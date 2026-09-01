@@ -44,14 +44,13 @@ export function NewTaskDialog() {
     try {
       // Cowork tasks get their own ACP child so Stop can hard-cancel them.
       const { sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true });
-      startTask({ sessionId, goal, cwd, profile });
-      // Enforce the approval mode agent-side, not just in the UI.
       const mode = useCoworkStore.getState().approvalMode;
       await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[mode] }).catch(() => { /* non-fatal */ });
-      await window.hermes.acp.send({
-        kind: 'prompt',
-        sessionId,
-        text: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
+      // Hand the kickoff to CoworkPage: it registers the event listener before
+      // sending, so the streamed plan is not lost between routes.
+      startTask({
+        sessionId, goal, cwd, profile,
+        kickoff: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');
     } finally {

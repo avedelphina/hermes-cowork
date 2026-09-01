@@ -1,4 +1,4 @@
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
 type Item = { icon: string; label: string; href: string };
 
@@ -34,7 +34,7 @@ function Section({ title, items, active }: { title: string; items: Item[]; activ
       {items.map((it) => {
         const isActive = active === it.href;
         return (
-          <a
+          <Link
             key={it.href}
             href={it.href}
             className={
@@ -44,7 +44,7 @@ function Section({ title, items, active }: { title: string; items: Item[]; activ
           >
             <span className="w-4 text-center">{it.icon}</span>
             <span>{it.label}</span>
-          </a>
+          </Link>
         );
       })}
     </div>

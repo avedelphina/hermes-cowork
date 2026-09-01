@@ -18,13 +18,17 @@ type CoworkStore = {
   status: 'idle' | 'running';
   /** false until the user approves the proposed plan. */
   approved: boolean;
+  /** Kickoff prompt CoworkPage should send once its event listener is live. */
+  pendingKickoff: string | null;
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: string | null;
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
 
-  startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string }) => void;
+  startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
+  /** CoworkPage calls this after it has sent the kickoff. */
+  clearKickoff: () => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
   /** User approved the proposed plan — execution may proceed. */
   approvePlan: () => void;
@@ -46,15 +50,17 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   approvalMode: 'ask',
   status: 'idle',
   approved: false,
+  pendingKickoff: null,
   transcript: [],
   approvals: [],
   parentTaskId: null,
   planTasks: [],
   artifacts: [],
 
-  startTask: ({ sessionId, goal, cwd, profile }) =>
-    set({ sessionId, goal, cwd, profile, status: 'running', approved: false, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+  startTask: ({ sessionId, goal, cwd, profile, kickoff }) =>
+    set({ sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
 
+  clearKickoff: () => set({ pendingKickoff: null }),
   setApprovalMode: (approvalMode) => set({ approvalMode }),
   approvePlan: () => set({ approved: true, status: 'running' }),
   setParent: (parentTaskId) => set({ parentTaskId }),
@@ -75,7 +81,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
 
   reset: () => set({
-    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
+    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false, pendingKickoff: null,
     transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
   }),
 

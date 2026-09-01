@@ -11,7 +11,14 @@ export function CoworkPage() {
   const pushUserText = useCoworkStore((s) => s.pushUserText);
 
   useEffect(() => {
+    // Register the listener first, then fire any pending kickoff so none of the
+    // streamed plan is lost in the gap between routes.
     const off = window.hermes.acp.onEvent((evt) => ingestAcp(evt));
+    const { pendingKickoff, sessionId: sid, clearKickoff } = useCoworkStore.getState();
+    if (pendingKickoff && sid) {
+      clearKickoff();
+      void window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: pendingKickoff });
+    }
     return () => { off(); };
   }, [ingestAcp]);
 
