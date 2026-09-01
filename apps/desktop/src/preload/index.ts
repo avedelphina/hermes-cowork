@@ -12,6 +12,8 @@ const api = {
   profile: {
     list: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IpcChannel.ProfileList),
     switch: (name: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ProfileSwitch, name),
+    env: (): Promise<{ globalHermesHome: string; envProfile: string | null }> =>
+      ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
     start: (opts: { profile: string; cwd: string }): Promise<{ sessionId: string }> =>

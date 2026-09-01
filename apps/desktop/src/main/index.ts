@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { findHermesBinary, verifyHermesVersion } from './orchestrator/hermes-runtime';
+import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
 import { AcpSupervisor } from './orchestrator/acp-supervisor';
 import { registerIpcHandlers } from './ipc/handlers';
@@ -43,6 +43,7 @@ const supervisor = new AcpSupervisor();
 
 void app.whenReady().then(async () => {
   const found = findHermesBinary();
+  const homes = resolveHermesHomes();
   let hermesBinary = '';
   let dashboardPort = 0;
   let dashboardToken: string | null = null;
@@ -51,8 +52,9 @@ void app.whenReady().then(async () => {
     const versionCheck = await verifyHermesVersion(found.path);
     if (versionCheck.kind === 'ok') {
       hermesBinary = found.path;
-      const hermesHome = process.env['HERMES_HOME'] ?? join(homedir(), '.hermes');
-      const dashboard = await ensureDashboard({ binaryPath: found.path, hermesHome });
+      // The dashboard enumerates every profile, so it must run against the
+      // global home — never a profile-scoped one.
+      const dashboard = await ensureDashboard({ binaryPath: found.path, hermesHome: homes.global });
       if (dashboard.kind === 'ready') {
         dashboardPort = dashboard.port;
         dashboardToken = await fetchDashboardToken(dashboard.port);
@@ -65,8 +67,8 @@ void app.whenReady().then(async () => {
       hermesBinary,
       dashboardPort,
       dashboardToken,
-      defaultHermesHome: process.env['HERMES_HOME'] ?? join(homedir(), '.hermes'),
-      activeHermesHome: process.env['HERMES_HOME'] ?? join(homedir(), '.hermes'),
+      globalHermesHome: homes.global,
+      envProfile: homes.envProfile,
       win: () => win,
     },
     supervisor,

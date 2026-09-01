@@ -7,6 +7,7 @@ export const IpcChannel = {
   // profiles
   ProfileList: 'profile:list',
   ProfileSwitch: 'profile:switch',
+  ProfileEnv: 'profile:env',  // resolved global home + HERMES_HOME profile hint
 
   // ACP
   AcpStart: 'acp:start',

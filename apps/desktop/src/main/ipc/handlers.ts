@@ -5,13 +5,16 @@ import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, ProfileSummary, StatusSnapshot, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
+import { profileHome } from '../orchestrator/hermes-home';
 
 type Context = {
   hermesBinary: string;
   dashboardPort: number;
   dashboardToken: string | null;
-  defaultHermesHome: string;
-  activeHermesHome: string;
+  /** Global Hermes home — the directory that contains `profiles/`. */
+  globalHermesHome: string;
+  /** Profile HERMES_HOME was scoped to at launch, or null. */
+  envProfile: string | null;
   win: () => BrowserWindow | null;
 };
 
@@ -47,6 +50,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return (await r.json()) as ProfileSummary[];
   });
 
+  ipcMain.handle(IpcChannel.ProfileEnv, async (): Promise<{ globalHermesHome: string; envProfile: string | null }> => ({
+    globalHermesHome: ctx.globalHermesHome,
+    envProfile: ctx.envProfile,
+  }));
+
   const bridge = new AcpBridge(sup);
 
   ipcMain.handle(IpcChannel.ProfileSwitch, async (_e, name: string): Promise<void> => {
@@ -69,9 +77,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       profile: opts.profile,
       cwd: opts.cwd,
       binaryPath: ctx.hermesBinary,
-      hermesHome: opts.profile === 'default'
-        ? ctx.defaultHermesHome
-        : `${ctx.defaultHermesHome}/profiles/${opts.profile}`,
+      hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
     });
   });
 
