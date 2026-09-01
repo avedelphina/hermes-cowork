@@ -34,6 +34,7 @@ const api = {
     get: <T>(path: string): Promise<T> => ipcRenderer.invoke(IpcChannel.RestGet, path),
     post: <T>(path: string, body: unknown): Promise<T> => ipcRenderer.invoke(IpcChannel.RestPost, path, body),
     patch: <T>(path: string, body: unknown): Promise<T> => ipcRenderer.invoke(IpcChannel.RestPatch, path, body),
+    del: <T>(path: string): Promise<T> => ipcRenderer.invoke(IpcChannel.RestDelete, path),
   },
   kanbanWs: {
     subscribe: (boardSlug: string | null): Promise<void> =>

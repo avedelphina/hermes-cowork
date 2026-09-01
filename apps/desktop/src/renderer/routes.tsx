@@ -6,6 +6,7 @@ import { NewTaskDialog } from './features/cowork/NewTaskDialog';
 import { TasksPage } from './features/cowork/TasksPage';
 import { CodePage } from './features/code/CodePage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
+import { ProfilesManager } from './features/profiles/ProfilesManager';
 
 export function Routes() {
   return (
@@ -15,6 +16,7 @@ export function Routes() {
       <Route path="/cowork/new"><NewTaskDialog /></Route>
       <Route path="/cowork/tasks"><TasksPage /></Route>
       <Route path="/cowork/projects"><ProjectsPage /></Route>
+      <Route path="/profiles"><ProfilesManager /></Route>
       <Route path="/code"><CodePage /></Route>
       <Route path="/kanban"><div className="p-6">Kanban</div></Route>
       <Route path="/"><Redirect to="/chat" /></Route>

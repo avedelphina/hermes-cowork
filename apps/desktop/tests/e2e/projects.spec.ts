@@ -55,6 +55,12 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await win.keyboard.press('Enter');
   await expect(win.locator('li', { hasText: 'Renamed Project' })).toBeVisible();
 
+  // Profiles manager reachable from the profile dropdown.
+  await win.getByRole('button', { name: 'Profile menu' }).click();
+  await win.getByRole('link', { name: /Manage profiles/i }).click();
+  await expect(win.getByRole('heading', { name: 'Profiles' })).toBeVisible();
+  await expect(win.getByText('New profile name')).toBeVisible();
+
   // Code mode: project file tree + a message composer.
   await win.getByRole('link', { name: 'Code' }).click();
   await expect(win.getByRole('button', { name: /README\.md/ })).toBeVisible();

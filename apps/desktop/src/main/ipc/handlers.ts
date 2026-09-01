@@ -148,6 +148,15 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return r.json().catch(() => null);
   });
 
+  ipcMain.handle(IpcChannel.RestDelete, async (_e, path: string) => {
+    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}${path}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    });
+    if (!r.ok) throw new Error(`DELETE ${path}: ${r.status}`);
+    return r.json().catch(() => null);
+  });
+
   // ── kanban WS ──
   ipcMain.handle(IpcChannel.KanbanWsSubscribe, (_e, _boardSlug: string | null) => undefined);
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'wouter';
 import { api } from '../api/rest-client';
 import type { ProfileSummary } from '../api/schemas';
 
@@ -35,6 +36,8 @@ export function ProfileDropdown() {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-md bg-surface2 px-3 py-1 text-xs"
         title={activePath}
+        aria-label="Profile menu"
+        aria-expanded={open}
       >
         <span
           className={
@@ -77,6 +80,13 @@ export function ProfileDropdown() {
               </span>
             </button>
           ))}
+          <Link
+            href="/profiles"
+            onClick={() => setOpen(false)}
+            className="mt-1 block border-t border-border px-2 py-1.5 text-xs text-muted hover:text-fg"
+          >
+            Manage profiles…
+          </Link>
         </div>
       )}
     </div>

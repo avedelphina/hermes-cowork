@@ -18,6 +18,7 @@ export const IpcChannel = {
   RestGet: 'rest:get',
   RestPost: 'rest:post',
   RestPatch: 'rest:patch',
+  RestDelete: 'rest:delete',
 
   // kanban WebSocket pump
   KanbanWsSubscribe: 'kanban-ws:subscribe',
