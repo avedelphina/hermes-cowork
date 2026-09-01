@@ -25,10 +25,25 @@ Download the latest DMG from the [Releases page](https://github.com/your-org/Her
 
 ## Develop
 
+Requires **Node 20** (see `.nvmrc`) and **pnpm 10** (pinned via `packageManager`;
+run `corepack enable` once to have the right version selected automatically).
+
 ```bash
-pnpm install
+corepack enable        # first time only — activates the pinned pnpm
+nvm use                # or otherwise select Node 20
+pnpm install           # electron/esbuild binaries download via approved postinstall
 pnpm dev
 ```
+
+A clean checkout builds and launches with no manual steps:
+
+```bash
+pnpm -r typecheck && pnpm -r test && pnpm -r build
+```
+
+If `electron` fails to launch after install, `node_modules` is stale — remove it
+and reinstall. The `onlyBuiltDependencies` list in `pnpm-workspace.yaml` is what
+allows Electron's binary download to run under pnpm 10; do not delete it.
 
 ## Architecture
 

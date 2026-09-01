@@ -17,6 +17,9 @@
   "hermes": {
     "minVersion": "0.13.0"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
     "electron-log": "^5.2.0",
