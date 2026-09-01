@@ -27,7 +27,7 @@ A proper first release should let Tom:
 - work safely inside an explicitly approved folder
 - receive honest failure and recovery state
 
-Claude-Cowork-like features that are deliberately deferred: cloud execution, mobile clients, multi-human collaboration, SaaS connectors, billing, and a new project-management backend.
+Claude-Cowork-like features that are deliberately deferred: cloud execution, mobile clients, multi-human collaboration, SaaS connectors, billing, and a new project-management backend. Multi-agent collaboration is not deferred: it is a core Hermes-native capability and a release requirement, introduced after single-agent execution is reliable.
 
 ---
 
@@ -247,13 +247,71 @@ Claude-Cowork-like features that are deliberately deferred: cloud execution, mob
 
 ---
 
-# Phase 5 — Hermes-native depth
+# Phase 5 — Multi-agent collaboration and Hermes-native depth
 
-### Task 5.1: Profile manager
+Multi-agent work is a first-class product feature, not merely an implementation detail. A Cowork task may be decomposed into parallel subtasks assigned to distinct Hermes profiles or specialist workers, with the coordinator retaining responsibility for the overall plan, approvals, synthesis, and final delivery.
+
+### Task 5.0: Define the multi-agent execution model
+
+**Files:**
+- Add: `docs/multi-agent-model.md`
+- Modify: `apps/desktop/src/shared/types.ts`
+- Add: multi-agent state and routing tests
+
+**Work:** Define coordinator, worker, and reviewer roles; task ownership; profile and workspace isolation; parent/child task relationships; message routing; cancellation; retries; failure handling; approval authority; artifact ownership; and final-result synthesis. Make explicit which state is shared and which remains profile-scoped.
+
+**Acceptance:** A task can show a coordinator plus multiple workers with independent status, profile, working directory, transcript, artifacts, and failure state. No worker can silently write outside its approved project scope or inherit another profile’s private memory.
+
+### Task 5.1: Implement worker dispatch and supervision
+
+**Files:**
+- Add/modify: `apps/desktop/src/main/orchestrator/worker-supervisor.ts`
+- Modify: `apps/desktop/src/main/orchestrator/acp-supervisor.ts`
+- Modify: `apps/desktop/src/main/ipc/handlers.ts`
+- Add: supervisor and lifecycle tests
+
+**Work:** Spawn multiple ACP/Hermes workers with explicit profile, project, cwd, permissions, and task IDs. Track heartbeats, readiness, completion, cancellation, crashes, retries, and stale workers. Do not silently restart failed work.
+
+### Task 5.2: Build the multi-agent task view
+
+**Files:**
+- Modify: `apps/desktop/src/renderer/features/cowork/SubtasksTab.tsx`
+- Modify: `apps/desktop/src/renderer/features/cowork/RightPane.tsx`
+- Modify: `apps/desktop/src/renderer/features/cowork/GoalHeader.tsx`
+- Add: worker detail view and tests
+
+**Work:** Show the coordinator and worker graph, current activity, profile/role, progress, tool calls, approvals, artifacts, blockers, and output. Let Tom open a worker transcript, pause/cancel a worker, or redirect a subtask without losing the parent task context.
+
+### Task 5.3: Add dependency-aware scheduling
+
+**Files:**
+- Modify: task/plan state and Kanban event handling
+- Add: scheduler tests
+
+**Work:** Support parallel independent subtasks, dependent subtasks, bounded concurrency, priority, retries, and blocked state. Prevent the coordinator from marking the parent complete while required workers are still running or failed.
+
+### Task 5.4: Add synthesis and review stages
+
+**Files:**
+- Modify: Cowork task lifecycle and artifact store
+- Add: synthesis/review tests
+- Add: `docs/multi-agent-model.md` review protocol
+
+**Work:** Collect worker outputs with provenance, run an optional reviewer worker, present conflicts and unresolved questions, and require coordinator/user acceptance before finalising the parent task. The UI must distinguish worker claims from verified artifacts and test results.
+
+### Task 5.5: Add multi-agent cost and resource controls
+
+**Files:**
+- Modify: settings and task policy surfaces
+- Add: resource-policy tests
+
+**Work:** Configure maximum workers, model/profile selection, timeout, token/cost budget where available, filesystem permissions, network permissions, and whether workers may spawn further workers. Default to bounded, explicit concurrency.
+
+### Task 5.6: Profile manager
 
 Create/clone/export/import profiles only after verifying the current Hermes profile APIs. Keep destructive profile operations behind confirmation and never assume profile deletion means deleting its files.
 
-### Task 5.2: Skills, memory, cron, gateway, and insights surfaces
+### Task 5.7: Skills, memory, cron, gateway, and insights surfaces
 
 Expose existing Hermes capabilities as read-first UI surfaces. Mutations must use Hermes APIs, show scope, and read back the result. Keep Anikke’s private profile and team/shared state visibly distinct.
 
@@ -289,7 +347,8 @@ A clean install can:
 8. Accept a follow-up instruction in the same task.
 9. Survive a window restart and offer task resumption.
 10. Keep unrelated profiles/projects/tasks isolated.
-11. Report failures honestly and preserve evidence.
+11. Run at least two bounded worker subtasks in parallel, show their independent progress, and synthesise their outputs with provenance.
+12. Report failures honestly and preserve evidence.
 
 # Risks and open decisions
 
