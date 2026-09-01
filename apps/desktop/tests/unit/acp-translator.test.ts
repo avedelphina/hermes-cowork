@@ -4,11 +4,24 @@ import { translateAcpEvent } from '@main/orchestrator/acp-translator';
 import type { AcpEvent } from '@main/orchestrator/acp-supervisor';
 
 describe('translateAcpEvent — lifecycle', () => {
-  it('surfaces an ACP child exit as a fatal session-error', () => {
-    const out = translateAcpEvent({ kind: 'exit', sessionId: 'h1', code: 1 } as AcpEvent);
+  it('surfaces an unexpected non-zero exit as a fatal session-error', () => {
+    const out = translateAcpEvent({ kind: 'exit', sessionId: 'h1', code: 1, expected: false } as AcpEvent);
     expect(out).toEqual([
       { kind: 'session-error', sessionId: 'h1', message: expect.stringContaining('code 1'), fatal: true },
     ]);
+  });
+
+  it('stays silent for a clean exit (code 0)', () => {
+    expect(translateAcpEvent({ kind: 'exit', sessionId: 'h1', code: 0, expected: false } as AcpEvent)).toEqual([]);
+  });
+
+  it('stays silent for an exit we asked for, even with a non-zero code', () => {
+    expect(translateAcpEvent({ kind: 'exit', sessionId: 'h1', code: 143, expected: true } as AcpEvent)).toEqual([]);
+  });
+
+  it('reports a signal kill (code null) as a crash', () => {
+    const out = translateAcpEvent({ kind: 'exit', sessionId: 'h1', code: null, expected: false } as AcpEvent);
+    expect(out).toEqual([{ kind: 'session-error', sessionId: 'h1', message: expect.stringContaining('killed'), fatal: true }]);
   });
 
   it('surfaces a spawn error as a fatal session-error', () => {

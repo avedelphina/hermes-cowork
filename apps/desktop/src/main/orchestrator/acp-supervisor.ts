@@ -17,7 +17,8 @@ export type AcpSpawnOptions = AcpSession & {
 
 export type AcpEvent =
   | { kind: 'message'; sessionId: string; msg: JsonRpcMessage }
-  | { kind: 'exit'; sessionId: string; code: number | null }
+  // `expected` is true when we asked the child to stop (shutdown/shutdownAll)
+  | { kind: 'exit'; sessionId: string; code: number | null; expected: boolean }
   | { kind: 'error'; sessionId: string; error: string };
 
 type PendingRequest = {
@@ -28,6 +29,8 @@ type PendingRequest = {
 class AcpChild {
   readonly decoder = new FrameDecoder();
   readonly pending = new Map<string | number, PendingRequest>();
+  /** Set by shutdown() so the exit handler can mark the exit as expected. */
+  stopping = false;
   constructor(public readonly proc: ChildProcess, public readonly session: AcpSession) {}
 }
 
@@ -62,7 +65,12 @@ export class AcpSupervisor extends EventEmitter {
 
     proc.on('exit', (code) => {
       this.rejectAllPending(child, new Error(`ACP child exited (code=${code ?? 'null'})`));
-      this.emit('event', { kind: 'exit', sessionId: opts.id, code } satisfies AcpEvent);
+      this.emit('event', {
+        kind: 'exit',
+        sessionId: opts.id,
+        code,
+        expected: child.stopping,
+      } satisfies AcpEvent);
       this.children.delete(opts.id);
     });
   }
@@ -95,6 +103,7 @@ export class AcpSupervisor extends EventEmitter {
   shutdown(sessionId: string): void {
     const child = this.children.get(sessionId);
     if (!child) return;
+    child.stopping = true;
     try {
       child.proc.stdin?.end();
     } catch {

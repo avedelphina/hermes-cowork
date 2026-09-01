@@ -44,10 +44,14 @@ function isJsonRpcRequest(msg: unknown): msg is JsonRpcRequest {
  */
 export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
   if (event.kind === 'exit') {
+    // A clean exit (code 0) or one we asked for is normal teardown, not a
+    // failure — only a real crash gets surfaced to the user.
+    if (event.expected || event.code === 0) return [];
+    const detail = event.code === null ? 'was killed' : `exited (code ${event.code})`;
     return [{
       kind: 'session-error',
       sessionId: event.sessionId,
-      message: `Hermes ACP process exited (code ${event.code ?? 'unknown'}).`,
+      message: `Hermes ACP process ${detail}.`,
       fatal: true,
     }];
   }

@@ -11,6 +11,7 @@ export const IpcChannel = {
 
   // ACP
   AcpStart: 'acp:start',
+  AcpLoad: 'acp:load',
   AcpSend: 'acp:send',
   AcpStop: 'acp:stop',
   AcpEvent: 'acp:event',  // main → renderer push

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/rest-client';
 import type { SessionSummary } from '../../api/schemas';
 
-export function SessionList({ onPick }: { onPick: (id: string) => void }) {
+export function SessionList({ activeId, onPick }: { activeId?: string | null; onPick: (id: string) => void }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   useEffect(() => {
     api.sessions(50).then(setSessions).catch(() => setSessions([]));
@@ -19,7 +19,10 @@ export function SessionList({ onPick }: { onPick: (id: string) => void }) {
           <button
             key={s.id}
             onClick={() => onPick(s.id)}
-            className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs hover:bg-surface2"
+            className={
+              'block w-full border-b border-border/50 px-3 py-2 text-left text-xs hover:bg-surface2 ' +
+              (s.id === activeId ? 'bg-surface2' : '')
+            }
           >
             <div className="text-fg">{s.title ?? s.id.slice(0, 8)}</div>
             <div className="mt-0.5 flex justify-between text-[10px] text-dim">

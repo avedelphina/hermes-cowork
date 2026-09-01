@@ -1,5 +1,6 @@
 // apps/desktop/src/main/ipc/handlers.ts
 import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { homedir } from 'node:os';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
@@ -111,6 +112,21 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
     });
   });
+
+  ipcMain.handle(
+    IpcChannel.AcpLoad,
+    async (_e, opts: { sessionId: string; profile?: string; cwd?: string }) => {
+      const profile = opts.profile ?? 'default';
+      const cwd = opts.cwd && isExistingDir(opts.cwd) ? opts.cwd : homedir();
+      return bridge.loadSession({
+        sessionId: opts.sessionId,
+        profile,
+        cwd,
+        binaryPath: ctx.hermesBinary,
+        hermesHome: profileHome(ctx.globalHermesHome, profile),
+      });
+    },
+  );
 
   ipcMain.handle(IpcChannel.AcpSend, async (_e, msg: AcpClientMessage) => {
     if (msg.kind === 'prompt') {

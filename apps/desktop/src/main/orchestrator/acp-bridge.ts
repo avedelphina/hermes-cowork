@@ -54,6 +54,29 @@ export class AcpBridge extends EventEmitter {
    * ACP sessionId, which the renderer uses for all subsequent prompts.
    */
   async startSession(opts: StartSessionOpts): Promise<{ sessionId: string }> {
+    return this.spawnAndHandshake(opts, (handle) =>
+      this.sup.request(handle, 'session/new', { cwd: opts.cwd, mcpServers: [] }),
+    );
+  }
+
+  /**
+   * Resume an existing Hermes session by id. Hermes replays the conversation
+   * as session/update notifications during the load, then responds.
+   */
+  async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
+    return this.spawnAndHandshake(opts, (handle) =>
+      this.sup.request(handle, 'session/load', {
+        sessionId: opts.sessionId,
+        cwd: opts.cwd,
+        mcpServers: [],
+      }),
+    );
+  }
+
+  private async spawnAndHandshake(
+    opts: StartSessionOpts,
+    openSession: (handle: string) => Promise<unknown>,
+  ): Promise<{ sessionId: string }> {
     const handle = randomUUID();
     this.sup.spawn({
       id: handle,
@@ -73,17 +96,13 @@ export class AcpBridge extends EventEmitter {
         clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
       });
 
-      const newSession = (await this.sup.request(handle, 'session/new', {
-        cwd: opts.cwd,
-        mcpServers: [],
-      })) as { sessionId: string };
-
-      if (typeof newSession?.sessionId !== 'string') {
-        throw new Error('session/new returned no sessionId');
+      const session = (await openSession(handle)) as { sessionId?: string };
+      if (typeof session?.sessionId !== 'string') {
+        throw new Error('session open returned no sessionId');
       }
 
-      this.acpToHandle.set(newSession.sessionId, handle);
-      return { sessionId: newSession.sessionId };
+      this.acpToHandle.set(session.sessionId, handle);
+      return { sessionId: session.sessionId };
     } catch (err) {
       // Handshake failed; tear down the orphan child so it doesn't leak.
       this.sup.shutdown(handle);

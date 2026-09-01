@@ -64,7 +64,15 @@ describe('AcpSupervisor', () => {
     const { proc, events } = makeSupervisor();
     proc.emit('exit', 0);
     await new Promise((r) => setImmediate(r));
-    expect(events).toContainEqual({ kind: 'exit', sessionId: 's1', code: 0 });
+    expect(events).toContainEqual({ kind: 'exit', sessionId: 's1', code: 0, expected: false });
+  });
+
+  it('marks the exit as expected when we asked the child to shut down', async () => {
+    const { sup, proc, events } = makeSupervisor();
+    sup.shutdown('s1');
+    proc.emit('exit', 0);
+    await new Promise((r) => setImmediate(r));
+    expect(events).toContainEqual({ kind: 'exit', sessionId: 's1', code: 0, expected: true });
   });
 
   it('request() resolves when matching response arrives, and does NOT broadcast it', async () => {
