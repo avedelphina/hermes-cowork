@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { PlanTab } from './PlanTab';
 import { ArtifactsTab } from './ArtifactsTab';
 import { SubtasksTab } from './SubtasksTab';
+import { FileBrowser } from '../files/FileBrowser';
 import { useCoworkStore, MODE_FOR } from './cowork.store';
 
 const TABS = [
   { id: 'plan', label: 'Plan' },
+  { id: 'files', label: 'Files' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'subtasks', label: 'Subtasks' },
 ] as const;
@@ -25,7 +27,7 @@ export function RightPane() {
   };
 
   return (
-    <aside className="flex w-[280px] flex-col border-l border-border bg-surface">
+    <aside className="flex w-[340px] flex-col border-l border-border bg-surface">
       <div className="flex border-b border-border text-[11px]">
         {TABS.map((t) => (
           <button
@@ -42,10 +44,11 @@ export function RightPane() {
           </button>
         ))}
       </div>
-      <div className="flex-1 overflow-y-auto">
-        {tab === 'plan' && <PlanTab />}
-        {tab === 'artifacts' && <ArtifactsTab />}
-        {tab === 'subtasks' && <SubtasksTab />}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {tab === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
+        {tab === 'files' && <FileBrowser />}
+        {tab === 'artifacts' && <div className="overflow-y-auto"><ArtifactsTab /></div>}
+        {tab === 'subtasks' && <div className="overflow-y-auto"><SubtasksTab /></div>}
       </div>
       <div className="border-t border-border p-3 text-[11px]">
         <div className="mb-2 text-[9px] uppercase tracking-wide text-dim">Mode</div>

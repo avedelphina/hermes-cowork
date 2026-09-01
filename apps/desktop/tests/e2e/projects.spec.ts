@@ -1,12 +1,14 @@
 // apps/desktop/tests/e2e/projects.spec.ts
 import { test, expect, _electron as electron } from '@playwright/test';
 import path from 'node:path';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
-test('projects: create from folder, activate, prefill New task', async () => {
+test('projects: create from folder, activate, prefill New task, browse files', async () => {
   test.setTimeout(60_000);
   const work = path.join('/tmp', 'proj-e2e-' + Date.now());
   mkdirSync(work, { recursive: true });
+  writeFileSync(path.join(work, 'README.md'), '# demo project\nhello from readme\n');
+  writeFileSync(path.join(work, 'AGENTS.md'), 'project rules\n');
 
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -28,16 +30,23 @@ test('projects: create from folder, activate, prefill New task', async () => {
   await win.getByPlaceholder('Site redesign').fill('E2E Project');
   await win.getByRole('button', { name: /Create project/i }).click();
 
-  // Project appears and is active.
+  // Project appears and is active, with its context files detected.
   const row = win.locator('li', { hasText: 'E2E Project' });
   await expect(row).toBeVisible();
   await expect(row).toContainText(work);
+  await expect(row).toContainText('AGENTS.md');
   await expect(win.getByRole('link', { name: /E2E Project/i })).toBeVisible(); // title bar chip
 
   // New task dialog prefills the folder from the active project.
   await win.getByRole('link', { name: 'Cowork' }).click();
   await win.getByRole('link', { name: /New task/i }).click();
   await expect(win.locator(`input[value="${work}"]`)).toBeVisible();
+
+  // File browser (Cowork right pane) lists and previews project files.
+  await win.getByRole('link', { name: 'Active tasks' }).click();
+  await win.getByRole('button', { name: 'Files', exact: true }).click();
+  await win.getByRole('button', { name: /README\.md/ }).click();
+  await expect(win.locator('pre')).toContainText('hello from readme');
 
   await app.close();
   rmSync(work, { recursive: true, force: true });

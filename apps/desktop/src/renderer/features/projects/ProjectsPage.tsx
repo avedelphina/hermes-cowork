@@ -10,6 +10,15 @@ export function ProjectsPage() {
   const [folder, setFolder] = useState('');
   const [profile, setProfile] = useState('default');
   const [error, setError] = useState<string | null>(null);
+  const [ctx, setCtx] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    for (const p of projects) {
+      window.hermes.projects.contextFiles(p.id)
+        .then((files) => setCtx((c) => ({ ...c, [p.id]: files })))
+        .catch(() => { /* ignore */ });
+    }
+  }, [projects]);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -116,6 +125,11 @@ export function ProjectsPage() {
                   <span className="text-[10px] text-dim">{p.profile}</span>
                 </div>
                 <div className="truncate text-[11px] text-muted">{p.folderPath}</div>
+                <div className="mt-0.5 text-[10px] text-dim">
+                  {ctx[p.id]?.length
+                    ? `context: ${(ctx[p.id] ?? []).join(', ')}`
+                    : 'no AGENTS.md / .hermes.md'}
+                </div>
               </div>
               <div className="flex shrink-0 gap-2">
                 {p.id !== activeId && (

@@ -11,6 +11,15 @@ export type Project = {
 };
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
 
+export type DirEntry = { name: string; kind: 'dir' | 'file'; size: number };
+export type DirListing = { path: string; entries: DirEntry[] };
+
+export type FilePreview =
+  | { kind: 'text'; name: string; text: string; truncated: boolean }
+  | { kind: 'image'; name: string; dataUri: string }
+  | { kind: 'pdf'; name: string; dataUri: string }
+  | { kind: 'unsupported'; name: string; size: number };
+
 /**
  * What a task/worker may do inside its approved root. See
  * docs/security-model.md. Default-deny: read-only until the user widens it.

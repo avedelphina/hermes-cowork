@@ -11,6 +11,7 @@ import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../or
 import { profileHome } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
 import { ProjectStore } from '../store/project-store';
+import { contextFiles, listDir, readFilePreview } from '../fs/project-fs';
 
 type Context = {
   hermesBinary: string;
@@ -193,4 +194,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     projects.remove(id);
     return projects.snapshot();
   });
+
+  const projectRoot = (id: string): string => {
+    const p = projects.get(id);
+    if (!p) throw new Error(`unknown project ${id}`);
+    return p.folderPath;
+  };
+
+  ipcMain.handle(IpcChannel.ProjectContextFiles, (_e, id: string) => contextFiles(projectRoot(id)));
+
+  // ── project filesystem (read-only, scoped to the project root) ──
+  ipcMain.handle(IpcChannel.FsList, (_e, id: string, rel?: string) => listDir(projectRoot(id), rel ?? ''));
+  ipcMain.handle(IpcChannel.FsRead, (_e, id: string, rel: string) => readFilePreview(projectRoot(id), rel));
 }

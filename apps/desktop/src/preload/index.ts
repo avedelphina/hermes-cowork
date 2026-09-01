@@ -1,7 +1,9 @@
 // apps/desktop/src/preload/index.ts
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
-import type { AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot } from '../shared/types';
+import type {
+  AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot, DirListing, FilePreview,
+} from '../shared/types';
 
 const api = {
   runtime: {
@@ -52,6 +54,11 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
     setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
     remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),
+    contextFiles: (id: string): Promise<string[]> => ipcRenderer.invoke(IpcChannel.ProjectContextFiles, id),
+  },
+  fs: {
+    list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
+    read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
   },
 };
 

@@ -32,6 +32,11 @@ export const IpcChannel = {
   ProjectUpdate: 'project:update',
   ProjectSetActive: 'project:set-active',
   ProjectRemove: 'project:remove',
+  ProjectContextFiles: 'project:context-files', // which context files exist in a folder
+
+  // project filesystem (scoped to a project root)
+  FsList: 'fs:list',
+  FsRead: 'fs:read',
 } as const;
 
 export type IpcChannelKey = (typeof IpcChannel)[keyof typeof IpcChannel];
