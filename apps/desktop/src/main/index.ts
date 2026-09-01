@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron';
+import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { findHermesBinary, verifyHermesVersion } from './orchestrator/hermes-runtime';
 import { resolveHermesHomes } from './orchestrator/hermes-home';
@@ -9,6 +10,9 @@ import { KanbanWsPump } from './orchestrator/kanban-ws';
 
 let win: BrowserWindow | null = null;
 let pump: KanbanWsPump | null = null;
+// Set only when we spawned the dashboard ourselves — a reused external one is
+// left alone.
+let dashboardChild: ChildProcess | null = null;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -57,6 +61,7 @@ void app.whenReady().then(async () => {
       const dashboard = await ensureDashboard({ binaryPath: found.path, hermesHome: homes.global });
       if (dashboard.kind === 'ready') {
         dashboardPort = dashboard.port;
+        dashboardChild = dashboard.child;
         dashboardToken = await fetchDashboardToken(dashboard.port);
       }
     }
@@ -82,15 +87,21 @@ void app.whenReady().then(async () => {
   createWindow();
 });
 
-app.on('window-all-closed', () => {
+function stopOwnedChildren() {
+  pump?.stop();
   supervisor.shutdownAll();
+  if (dashboardChild && dashboardChild.exitCode === null) {
+    dashboardChild.kill('SIGTERM');
+    dashboardChild = null;
+  }
+}
+
+app.on('window-all-closed', () => {
+  stopOwnedChildren();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  pump?.stop();
-  supervisor.shutdownAll();
-});
+app.on('before-quit', stopOwnedChildren);
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
