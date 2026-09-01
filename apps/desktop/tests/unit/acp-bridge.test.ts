@@ -81,6 +81,30 @@ describe('AcpBridge.startSession', () => {
     await expect(startPromise).resolves.toEqual({ sessionId: 'sess-real-123' });
   });
 
+  it('resumes via session/load and keeps the id it was given (load has no sessionId)', async () => {
+    const { bridge, proc } = makeBridge();
+
+    const loadPromise = bridge.loadSession({
+      sessionId: 'past-sess-9', profile: 'default', cwd: '/Users/x',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+
+    await flush();
+    proc.stdout!.push(
+      encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }),
+    );
+
+    await flush();
+    const loadReq = proc.findOutgoing('session/load')!;
+    expect(loadReq['params']).toEqual({ sessionId: 'past-sess-9', cwd: '/Users/x', mcpServers: [] });
+    // Hermes 0.20.6 replies with { _meta, models, modes } — no sessionId.
+    proc.stdout!.push(
+      encodeFrame({ jsonrpc: '2.0', id: loadReq['id'] as string, result: { models: {}, modes: {} } }),
+    );
+
+    await expect(loadPromise).resolves.toEqual({ sessionId: 'past-sess-9' });
+  });
+
   it('shuts the orphan child down if the handshake fails', async () => {
     const { bridge, proc } = makeBridge();
     const startPromise = bridge.startSession({

@@ -54,28 +54,36 @@ export class AcpBridge extends EventEmitter {
    * ACP sessionId, which the renderer uses for all subsequent prompts.
    */
   async startSession(opts: StartSessionOpts): Promise<{ sessionId: string }> {
-    return this.spawnAndHandshake(opts, (handle) =>
-      this.sup.request(handle, 'session/new', { cwd: opts.cwd, mcpServers: [] }),
-    );
+    // session/new: the agent assigns the id and returns it.
+    return this.spawnAndHandshake(opts, async (handle) => {
+      const res = (await this.sup.request(handle, 'session/new', {
+        cwd: opts.cwd,
+        mcpServers: [],
+      })) as { sessionId?: string };
+      if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
+      return res.sessionId;
+    });
   }
 
   /**
-   * Resume an existing Hermes session by id. Hermes replays the conversation
-   * as session/update notifications during the load, then responds.
+   * Resume an existing Hermes session by id. Per ACP, session/load takes the
+   * id we already hold and its response carries no sessionId — the agent just
+   * replays the conversation as session/update notifications during the call.
    */
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
-    return this.spawnAndHandshake(opts, (handle) =>
-      this.sup.request(handle, 'session/load', {
+    return this.spawnAndHandshake(opts, async (handle) => {
+      await this.sup.request(handle, 'session/load', {
         sessionId: opts.sessionId,
         cwd: opts.cwd,
         mcpServers: [],
-      }),
-    );
+      });
+      return opts.sessionId;
+    });
   }
 
   private async spawnAndHandshake(
     opts: StartSessionOpts,
-    openSession: (handle: string) => Promise<unknown>,
+    openSession: (handle: string) => Promise<string>,
   ): Promise<{ sessionId: string }> {
     const handle = randomUUID();
     this.sup.spawn({
@@ -96,13 +104,9 @@ export class AcpBridge extends EventEmitter {
         clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
       });
 
-      const session = (await openSession(handle)) as { sessionId?: string };
-      if (typeof session?.sessionId !== 'string') {
-        throw new Error('session open returned no sessionId');
-      }
-
-      this.acpToHandle.set(session.sessionId, handle);
-      return { sessionId: session.sessionId };
+      const sessionId = await openSession(handle);
+      this.acpToHandle.set(sessionId, handle);
+      return { sessionId };
     } catch (err) {
       // Handshake failed; tear down the orphan child so it doesn't leak.
       this.sup.shutdown(handle);
