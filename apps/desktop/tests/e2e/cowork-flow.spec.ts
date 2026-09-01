@@ -14,7 +14,7 @@ test('cowork: propose plan → approve → execute', async () => {
   test.skip(!hermesPresent, 'requires a configured Hermes on PATH');
   test.setTimeout(240_000);
   const work = path.join('/tmp', 'cowork-ui-test');
-  rmSync(path.join(work, 'hello.txt'), { force: true });
+  rmSync(work, { recursive: true, force: true }); // fresh work dir + isolated stores
   mkdirSync(work, { recursive: true });
 
   // The dev shell exports ELECTRON_RUN_AS_NODE=1, which makes Electron reject

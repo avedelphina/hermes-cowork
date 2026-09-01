@@ -26,6 +26,9 @@ export const IpcChannel = {
   // dialog
   ShowFolderPicker: 'dialog:folder',
 
+  // app
+  Notify: 'app:notify', // desktop notification when the window is unfocused
+
   // projects
   ProjectList: 'project:list',
   ProjectCreate: 'project:create',

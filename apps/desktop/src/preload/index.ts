@@ -47,6 +47,10 @@ const api = {
   dialog: {
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.ShowFolderPicker),
   },
+  app: {
+    notify: (opts: { title: string; body: string }): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Notify, opts),
+  },
   projects: {
     list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),
     create: (input: { name: string; folderPath: string; profile: string }): Promise<Project> =>

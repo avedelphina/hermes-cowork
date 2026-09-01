@@ -13,6 +13,10 @@ function persistTask(id: string | null, patch: { status?: TaskStatus; approved?:
   if (id) void window.hermes?.tasks?.update(id, patch);
 }
 
+function notify(title: string, body: string): void {
+  void window.hermes?.app?.notify({ title, body });
+}
+
 type CoworkStore = {
   taskId: string | null;
   sessionId: string | null;
@@ -49,6 +53,8 @@ type CoworkStore = {
   pushUserText: (text: string) => void;
   /** User cancelled the ACP session — record it and go idle. */
   markStopped: () => void;
+  /** Clear the transcript and mark running before an acp.load replay. */
+  beginReconnect: () => void;
   ingestAcp: (msg: AcpServerMessage) => void;
   upsertPlanTask: (task: KanbanTask) => void;
   setParent: (id: string) => void;
@@ -112,6 +118,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       return { status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] };
     }),
 
+  beginReconnect: () => set({ transcript: [], approvals: [], status: 'running' }),
+
   upsertPlanTask: (task) =>
     set((s) => {
       const existing = s.planTasks.find((t) => t.id === task.id);
@@ -152,12 +160,18 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
         case 'session-error':
           persistTask(s.taskId, { status: 'failed' });
+          if (s.goal) notify('Cowork task failed', s.goal);
           return {
             status: 'idle',
             transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }],
           };
         case 'done':
           persistTask(s.taskId, { status: s.approved ? 'done' : 'awaiting_approval' });
+          // Only notify when the plan first lands — every executing turn also
+          // ends with 'done' and there is no distinct task-complete signal.
+          if (!s.approved && s.goal && s.transcript.some((m) => m.role === 'agent')) {
+            notify('Plan ready for approval', s.goal);
+          }
           return { status: 'idle' };
         case 'tool-result':
           return s;

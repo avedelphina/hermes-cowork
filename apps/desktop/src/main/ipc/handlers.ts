@@ -1,5 +1,5 @@
 // apps/desktop/src/main/ipc/handlers.ts
-import { app, ipcMain, BrowserWindow, dialog } from 'electron';
+import { app, ipcMain, BrowserWindow, dialog, Notification } from 'electron';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -150,6 +150,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   // ── kanban WS ──
   ipcMain.handle(IpcChannel.KanbanWsSubscribe, (_e, _boardSlug: string | null) => undefined);
+
+  // ── app ──
+  ipcMain.handle(IpcChannel.Notify, (_e, opts: { title: string; body: string }) => {
+    const w = ctx.win();
+    if (w && !w.isFocused() && Notification.isSupported()) {
+      const n = new Notification({ title: opts.title, body: opts.body });
+      n.on('click', () => { w.show(); w.focus(); });
+      n.show();
+    }
+  });
 
   // ── dialog ──
   ipcMain.handle(IpcChannel.ShowFolderPicker, async () => {
