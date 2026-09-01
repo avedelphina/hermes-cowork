@@ -17,6 +17,7 @@ type CreateInput = {
   profile: string;
   acpSessionId: string;
   projectId: string | null;
+  parentTaskId?: string | null;
 };
 
 // Statuses that mean "the agent was mid-flight" — if we find one at load time
@@ -34,9 +35,10 @@ export class TaskStore {
     try {
       if (existsSync(this.filePath)) {
         const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<Data>;
-        const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) =>
-          LIVE.includes(t.status) ? { ...t, status: 'interrupted' as const } : t,
-        );
+        const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) => {
+          const migrated = { ...t, parentTaskId: t.parentTaskId ?? null };
+          return LIVE.includes(migrated.status) ? { ...migrated, status: 'interrupted' as const } : migrated;
+        });
         return { tasks };
       }
     } catch {
@@ -67,6 +69,7 @@ export class TaskStore {
       createdAt: now,
       updatedAt: now,
       ...input,
+      parentTaskId: input.parentTaskId ?? null,
     };
     this.data.tasks.push(task);
     this.write();

@@ -149,6 +149,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
 
   ingestAcp: (msg) =>
     set((s) => {
+      // Ignore events for other ACP sessions (worker sessions, chat/code).
+      if (s.sessionId && msg.sessionId !== s.sessionId) return s;
       switch (msg.kind) {
         case 'token': {
           const last = s.transcript[s.transcript.length - 1];

@@ -72,7 +72,8 @@ const api = {
   tasks: {
     list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
     create: (input: {
-      goal: string; cwd: string; profile: string; acpSessionId: string; projectId: string | null;
+      goal: string; cwd: string; profile: string; acpSessionId: string;
+      projectId: string | null; parentTaskId?: string | null;
     }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
     update: (id: string, patch: { status?: TaskStatus; approved?: boolean }): Promise<CoworkTask | null> =>
       ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),

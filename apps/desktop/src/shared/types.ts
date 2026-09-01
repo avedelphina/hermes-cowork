@@ -28,6 +28,8 @@ export type CoworkTask = {
   profile: string;
   acpSessionId: string;
   projectId: string | null;
+  /** Set when this task is a worker under a coordinator task. */
+  parentTaskId: string | null;
   status: TaskStatus;
   approved: boolean;
   createdAt: string;

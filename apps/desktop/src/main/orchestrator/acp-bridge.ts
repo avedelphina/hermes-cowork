@@ -254,16 +254,29 @@ export class AcpBridge extends EventEmitter {
           });
         }
       }
-    } else if (event.kind === 'exit') {
-      // Child is gone — drop its sessions and its pooled connection so the
-      // next call respawns instead of writing to a dead pipe.
-      for (const [acpId, handle] of this.acpToHandle) {
-        if (handle === event.sessionId) this.acpToHandle.delete(acpId);
+    } else if (event.kind === 'exit' || event.kind === 'error') {
+      // Re-key the failure onto the ACP sessionId(s) this handle served — the
+      // renderer routes events by ACP sessionId, not our internal handle.
+      const affected = [...this.acpToHandle].filter(([, h]) => h === event.sessionId).map(([id]) => id);
+      const expected = event.kind === 'exit' && event.expected;
+      const message = event.kind === 'error'
+        ? event.error
+        : event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`;
+
+      if (event.kind === 'exit') {
+        for (const id of affected) this.acpToHandle.delete(id);
+        for (const [key, conn] of this.conns) {
+          if (conn.handle === event.sessionId) this.conns.delete(key);
+        }
+        this.isolatedHandles.delete(event.sessionId);
       }
-      for (const [key, conn] of this.conns) {
-        if (conn.handle === event.sessionId) this.conns.delete(key);
+
+      if (!expected && !(event.kind === 'exit' && event.code === 0)) {
+        for (const sessionId of affected.length ? affected : [event.sessionId]) {
+          this.emit('event', { kind: 'session-error', sessionId, message, fatal: true } satisfies AcpServerMessage);
+        }
       }
-      this.isolatedHandles.delete(event.sessionId);
+      return;
     }
 
     for (const semantic of translateAcpEvent(event)) {

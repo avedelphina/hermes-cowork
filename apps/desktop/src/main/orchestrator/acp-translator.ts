@@ -29,35 +29,19 @@ function isJsonRpcRequest(msg: unknown): msg is JsonRpcRequest {
 }
 
 /**
- * Translate one supervisor event into zero-or-more semantic events.
+ * Translate one supervisor 'message' event into zero-or-more semantic events.
+ * Inspect the JSON-RPC method and map ACP client methods to semantic UI
+ * events; ignore JSON-RPC responses (replies to our own outgoing requests).
  *
- *  - 'message'  → inspect the JSON-RPC method, map ACP client methods to
- *                 semantic UI events; ignore JSON-RPC responses (those are
- *                 replies to our outgoing requests, not server-pushed events)
- *  - 'exit'     → surfaced as a fatal 'session-error' so the UI can tell the
- *                 user the ACP child died instead of hanging on a spinner
- *  - 'error'    → surfaced as a fatal 'session-error'
+ * 'exit' / 'error' are handled in AcpBridge (it re-keys them onto the ACP
+ * sessionId), so they are dropped here.
  *
- * Returning [] is correct for frames we deliberately don't surface
- * (e.g. JSON-RPC *responses* to our own outgoing prompt/permission requests,
- * or session/update variants we don't render yet like usage_update).
+ * Returning [] is correct for frames we deliberately don't surface — e.g.
+ * responses to our own prompt/permission requests, or session/update variants
+ * we don't render yet like usage_update.
  */
 export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
-  if (event.kind === 'exit') {
-    // A clean exit (code 0) or one we asked for is normal teardown, not a
-    // failure — only a real crash gets surfaced to the user.
-    if (event.expected || event.code === 0) return [];
-    const detail = event.code === null ? 'was killed' : `exited (code ${event.code})`;
-    return [{
-      kind: 'session-error',
-      sessionId: event.sessionId,
-      message: `Hermes ACP process ${detail}.`,
-      fatal: true,
-    }];
-  }
-  if (event.kind === 'error') {
-    return [{ kind: 'session-error', sessionId: event.sessionId, message: event.error, fatal: true }];
-  }
+  if (event.kind !== 'message') return [];
 
   const { sessionId: supervisorSessionId, msg } = event;
   if (!isJsonRpcRequest(msg)) return [];
