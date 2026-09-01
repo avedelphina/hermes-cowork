@@ -1,11 +1,8 @@
 export const IpcChannel = {
   // status / runtime
-  RuntimeStatus: 'runtime:status',
-  RuntimeRescan: 'runtime:rescan',
   RuntimeProbe: 'runtime:probe',
 
-  // profiles
-  ProfileList: 'profile:list',
+  // profiles — list/status come straight from the dashboard via the REST proxy
   ProfileSwitch: 'profile:switch',
   ProfileEnv: 'profile:env',  // resolved global home + HERMES_HOME profile hint
 

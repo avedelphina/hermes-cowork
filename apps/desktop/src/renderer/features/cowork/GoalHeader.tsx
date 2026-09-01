@@ -3,7 +3,7 @@ import { useCoworkStore } from './cowork.store';
 export function GoalHeader() {
   const { goal, cwd, profile, planTasks, sessionId, status, markStopped } = useCoworkStore();
   const total = planTasks.length;
-  const done = planTasks.filter((t) => t.status === 'done' || t.status === 'archived').length;
+  const done = planTasks.filter((t) => t.status === 'done').length;
 
   if (!goal) return null;
 

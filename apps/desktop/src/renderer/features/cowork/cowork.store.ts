@@ -15,7 +15,7 @@ type CoworkStore = {
   status: 'idle' | 'running';
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
-  parentTaskId: number | null;
+  parentTaskId: string | null;
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
 
@@ -27,7 +27,7 @@ type CoworkStore = {
   markStopped: () => void;
   ingestAcp: (msg: AcpServerMessage) => void;
   upsertPlanTask: (task: KanbanTask) => void;
-  setParent: (id: number) => void;
+  setParent: (id: string) => void;
   reset: () => void;
 };
 

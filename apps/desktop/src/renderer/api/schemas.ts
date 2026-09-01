@@ -78,17 +78,33 @@ export const SessionListSchema = z
   .object({ sessions: z.array(SessionSummarySchema) })
   .transform((d) => d.sessions);
 
-export const KanbanTaskSchema = z.object({
-  id: z.number().int(),
-  title: z.string(),
-  body: z.string().nullable(),
-  status: z.enum(['triage', 'todo', 'ready', 'running', 'blocked', 'done', 'archived']),
-  assignee: z.string().nullable(),
-  parents: z.array(z.number().int()).default([]),
-  createdAt: z.string(),
-});
+// Hermes 0.20.6 kanban task: string ids ("t_ab12cd"), 8-state column enum,
+// unix-int created_at, parent/child counts under link_counts.
+export const KanbanTaskSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    body: z.string().nullish(),
+    status: z.enum(['triage', 'todo', 'scheduled', 'ready', 'running', 'blocked', 'review', 'done']),
+    assignee: z.string().nullish(),
+    priority: z.number().nullish(),
+    created_at: z.number().nullish(),
+    link_counts: z.object({ parents: z.number(), children: z.number() }).nullish(),
+  })
+  .passthrough()
+  .transform((t) => ({
+    id: t.id,
+    title: t.title,
+    body: t.body ?? null,
+    status: t.status,
+    assignee: t.assignee ?? null,
+    priority: t.priority ?? 0,
+    createdAt: t.created_at ?? 0,
+    parentCount: t.link_counts?.parents ?? 0,
+  }));
 export type KanbanTask = z.infer<typeof KanbanTaskSchema>;
 
+// FIXME: kanban WS event shape not yet verified against 0.20.6 (Cowork phase).
 export const KanbanEventSchema = z.object({
   id: z.number().int(),
   taskId: z.number().int(),

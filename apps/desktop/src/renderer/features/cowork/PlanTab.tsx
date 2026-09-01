@@ -19,7 +19,9 @@ export function PlanTab() {
       const parsed = KanbanTaskSchema.safeParse(payloadTask);
       if (!parsed.success) return;
       const t = parsed.data;
-      if (parentId !== null && t.id !== parentId && !t.parents.includes(parentId)) return;
+      // TODO(Task 3.4): scope to the active task tree once kanban_create output
+      // is wired to parentTaskId. Until then, ingest everything.
+      if (parentId !== null && t.id !== parentId) return;
       upsert(t);
     });
     return () => { off(); };
@@ -39,13 +41,10 @@ export function PlanTab() {
 }
 
 function PlanRow({ task }: { task: import('../../api/schemas').KanbanTask }) {
-  const icon = task.status === 'done' || task.status === 'archived' ? '✓'
-    : task.status === 'running' ? '▸'
-    : '○';
-  const color = task.status === 'done' || task.status === 'archived' ? 'text-success'
-    : task.status === 'running' ? 'text-accent'
-    : 'text-dim';
-  const muted = task.status === 'done' || task.status === 'archived' ? 'text-muted line-through' : 'text-fg';
+  const done = task.status === 'done';
+  const icon = done ? '✓' : task.status === 'running' ? '▸' : '○';
+  const color = done ? 'text-success' : task.status === 'running' ? 'text-accent' : 'text-dim';
+  const muted = done ? 'text-muted line-through' : 'text-fg';
   return (
     <div className={'flex items-start gap-2 rounded px-2 py-1 ' + (task.status === 'running' ? 'bg-surface2' : '')}>
       <span className={color}>{icon}</span>

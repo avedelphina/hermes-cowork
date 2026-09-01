@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
-import type { AcpServerMessage, ProfileSummary, StatusSnapshot, AcpClientMessage } from '../../shared/types';
+import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
@@ -36,47 +36,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return { kind: 'ok' as const, path: found.path, version: v.version, min: MIN_HERMES_VERSION };
   });
 
-  ipcMain.handle(IpcChannel.RuntimeStatus, async (): Promise<StatusSnapshot> => {
-    const r = await fetch(`${base}/api/status`, { headers: authHeader() });
-    if (!r.ok) throw new Error(`status fetch failed: ${r.status}`);
-    // Hermes 0.20.6 shape: flat gateway_running + gateway_platforms map.
-    const body = (await r.json()) as {
-      version: string;
-      gateway_running?: boolean;
-      gateway_platforms?: Record<string, { state?: string }>;
-    };
-    const platforms = Object.entries(body.gateway_platforms ?? {})
-      .filter(([, v]) => v?.state === 'connected')
-      .map(([k]) => k);
-    return {
-      hermesVersion: body.version,
-      dashboardPort: ctx.dashboardPort,
-      gateway: { running: body.gateway_running ?? false, platforms },
-    };
-  });
+  // Status and the profile list are read directly from the dashboard by the
+  // renderer through the REST proxy (see api/rest-client.ts) — no bespoke
+  // handlers here.
 
   // ── profiles ──
-  // Hermes 0.20.6: GET /api/profiles -> { profiles: [{ name, path, model, provider, ... }] };
-  // the active profile is a separate GET /api/profiles/active -> { active, current }.
-  ipcMain.handle(IpcChannel.ProfileList, async (): Promise<ProfileSummary[]> => {
-    const [pRes, aRes] = await Promise.all([
-      fetch(`${base}/api/profiles`, { headers: authHeader() }),
-      fetch(`${base}/api/profiles/active`, { headers: authHeader() }),
-    ]);
-    if (!pRes.ok) throw new Error(`profiles fetch failed: ${pRes.status}`);
-    const { profiles } = (await pRes.json()) as {
-      profiles: Array<{ name: string; path: string; model?: string | null; provider?: string | null }>;
-    };
-    const active = aRes.ok ? ((await aRes.json()) as { active?: string }).active ?? null : null;
-    return profiles.map((p) => ({
-      name: p.name,
-      active: p.name === active,
-      hermesHome: p.path,
-      model: p.model ?? null,
-      provider: p.provider ?? null,
-    }));
-  });
-
   ipcMain.handle(IpcChannel.ProfileEnv, async (): Promise<{ globalHermesHome: string; envProfile: string | null }> => ({
     globalHermesHome: ctx.globalHermesHome,
     envProfile: ctx.envProfile,
@@ -99,15 +63,17 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     ctx.win()?.webContents.send(IpcChannel.AcpEvent, semantic);
   });
 
-  ipcMain.handle(IpcChannel.AcpStart, async (_e, opts: { profile: string; cwd: string }) => {
-    // Folder scope is the trust boundary: a task only ever runs against an
-    // explicit, existing directory the user picked. See docs/security-model.md.
-    if (!isExistingDir(opts.cwd)) {
-      throw new Error(`Refusing to start: "${opts.cwd}" is not an existing directory.`);
+  ipcMain.handle(IpcChannel.AcpStart, async (_e, opts: { profile: string; cwd?: string }) => {
+    // Chat is not folder-scoped — it defaults to the home directory. A Cowork
+    // task always passes an explicit folder the user picked, which must exist
+    // (the trust boundary — see docs/security-model.md).
+    const cwd = opts.cwd || homedir();
+    if (!isExistingDir(cwd)) {
+      throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
     }
     return bridge.startSession({
       profile: opts.profile,
-      cwd: opts.cwd,
+      cwd,
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
     });

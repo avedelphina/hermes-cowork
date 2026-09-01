@@ -1,22 +1,19 @@
 // apps/desktop/src/preload/index.ts
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
-import type { ProfileSummary, StatusSnapshot, AcpClientMessage, AcpServerMessage } from '../shared/types';
+import type { AcpClientMessage, AcpServerMessage } from '../shared/types';
 
 const api = {
   runtime: {
-    status: (): Promise<StatusSnapshot> => ipcRenderer.invoke(IpcChannel.RuntimeStatus),
-    rescan: (): Promise<StatusSnapshot> => ipcRenderer.invoke(IpcChannel.RuntimeRescan),
     probe: () => ipcRenderer.invoke(IpcChannel.RuntimeProbe),
   },
   profile: {
-    list: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IpcChannel.ProfileList),
     switch: (name: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ProfileSwitch, name),
     env: (): Promise<{ globalHermesHome: string; envProfile: string | null }> =>
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd: string }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
     load: (opts: { sessionId: string; profile?: string; cwd?: string }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),

@@ -24,7 +24,7 @@ export function ChatPage() {
   const ensureSession = async () => {
     const current = useChatStore.getState().sessionId;
     if (current) return current;
-    const { sessionId: id } = await window.hermes.acp.start({ profile, cwd: '/' });
+    const { sessionId: id } = await window.hermes.acp.start({ profile });
     startSession(id);
     return id;
   };

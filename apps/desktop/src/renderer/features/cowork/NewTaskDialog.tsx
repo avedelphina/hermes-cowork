@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useCoworkStore } from './cowork.store';
+import { api } from '../../api/rest-client';
 
 const COWORK_SYSTEM_PROMPT = `You are running in Hermes Cowork mode.
 
@@ -15,9 +16,20 @@ export function NewTaskDialog() {
   const [goal, setGoal] = useState('');
   const [cwd, setCwd] = useState('');
   const [profile, setProfile] = useState('default');
+  const [profiles, setProfiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [, navigate] = useLocation();
   const startTask = useCoworkStore((s) => s.startTask);
+
+  useEffect(() => {
+    api.profiles()
+      .then((ps) => {
+        setProfiles(ps.map((p) => p.name));
+        const active = ps.find((p) => p.active)?.name;
+        if (active) setProfile(active);
+      })
+      .catch(() => { /* keep the default */ });
+  }, []);
 
   const pickFolder = async () => {
     const path = await window.hermes.dialog.pickFolder();
@@ -69,11 +81,23 @@ export function NewTaskDialog() {
       </div>
 
       <label className="mb-1 block text-xs text-muted">Profile</label>
-      <input
-        value={profile}
-        onChange={(e) => setProfile(e.target.value)}
-        className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-      />
+      {profiles.length > 0 ? (
+        <select
+          value={profile}
+          onChange={(e) => setProfile(e.target.value)}
+          className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+        >
+          {profiles.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={profile}
+          onChange={(e) => setProfile(e.target.value)}
+          className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+        />
+      )}
 
       <div className="flex justify-end gap-2">
         <button onClick={() => navigate('/cowork')} className="rounded px-3 py-2 text-sm text-muted hover:text-fg">

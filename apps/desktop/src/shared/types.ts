@@ -1,16 +1,5 @@
-export type ProfileSummary = {
-  name: string;
-  active: boolean;
-  hermesHome: string;
-  model: string | null;
-  provider: string | null;
-};
-
-export type StatusSnapshot = {
-  hermesVersion: string;
-  dashboardPort: number;
-  gateway: { running: boolean; platforms: string[] };
-};
+// Dashboard-derived types (ProfileSummary, Status) live in the renderer's
+// api/schemas.ts as Zod schemas — they are only consumed there.
 
 /**
  * What a task/worker may do inside its approved root. See
