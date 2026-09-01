@@ -21,6 +21,39 @@
   --radius-xl: 12px;
 }
 
+/* Light palette. Same token roles, inverted values; the gold accent is
+   darkened for contrast on a light ground. Applied when the OS prefers light
+   (unless the user forced dark) and whenever data-theme="light" is set. */
+:root[data-theme='light'],
+:root:not([data-theme='dark']) {
+  @media (prefers-color-scheme: light) {
+    --color-bg: #faf8f2;
+    --color-surface: #ffffff;
+    --color-surface2: #f0ece1;
+    --color-border: #ddd6c5;
+    --color-fg: #1f1b12;
+    --color-muted: #6b6450;
+    --color-dim: #9a927c;
+    --color-accent: #8a6410;
+    --color-success: #15803d;
+    --color-warn: #b45309;
+    --color-danger: #c0392b;
+  }
+}
+:root[data-theme='light'] {
+  --color-bg: #faf8f2;
+  --color-surface: #ffffff;
+  --color-surface2: #f0ece1;
+  --color-border: #ddd6c5;
+  --color-fg: #1f1b12;
+  --color-muted: #6b6450;
+  --color-dim: #9a927c;
+  --color-accent: #8a6410;
+  --color-success: #15803d;
+  --color-warn: #b45309;
+  --color-danger: #c0392b;
+}
+
 html, body, #root { height: 100%; }
 body {
   margin: 0;

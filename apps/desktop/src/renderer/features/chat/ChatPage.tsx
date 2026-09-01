@@ -28,9 +28,20 @@ export function ChatPage() {
     const current = useChatStore.getState().sessionId;
     if (current === id) return;
     if (current) void window.hermes.acp.stop(current);
-    useChatStore.getState().reset();
-    await window.hermes.acp.load({ sessionId: id });
+    // Set the session and clear the pane *before* the load so the history
+    // Hermes replays during session/load lands in a fresh transcript instead
+    // of being wiped by a late startSession().
     startSession(id);
+    try {
+      await window.hermes.acp.load({ sessionId: id });
+    } catch (err) {
+      useChatStore.getState().ingest({
+        kind: 'session-error',
+        sessionId: id,
+        message: `Could not open session: ${err instanceof Error ? err.message : String(err)}`,
+        fatal: true,
+      });
+    }
   };
 
   return (

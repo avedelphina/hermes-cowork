@@ -94,8 +94,11 @@ export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
  *   "tool_call_update"      → tool-result if status==="completed"; otherwise
  *                             dropped (intermediate progress is not surfaced)
  *
- * Variants we deliberately drop in M1:
- *   user_message_chunk, plan, available_commands_update, current_mode_update,
+ *   "user_message_chunk"    → token with role 'user' (only during a
+ *                             session/load history replay)
+ *
+ * Variants we deliberately drop:
+ *   plan, available_commands_update, current_mode_update,
  *   config_option_update, session_info_update, usage_update.
  */
 function translateSessionUpdate(
@@ -113,6 +116,11 @@ function translateSessionUpdate(
     case 'agent_thought_chunk': {
       const text = extractTextFromContentBlock(u['content']);
       return text ? [{ kind: 'token', sessionId, text }] : [];
+    }
+    case 'user_message_chunk': {
+      // Only seen while Hermes replays history during session/load.
+      const text = extractTextFromContentBlock(u['content']);
+      return text ? [{ kind: 'token', sessionId, text, role: 'user' }] : [];
     }
     case 'tool_call': {
       const toolCallId = typeof u['toolCallId'] === 'string' ? u['toolCallId'] : '';

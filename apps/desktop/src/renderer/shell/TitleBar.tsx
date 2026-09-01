@@ -1,4 +1,5 @@
 import { ProfileDropdown } from './ProfileDropdown';
+import { ThemeToggle } from './ThemeToggle';
 
 export function TitleBar() {
   return (
@@ -10,6 +11,7 @@ export function TitleBar() {
         <ProfileDropdown />
       </div>
       <div className="ml-auto" />
+      <ThemeToggle />
     </div>
   );
 }

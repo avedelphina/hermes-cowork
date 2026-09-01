@@ -42,6 +42,11 @@ describe('translateAcpEvent — session/update (Hermes 0.20.6 wire shapes)', () 
     expect(out).toEqual([{ kind: 'token', sessionId: 's1', text: 'P' }]);
   });
 
+  it('maps a replayed user_message_chunk to a user-role token', () => {
+    const out = translateAcpEvent(msg({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'hi' } }));
+    expect(out).toEqual([{ kind: 'token', sessionId: 's1', text: 'hi', role: 'user' }]);
+  });
+
   it('drops usage_update / available_commands_update / session_info_update', () => {
     for (const v of ['usage_update', 'available_commands_update', 'session_info_update']) {
       expect(translateAcpEvent(msg({ sessionUpdate: v }))).toEqual([]);

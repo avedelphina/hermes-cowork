@@ -31,8 +31,9 @@ export const useChatStore = create<ChatStore>((set) => ({
     set((s) => {
       switch (msg.kind) {
         case 'token': {
+          const role = msg.role === 'user' ? 'user' : 'assistant';
           const last = s.messages[s.messages.length - 1];
-          if (last && last.role === 'assistant') {
+          if (last && last.role === role) {
             return {
               messages: [
                 ...s.messages.slice(0, -1),
@@ -41,15 +42,21 @@ export const useChatStore = create<ChatStore>((set) => ({
             };
           }
           return {
-            messages: [...s.messages, { role: 'assistant', text: msg.text, toolCalls: [] }],
+            messages: [...s.messages, { role, text: msg.text, toolCalls: [] }],
           };
         }
         case 'tool-call': {
-          const last = s.messages[s.messages.length - 1];
-          if (!last || last.role !== 'assistant') return s;
+          let msgs = s.messages;
+          let last = msgs[msgs.length - 1];
+          if (!last || last.role !== 'assistant') {
+            // Replay can deliver a tool call before any agent text — open a
+            // shell assistant message to hang it on.
+            msgs = [...msgs, { role: 'assistant', text: '', toolCalls: [] }];
+            last = msgs[msgs.length - 1]!;
+          }
           return {
             messages: [
-              ...s.messages.slice(0, -1),
+              ...msgs.slice(0, -1),
               { ...last, toolCalls: [...last.toolCalls, { id: msg.toolCallId, name: msg.name, args: msg.args }] },
             ],
           };
