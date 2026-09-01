@@ -105,6 +105,33 @@ describe('AcpBridge.startSession', () => {
     await expect(loadPromise).resolves.toEqual({ sessionId: 'past-sess-9' });
   });
 
+  it('reuses one warm connection for a second session of the same profile', async () => {
+    const { bridge, proc } = makeBridge();
+    const common = {
+      profile: 'default', cwd: '/Users/x',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    };
+
+    const first = bridge.startSession(common);
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 's1' } }));
+    await first;
+
+    const initCalls = proc.written.filter((m) => m['method'] === 'initialize').length;
+    const spawnCalls = vi.mocked(cp.spawn).mock.calls.length;
+
+    // Second open: no new spawn, no second initialize — straight to session/load.
+    const second = bridge.loadSession({ ...common, sessionId: 'past-1' });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/load')!['id'] as string, result: {} }));
+    await expect(second).resolves.toEqual({ sessionId: 'past-1' });
+
+    expect(proc.written.filter((m) => m['method'] === 'initialize').length).toBe(initCalls);
+    expect(vi.mocked(cp.spawn).mock.calls.length).toBe(spawnCalls);
+  });
+
   it('shuts the orphan child down if the handshake fails', async () => {
     const { bridge, proc } = makeBridge();
     const startPromise = bridge.startSession({

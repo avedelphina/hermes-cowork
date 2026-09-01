@@ -1,8 +1,12 @@
 // apps/desktop/src/main/orchestrator/acp-bridge.ts
 //
 // High-level ACP session manager. Owns:
-//  - The handshake (initialize → session/new) on session start.
-//  - The acp-sessionId ↔ supervisor-handle mapping.
+//  - A pool of `hermes acp` connections, one per (profile, hermesHome). The
+//    Python process cold-starts in ~3s (plugin/MCP/memory discovery), so a
+//    connection is initialized once and then reused for every session/new,
+//    session/load and session/prompt — resuming a past session drops from a
+//    full respawn to ~0.4s.
+//  - The acp-sessionId ↔ connection-handle mapping (many sessions per handle).
 //  - Pending session/request_permission state, so renderer-side approve/deny
 //    can be turned into JSON-RPC responses to the original request.
 //  - Translation of incoming server-pushed events → semantic AcpServerMessage.
@@ -40,9 +44,13 @@ type PendingPermission = {
   options: PermissionOption[];
 };
 
+type Conn = { handle: string; ready: Promise<void> };
+
 export class AcpBridge extends EventEmitter {
   private acpToHandle = new Map<string, string>();
   private pendingPermissions = new Map<string, PendingPermission>();
+  /** One warm ACP connection per `${profile}\0${hermesHome}`. */
+  private conns = new Map<string, Conn>();
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -50,19 +58,17 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
-   * Spawn an ACP child and complete the protocol handshake. Returns the real
-   * ACP sessionId, which the renderer uses for all subsequent prompts.
+   * Open a new Hermes session. Reuses the warm connection for the profile.
    */
   async startSession(opts: StartSessionOpts): Promise<{ sessionId: string }> {
-    // session/new: the agent assigns the id and returns it.
-    return this.spawnAndHandshake(opts, async (handle) => {
-      const res = (await this.sup.request(handle, 'session/new', {
-        cwd: opts.cwd,
-        mcpServers: [],
-      })) as { sessionId?: string };
-      if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
-      return res.sessionId;
-    });
+    const handle = await this.connFor(opts);
+    const res = (await this.sup.request(handle, 'session/new', {
+      cwd: opts.cwd,
+      mcpServers: [],
+    })) as { sessionId?: string };
+    if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
+    this.acpToHandle.set(res.sessionId, handle);
+    return { sessionId: res.sessionId };
   }
 
   /**
@@ -71,47 +77,50 @@ export class AcpBridge extends EventEmitter {
    * replays the conversation as session/update notifications during the call.
    */
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
-    return this.spawnAndHandshake(opts, async (handle) => {
-      await this.sup.request(handle, 'session/load', {
-        sessionId: opts.sessionId,
-        cwd: opts.cwd,
-        mcpServers: [],
-      });
-      return opts.sessionId;
+    const handle = await this.connFor(opts);
+    await this.sup.request(handle, 'session/load', {
+      sessionId: opts.sessionId,
+      cwd: opts.cwd,
+      mcpServers: [],
     });
+    this.acpToHandle.set(opts.sessionId, handle);
+    return { sessionId: opts.sessionId };
   }
 
-  private async spawnAndHandshake(
-    opts: StartSessionOpts,
-    openSession: (handle: string) => Promise<string>,
-  ): Promise<{ sessionId: string }> {
-    const handle = randomUUID();
-    this.sup.spawn({
-      id: handle,
-      profile: opts.profile,
-      cwd: opts.cwd,
-      binaryPath: opts.binaryPath,
-      hermesHome: opts.hermesHome,
-    });
-
-    try {
-      await this.sup.request(handle, 'initialize', {
-        protocolVersion: ACP_PROTOCOL_VERSION,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-        },
-        clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
+  /** Get (or lazily create + initialize) the pooled connection for a profile. */
+  private async connFor(opts: StartSessionOpts): Promise<string> {
+    const key = `${opts.profile}\0${opts.hermesHome}`;
+    let conn = this.conns.get(key);
+    if (!conn) {
+      const handle = randomUUID();
+      this.sup.spawn({
+        id: handle,
+        profile: opts.profile,
+        cwd: opts.cwd,
+        binaryPath: opts.binaryPath,
+        hermesHome: opts.hermesHome,
       });
-
-      const sessionId = await openSession(handle);
-      this.acpToHandle.set(sessionId, handle);
-      return { sessionId };
-    } catch (err) {
-      // Handshake failed; tear down the orphan child so it doesn't leak.
-      this.sup.shutdown(handle);
-      throw err;
+      const ready = this.sup
+        .request(handle, 'initialize', {
+          protocolVersion: ACP_PROTOCOL_VERSION,
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
+          },
+          clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
+        })
+        .then(() => undefined)
+        .catch((err) => {
+          // Bad handshake — drop the dead conn so the next call respawns.
+          this.conns.delete(key);
+          this.sup.shutdown(handle);
+          throw err;
+        });
+      conn = { handle, ready };
+      this.conns.set(key, conn);
     }
+    await conn.ready;
+    return conn.handle;
   }
 
   /**
@@ -151,7 +160,10 @@ export class AcpBridge extends EventEmitter {
     this.sup.send(pending.handle, { jsonrpc: '2.0', id: pending.requestId, result });
   }
 
-  /** Shut down the ACP child for a given session. */
+  /**
+   * Stop a session's current turn and forget it. The pooled ACP child stays
+   * warm for other sessions — only stopAll() actually kills processes.
+   */
   stopSession(sessionId: string): void {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) return;
@@ -159,13 +171,19 @@ export class AcpBridge extends EventEmitter {
     for (const [tcId, p] of this.pendingPermissions) {
       if (p.handle === handle) this.pendingPermissions.delete(tcId);
     }
-    this.sup.shutdown(handle);
+    // Best-effort: ask Hermes to cancel any in-flight turn for this session.
+    try {
+      this.sup.send(handle, { jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
+    } catch {
+      // child already gone — nothing to cancel
+    }
   }
 
-  /** Shut down all sessions (used on profile switch / app quit). */
+  /** Kill every pooled connection (profile switch / app quit). */
   stopAll(): void {
     this.acpToHandle.clear();
     this.pendingPermissions.clear();
+    this.conns.clear();
     this.sup.shutdownAll();
   }
 
@@ -190,10 +208,13 @@ export class AcpBridge extends EventEmitter {
         }
       }
     } else if (event.kind === 'exit') {
-      // Child is gone — drop its ACP-sessionId mapping so a stale prompt
-      // fails fast instead of writing to a dead pipe.
+      // Child is gone — drop its sessions and its pooled connection so the
+      // next call respawns instead of writing to a dead pipe.
       for (const [acpId, handle] of this.acpToHandle) {
         if (handle === event.sessionId) this.acpToHandle.delete(acpId);
+      }
+      for (const [key, conn] of this.conns) {
+        if (conn.handle === event.sessionId) this.conns.delete(key);
       }
     }
 
