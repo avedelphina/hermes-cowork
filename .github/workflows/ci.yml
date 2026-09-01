@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'harden/**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm -r typecheck
+      - run: pnpm -r lint
+      - run: pnpm -r test
+      - run: pnpm -r build
+
+  package-mac:
+    # Unsigned DMG — proves packaging works. Signing/notarisation happen on a
+    # machine with the Apple Developer cert (see docs/release-checklist.md).
+    runs-on: macos-14
+    needs: check
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/harden/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hermes-cowork/desktop build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-cowork-dmg
+          path: apps/desktop/release/*.dmg
+          if-no-files-found: error
