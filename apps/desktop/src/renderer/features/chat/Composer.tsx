@@ -43,6 +43,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
     <div className="border-t border-border px-6 py-3">
       <textarea
         value={text}
+        aria-label="Message input"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); }

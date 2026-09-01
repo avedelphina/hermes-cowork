@@ -20,7 +20,7 @@ const HERMES_ITEMS: Item[] = [
 export function Sidebar() {
   const [location] = useLocation();
   return (
-    <aside className="flex w-[200px] flex-col gap-4 border-r border-border bg-surface px-3 py-3 text-sm">
+    <aside aria-label="Navigation" className="flex w-[200px] flex-col gap-4 border-r border-border bg-surface px-3 py-3 text-sm">
       <Section title="Cowork" items={COWORK_ITEMS} active={location} />
       <Section title="Hermes" items={HERMES_ITEMS} active={location} />
     </aside>
@@ -42,7 +42,7 @@ function Section({ title, items, active }: { title: string; items: Item[]; activ
               (isActive ? 'bg-surface2 text-fg' : 'text-muted hover:text-fg')
             }
           >
-            <span className="w-4 text-center">{it.icon}</span>
+            <span aria-hidden className="w-4 text-center">{it.icon}</span>
             <span>{it.label}</span>
           </Link>
         );

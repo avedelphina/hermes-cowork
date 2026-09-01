@@ -55,6 +55,12 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await win.keyboard.press('Enter');
   await expect(win.locator('li', { hasText: 'Renamed Project' })).toBeVisible();
 
+  // Code mode: project file tree + a message composer.
+  await win.getByRole('link', { name: 'Code' }).click();
+  await expect(win.getByRole('button', { name: /README\.md/ })).toBeVisible();
+  await expect(win.getByRole('textbox', { name: 'Message input' })).toBeVisible();
+
+  await win.getByRole('link', { name: /Projects/i }).first().click();
   await win.locator('li', { hasText: 'Renamed Project' }).getByRole('button', { name: 'Archive' }).click();
   await expect(win.getByText('Archived', { exact: true })).toBeVisible();
   await expect(win.getByRole('link', { name: /No project/i })).toBeVisible(); // chip cleared

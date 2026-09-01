@@ -22,7 +22,12 @@ export function StatusBar() {
   return (
     <div className="relative flex items-center gap-3 border-t border-border bg-bg px-3 py-1.5 text-[11px] text-muted">
       <GatewayDot status={status} stale={stale} />
-      <button className="ml-auto hover:text-fg" onClick={() => setOpen((v) => !v)}>
+      <button
+        className="ml-auto hover:text-fg"
+        aria-label="Runtime status details"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
         {stale ? (
           <span className="text-danger">● Hermes unreachable — retry</span>
         ) : status ? (

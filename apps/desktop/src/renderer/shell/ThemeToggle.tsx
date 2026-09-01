@@ -37,6 +37,7 @@ export function ThemeToggle() {
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       className="rounded-md bg-surface2 px-2 py-1 text-xs text-muted hover:text-fg"
       title="Toggle light / dark / auto"
+      aria-label="Toggle theme"
     >
       {label[mode]}
     </button>
