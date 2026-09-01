@@ -25,6 +25,13 @@ export const IpcChannel = {
 
   // dialog
   ShowFolderPicker: 'dialog:folder',
+
+  // projects
+  ProjectList: 'project:list',
+  ProjectCreate: 'project:create',
+  ProjectUpdate: 'project:update',
+  ProjectSetActive: 'project:set-active',
+  ProjectRemove: 'project:remove',
 } as const;
 
 export type IpcChannelKey = (typeof IpcChannel)[keyof typeof IpcChannel];

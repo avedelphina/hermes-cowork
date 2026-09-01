@@ -5,14 +5,17 @@ import { Sidebar } from './shell/Sidebar';
 import { StatusBar } from './shell/StatusBar';
 import { Routes } from './routes';
 import { RuntimeError } from './shell/RuntimeError';
+import { useProjectStore } from './features/projects/project.store';
 
 type Probe = Awaited<ReturnType<typeof window.hermes.runtime.probe>>;
 
 export function App() {
   const [probe, setProbe] = useState<Probe | null>(null);
+  const loadProjects = useProjectStore((s) => s.load);
   useEffect(() => {
     void window.hermes.runtime.probe().then(setProbe);
-  }, []);
+    void loadProjects();
+  }, [loadProjects]);
 
   if (probe === null) {
     return <main className="flex h-screen items-center justify-center text-muted">Connecting to Hermes…</main>;

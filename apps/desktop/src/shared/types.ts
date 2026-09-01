@@ -1,6 +1,16 @@
 // Dashboard-derived types (ProfileSummary, Status) live in the renderer's
 // api/schemas.ts as Zod schemas — they are only consumed there.
 
+export type Project = {
+  id: string;
+  name: string;
+  folderPath: string;
+  profile: string;
+  createdAt: string;
+  lastOpenedAt: string;
+};
+export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
+
 /**
  * What a task/worker may do inside its approved root. See
  * docs/security-model.md. Default-deny: read-only until the user widens it.

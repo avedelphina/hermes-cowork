@@ -1,7 +1,7 @@
 // apps/desktop/src/preload/index.ts
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
-import type { AcpClientMessage, AcpServerMessage } from '../shared/types';
+import type { AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot } from '../shared/types';
 
 const api = {
   runtime: {
@@ -43,6 +43,15 @@ const api = {
   },
   dialog: {
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.ShowFolderPicker),
+  },
+  projects: {
+    list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),
+    create: (input: { name: string; folderPath: string; profile: string }): Promise<Project> =>
+      ipcRenderer.invoke(IpcChannel.ProjectCreate, input),
+    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string }): Promise<Project | null> =>
+      ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
+    setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
+    remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),
   },
 };
 

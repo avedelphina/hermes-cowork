@@ -3,6 +3,7 @@ import { SessionList } from './SessionList';
 import { MessageStream } from './MessageStream';
 import { Composer } from './Composer';
 import { useChatStore } from './chat.store';
+import { activeProject } from '../projects/project.store';
 import { api } from '../../api/rest-client';
 
 export function ChatPage() {
@@ -14,17 +15,21 @@ export function ChatPage() {
   useEffect(() => {
     const off = window.hermes.acp.onEvent((evt) => ingest(evt));
     api.profiles()
-      .then((ps) => setProfile(ps.find((p) => p.active)?.name ?? 'default'))
+      .then((ps) => setProfile(activeProject()?.profile ?? ps.find((p) => p.active)?.name ?? 'default'))
       .catch(() => { /* keep default */ });
     return () => { off(); };
   }, [ingest]);
 
   // Start a session lazily on first send — mounting the page no longer creates
-  // a throwaway Hermes session.
+  // a throwaway Hermes session. Runs in the active project's folder if one is set.
   const ensureSession = async () => {
     const current = useChatStore.getState().sessionId;
     if (current) return current;
-    const { sessionId: id } = await window.hermes.acp.start({ profile });
+    const proj = activeProject();
+    const { sessionId: id } = await window.hermes.acp.start({
+      profile: proj?.profile ?? profile,
+      ...(proj ? { cwd: proj.folderPath } : {}),
+    });
     startSession(id);
     return id;
   };

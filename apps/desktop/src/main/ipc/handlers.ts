@@ -1,6 +1,8 @@
 // apps/desktop/src/main/ipc/handlers.ts
-import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { app, ipcMain, BrowserWindow, dialog } from 'electron';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
@@ -8,6 +10,7 @@ import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
+import { ProjectStore } from '../store/project-store';
 
 type Context = {
   hermesBinary: string;
@@ -150,5 +153,44 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (!w) return null;
     const result = await dialog.showOpenDialog(w, { properties: ['openDirectory'] });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  // ── projects ──
+  // HERMES_COWORK_USERDATA lets e2e tests point the store at a scratch dir.
+  const userData = process.env['HERMES_COWORK_USERDATA'] || app.getPath('userData');
+  mkdirSync(userData, { recursive: true });
+  const projects = new ProjectStore(join(userData, 'projects.json'));
+
+  ipcMain.handle(IpcChannel.ProjectList, () => projects.snapshot());
+
+  ipcMain.handle(
+    IpcChannel.ProjectCreate,
+    (_e, input: { name: string; folderPath: string; profile: string }) => {
+      if (!isExistingDir(input.folderPath)) {
+        throw new Error(`"${input.folderPath}" is not an existing directory.`);
+      }
+      const name = input.name.trim() || input.folderPath.split('/').filter(Boolean).pop() || 'Project';
+      return projects.create({ name, folderPath: input.folderPath, profile: input.profile });
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannel.ProjectUpdate,
+    (_e, id: string, patch: { name?: string; profile?: string; folderPath?: string }) => {
+      if (patch.folderPath !== undefined && !isExistingDir(patch.folderPath)) {
+        throw new Error(`"${patch.folderPath}" is not an existing directory.`);
+      }
+      return projects.update(id, patch);
+    },
+  );
+
+  ipcMain.handle(IpcChannel.ProjectSetActive, (_e, id: string) => {
+    projects.setActive(id);
+    return projects.snapshot();
+  });
+
+  ipcMain.handle(IpcChannel.ProjectRemove, (_e, id: string) => {
+    projects.remove(id);
+    return projects.snapshot();
   });
 }
