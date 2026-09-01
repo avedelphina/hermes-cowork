@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot, DirListing, FilePreview,
+  CoworkTask, TaskStatus,
 } from '../shared/types';
 
 const api = {
@@ -17,7 +18,7 @@ const api = {
   acp: {
     start: (opts: { profile: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
-    load: (opts: { sessionId: string; profile?: string; cwd?: string }): Promise<{ sessionId: string }> =>
+    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
     setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
@@ -59,6 +60,15 @@ const api = {
   fs: {
     list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
     read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
+  },
+  tasks: {
+    list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
+    create: (input: {
+      goal: string; cwd: string; profile: string; acpSessionId: string; projectId: string | null;
+    }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
+    update: (id: string, patch: { status?: TaskStatus; approved?: boolean }): Promise<CoworkTask | null> =>
+      ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.TaskRemove, id),
   },
 };
 

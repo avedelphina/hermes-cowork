@@ -34,6 +34,12 @@ export const IpcChannel = {
   ProjectRemove: 'project:remove',
   ProjectContextFiles: 'project:context-files', // which context files exist in a folder
 
+  // cowork tasks
+  TaskList: 'task:list',
+  TaskCreate: 'task:create',
+  TaskUpdate: 'task:update',
+  TaskRemove: 'task:remove',
+
   // project filesystem (scoped to a project root)
   FsList: 'fs:list',
   FsRead: 'fs:read',

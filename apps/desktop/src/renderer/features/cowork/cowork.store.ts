@@ -1,6 +1,6 @@
 // apps/desktop/src/renderer/features/cowork/cowork.store.ts
 import { create } from 'zustand';
-import type { AcpServerMessage } from '@shared/types';
+import type { AcpServerMessage, CoworkTask, TaskStatus } from '@shared/types';
 import type { KanbanTask } from '../../api/schemas';
 
 type Approval = { toolCallId: string; description: string };
@@ -8,7 +8,13 @@ type Approval = { toolCallId: string; description: string };
 /** Cowork approval mode → ACP session mode id. */
 export const MODE_FOR = { ask: 'default', auto: 'accept_edits' } as const;
 
+/** Fire-and-forget persistence of a task's lifecycle state. */
+function persistTask(id: string | null, patch: { status?: TaskStatus; approved?: boolean }): void {
+  if (id) void window.hermes?.tasks?.update(id, patch);
+}
+
 type CoworkStore = {
+  taskId: string | null;
   sessionId: string | null;
   goal: string;
   cwd: string;
@@ -28,7 +34,9 @@ type CoworkStore = {
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
 
-  startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
+  startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
+  /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
+  restoreTask: (task: CoworkTask) => void;
   /** CoworkPage calls this after it has sent the kickoff. */
   clearKickoff: () => void;
   /** Ask the Files tab to open `absPath` (converted to project-relative). */
@@ -48,6 +56,7 @@ type CoworkStore = {
 };
 
 export const useCoworkStore = create<CoworkStore>((set) => ({
+  taskId: null,
   sessionId: null,
   goal: '',
   cwd: '',
@@ -63,8 +72,16 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   planTasks: [],
   artifacts: [],
 
-  startTask: ({ sessionId, goal, cwd, profile, kickoff }) =>
-    set({ sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+  startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
+    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+
+  restoreTask: (t) =>
+    set({
+      taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
+      approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
+      pendingKickoff: null, filesTarget: null,
+      transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
+    }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
   openInFiles: (absPath) =>
@@ -76,14 +93,24 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
   clearFilesTarget: () => set({ filesTarget: null }),
   setApprovalMode: (approvalMode) => set({ approvalMode }),
-  approvePlan: () => set({ approved: true, status: 'running' }),
+  approvePlan: () =>
+    set((s) => {
+      persistTask(s.taskId, { approved: true, status: 'executing' });
+      return { approved: true, status: 'running' };
+    }),
   setParent: (parentTaskId) => set({ parentTaskId }),
 
   pushUserText: (text) =>
-    set((s) => ({ status: 'running', transcript: [...s.transcript, { role: 'user', text }] })),
+    set((s) => {
+      if (s.approved) persistTask(s.taskId, { status: 'executing' });
+      return { status: 'running', transcript: [...s.transcript, { role: 'user', text }] };
+    }),
 
   markStopped: () =>
-    set((s) => ({ status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] })),
+    set((s) => {
+      persistTask(s.taskId, { status: 'stopped' });
+      return { status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] };
+    }),
 
   upsertPlanTask: (task) =>
     set((s) => {
@@ -95,7 +122,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
 
   reset: () => set({
-    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
+    taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
     pendingKickoff: null, filesTarget: null,
     transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
   }),
@@ -124,11 +151,13 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
         case 'session-error':
+          persistTask(s.taskId, { status: 'failed' });
           return {
             status: 'idle',
             transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }],
           };
         case 'done':
+          persistTask(s.taskId, { status: s.approved ? 'done' : 'awaiting_approval' });
           return { status: 'idle' };
         case 'tool-result':
           return s;

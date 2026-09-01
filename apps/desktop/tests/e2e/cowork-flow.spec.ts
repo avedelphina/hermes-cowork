@@ -21,6 +21,7 @@ test('cowork: propose plan → approve → execute', async () => {
   // its own CLI flags — strip it for the real GUI launch.
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  env.HERMES_COWORK_USERDATA = path.join(work, '.userdata'); // isolate projects/tasks stores
 
   const app = await electron.launch({
     args: [path.join(__dirname, '../../out/main/index.js')],
@@ -68,6 +69,16 @@ test('cowork: propose plan → approve → execute', async () => {
     .toBe(true);
   expect(readFileSync(path.join(work, 'hello.txt'), 'utf8').trim()).toBe('hello');
   await shot('06-done');
+
+  // The task is persisted and resumable: leave, come back via the Tasks list.
+  await win.getByRole('link', { name: /Tasks/ }).click();
+  const taskRow = win.locator('li', { hasText: 'hello.txt containing the single word hello' });
+  await expect(taskRow).toBeVisible();
+  await taskRow.getByRole('button', { name: /Open|Resume/ }).click();
+  // session/load replays the conversation into the (initially empty) transcript.
+  const transcript = win.locator('.flex-1.overflow-y-auto').first();
+  await expect(transcript).toContainText(/Proceed with the plan|Verify the file exists/i, { timeout: 60_000 });
+  await shot('07-resumed');
 
   await app.close();
 });

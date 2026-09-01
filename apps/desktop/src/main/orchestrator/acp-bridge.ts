@@ -116,14 +116,22 @@ export class AcpBridge extends EventEmitter {
    * replays the conversation as session/update notifications during the call.
    */
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
-    const handle = await this.connFor(opts);
-    await this.sup.request(handle, 'session/load', {
-      sessionId: opts.sessionId,
-      cwd: opts.cwd,
-      mcpServers: [],
-    });
-    this.acpToHandle.set(opts.sessionId, handle);
-    return { sessionId: opts.sessionId };
+    const handle = opts.isolate ? await this.spawnDedicated(opts) : await this.connFor(opts);
+    try {
+      await this.sup.request(handle, 'session/load', {
+        sessionId: opts.sessionId,
+        cwd: opts.cwd,
+        mcpServers: [],
+      });
+      this.acpToHandle.set(opts.sessionId, handle);
+      return { sessionId: opts.sessionId };
+    } catch (err) {
+      if (opts.isolate) {
+        this.isolatedHandles.delete(handle);
+        this.sup.shutdown(handle);
+      }
+      throw err;
+    }
   }
 
   /** Get (or lazily create + initialize) the pooled connection for a profile. */

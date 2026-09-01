@@ -4,8 +4,8 @@ type Item = { icon: string; label: string; href: string };
 
 const COWORK_ITEMS: Item[] = [
   { icon: '+', label: 'New task', href: '/cowork/new' },
-  { icon: '⏵', label: 'Active tasks', href: '/cowork' },
-  { icon: '⏰', label: 'Scheduled', href: '/cowork/scheduled' },
+  { icon: '⏵', label: 'Current task', href: '/cowork' },
+  { icon: '☰', label: 'Tasks', href: '/cowork/tasks' },
   { icon: '📁', label: 'Projects', href: '/cowork/projects' },
 ];
 

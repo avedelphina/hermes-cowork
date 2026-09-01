@@ -12,6 +12,28 @@ export type Project = {
 };
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
 
+export type TaskStatus =
+  | 'planning'          // kickoff sent, agent drafting the plan
+  | 'awaiting_approval' // plan proposed, waiting for the user
+  | 'executing'         // plan approved, agent working
+  | 'done'              // agent finished after approval
+  | 'failed'            // ACP/session error
+  | 'stopped'           // user hit Stop
+  | 'interrupted';      // app exited while the task was live
+
+export type CoworkTask = {
+  id: string;
+  goal: string;
+  cwd: string;
+  profile: string;
+  acpSessionId: string;
+  projectId: string | null;
+  status: TaskStatus;
+  approved: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DirEntry = { name: string; kind: 'dir' | 'file'; size: number };
 export type DirListing = { path: string; entries: DirEntry[] };
 

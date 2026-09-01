@@ -11,7 +11,9 @@ import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../or
 import { profileHome } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
 import { ProjectStore } from '../store/project-store';
+import { TaskStore } from '../store/task-store';
 import { contextFiles, listDir, readFilePreview } from '../fs/project-fs';
+import type { CoworkTask, TaskStatus } from '../../shared/types';
 
 type Context = {
   hermesBinary: string;
@@ -93,13 +95,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   ipcMain.handle(
     IpcChannel.AcpLoad,
-    async (_e, opts: { sessionId: string; profile?: string; cwd?: string }) => {
+    async (_e, opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }) => {
       const profile = opts.profile ?? 'default';
       const cwd = opts.cwd && isExistingDir(opts.cwd) ? opts.cwd : homedir();
       return bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
         cwd,
+        isolate: !!opts.isolate,
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, profile),
       });
@@ -202,6 +205,17 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   };
 
   ipcMain.handle(IpcChannel.ProjectContextFiles, (_e, id: string) => contextFiles(projectRoot(id)));
+
+  // ── cowork tasks ──
+  const tasks = new TaskStore(join(userData, 'tasks.json'));
+  ipcMain.handle(IpcChannel.TaskList, () => tasks.list());
+  ipcMain.handle(IpcChannel.TaskCreate, (_e, input: Omit<CoworkTask, 'id' | 'status' | 'approved' | 'createdAt' | 'updatedAt'>) =>
+    tasks.create(input),
+  );
+  ipcMain.handle(IpcChannel.TaskUpdate, (_e, id: string, patch: { status?: TaskStatus; approved?: boolean }) =>
+    tasks.update(id, patch),
+  );
+  ipcMain.handle(IpcChannel.TaskRemove, (_e, id: string) => tasks.remove(id));
 
   // ── project filesystem (read-only, scoped to the project root) ──
   ipcMain.handle(IpcChannel.FsList, (_e, id: string, rel?: string) => listDir(projectRoot(id), rel ?? ''));

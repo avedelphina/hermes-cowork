@@ -43,7 +43,7 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await expect(win.locator(`input[value="${work}"]`)).toBeVisible();
 
   // File browser (Cowork right pane) lists and previews project files.
-  await win.getByRole('link', { name: 'Active tasks' }).click();
+  await win.getByRole('link', { name: /Current task/ }).click();
   await win.getByRole('button', { name: 'Files', exact: true }).click();
   await win.getByRole('button', { name: /README\.md/ }).click();
   await expect(win.locator('pre')).toContainText('hello from readme');

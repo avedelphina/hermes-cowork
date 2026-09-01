@@ -60,10 +60,14 @@ function Dialog() {
       const { sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true });
       const mode = useCoworkStore.getState().approvalMode;
       await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[mode] }).catch(() => { /* non-fatal */ });
+      const task = await window.hermes.tasks.create({
+        goal, cwd, profile, acpSessionId: sessionId,
+        projectId: activeProject()?.id ?? null,
+      });
       // Hand the kickoff to CoworkPage: it registers the event listener before
       // sending, so the streamed plan is not lost between routes.
       startTask({
-        sessionId, goal, cwd, profile,
+        taskId: task.id, sessionId, goal, cwd, profile,
         kickoff: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');

@@ -11,13 +11,17 @@ export function CoworkPage() {
   const pushUserText = useCoworkStore((s) => s.pushUserText);
 
   useEffect(() => {
-    // Register the listener first, then fire any pending kickoff so none of the
-    // streamed plan is lost in the gap between routes.
+    // Register the listener first, then either fire the kickoff (new task) or
+    // replay a resumed task's history via session/load.
     const off = window.hermes.acp.onEvent((evt) => ingestAcp(evt));
-    const { pendingKickoff, sessionId: sid, clearKickoff } = useCoworkStore.getState();
-    if (pendingKickoff && sid) {
-      clearKickoff();
-      void window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: pendingKickoff });
+    const s = useCoworkStore.getState();
+    if (s.pendingKickoff && s.sessionId) {
+      s.clearKickoff();
+      void window.hermes.acp.send({ kind: 'prompt', sessionId: s.sessionId, text: s.pendingKickoff });
+    } else if (s.taskId && s.sessionId && s.transcript.length === 0) {
+      void window.hermes.acp.load({
+        sessionId: s.sessionId, profile: s.profile, cwd: s.cwd, isolate: true,
+      });
     }
     return () => { off(); };
   }, [ingestAcp]);
