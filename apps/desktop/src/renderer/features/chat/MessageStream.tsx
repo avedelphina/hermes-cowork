@@ -1,7 +1,7 @@
 import { useChatStore } from './chat.store';
 import { ToolCallCard } from './ToolCallCard';
 
-export function MessageStream() {
+export function MessageStream({ agentName = 'Hermes' }: { agentName?: string }) {
   const messages = useChatStore((s) => s.messages);
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -13,7 +13,7 @@ export function MessageStream() {
       {messages.map((m, i) => (
         <div key={i} className="mb-6">
           <div className="mb-1 text-[10px] uppercase tracking-wide text-dim">
-            {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : 'Hermes'}
+            {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : agentName}
           </div>
           <div className={'whitespace-pre-wrap text-sm ' + (m.role === 'system' ? 'text-danger' : 'text-fg')}>
             {m.text}

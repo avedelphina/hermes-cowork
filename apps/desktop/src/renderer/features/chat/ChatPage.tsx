@@ -1,16 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { SessionList } from './SessionList';
 import { MessageStream } from './MessageStream';
 import { Composer } from './Composer';
 import { useChatStore } from './chat.store';
+import { api } from '../../api/rest-client';
 
 export function ChatPage() {
   const sessionId = useChatStore((s) => s.sessionId);
   const startSession = useChatStore((s) => s.startSession);
   const ingest = useChatStore((s) => s.ingest);
+  const [profile, setProfile] = useState('default');
 
   useEffect(() => {
     const off = window.hermes.acp.onEvent((evt) => ingest(evt));
+    api.profiles()
+      .then((ps) => setProfile(ps.find((p) => p.active)?.name ?? 'default'))
+      .catch(() => { /* keep default */ });
     return () => { off(); };
   }, [ingest]);
 
@@ -19,7 +24,7 @@ export function ChatPage() {
   const ensureSession = async () => {
     const current = useChatStore.getState().sessionId;
     if (current) return current;
-    const { sessionId: id } = await window.hermes.acp.start({ profile: 'default', cwd: '/' });
+    const { sessionId: id } = await window.hermes.acp.start({ profile, cwd: '/' });
     startSession(id);
     return id;
   };
@@ -33,7 +38,7 @@ export function ChatPage() {
     // of being wiped by a late startSession().
     startSession(id);
     try {
-      await window.hermes.acp.load({ sessionId: id });
+      await window.hermes.acp.load({ sessionId: id, profile });
     } catch (err) {
       useChatStore.getState().ingest({
         kind: 'session-error',
@@ -48,8 +53,8 @@ export function ChatPage() {
     <div className="flex h-full flex-1">
       <SessionList activeId={sessionId} onPick={(id) => void pick(id)} />
       <div className="flex flex-1 flex-col">
-        <MessageStream />
-        <Composer ensureSession={ensureSession} placeholder="Message Hermes… ⌘↵ to send" />
+        <MessageStream agentName={profile} />
+        <Composer ensureSession={ensureSession} placeholder={`Message ${profile}… ⌘↵ to send`} />
       </div>
     </div>
   );
