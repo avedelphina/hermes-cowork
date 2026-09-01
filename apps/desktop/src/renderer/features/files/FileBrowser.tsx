@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DirListing, FilePreview } from '@shared/types';
 import { activeProject, useProjectStore } from '../projects/project.store';
+import { useCoworkStore } from '../cowork/cowork.store';
 
 function crumbs(path: string): string[] {
   return path ? path.split('/') : [];
@@ -47,6 +48,20 @@ function Browser({ projectId, projectName }: { projectId: string; projectName: s
       .then((p) => { setPreview(p); setError(null); })
       .catch((e) => setError(String(e)));
   }, [projectId, sel]);
+
+  // Jump to a file requested from the Artifacts tab.
+  const filesTarget = useCoworkStore((s) => s.filesTarget);
+  const clearFilesTarget = useCoworkStore((s) => s.clearFilesTarget);
+  useEffect(() => {
+    if (!filesTarget) return;
+    const slash = filesTarget.lastIndexOf('/');
+    const targetDir = slash >= 0 ? filesTarget.slice(0, slash) : '';
+    window.hermes.fs
+      .list(projectId, targetDir)
+      .then((l) => { setDir(targetDir); setListing(l); setSel(filesTarget); setError(null); })
+      .catch((e) => setError(String(e)));
+    clearFilesTarget();
+  }, [filesTarget, projectId, clearFilesTarget]);
 
   const project = { name: projectName };
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import type { Project } from '@shared/types';
 import { useProjectStore } from './project.store';
 import { api } from '../../api/rest-client';
 
 export function ProjectsPage() {
-  const { projects, activeId, loaded, load, setActive, remove } = useProjectStore();
+  const { projects, activeId, loaded, load, setActive, remove, update } = useProjectStore();
   const [profiles, setProfiles] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -11,6 +12,8 @@ export function ProjectsPage() {
   const [profile, setProfile] = useState('default');
   const [error, setError] = useState<string | null>(null);
   const [ctx, setCtx] = useState<Record<string, string[]>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   useEffect(() => {
     for (const p of projects) {
@@ -51,6 +54,82 @@ export function ProjectsPage() {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const commitRename = async () => {
+    if (editing && editName.trim()) await update(editing, { name: editName.trim() });
+    setEditing(null);
+  };
+
+  const live = projects.filter((p) => !p.archived);
+  const archived = projects.filter((p) => p.archived);
+
+  const Row = ({ p }: { p: Project }) => (
+    <li
+      className={
+        'flex items-center justify-between rounded-lg border px-4 py-3 ' +
+        (p.id === activeId ? 'border-accent bg-surface2' : 'border-border bg-surface') +
+        (p.archived ? ' opacity-60' : '')
+      }
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm">
+          {p.id === activeId && <span className="text-accent">●</span>}
+          {editing === p.id ? (
+            <input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commitRename();
+                if (e.key === 'Escape') setEditing(null);
+              }}
+              onBlur={() => void commitRename()}
+              className="rounded border border-border bg-surface2 px-1.5 py-0.5 text-sm"
+            />
+          ) : (
+            <span
+              className="font-medium"
+              onDoubleClick={() => { setEditing(p.id); setEditName(p.name); }}
+              title="Double-click to rename"
+            >
+              {p.name}
+            </span>
+          )}
+          <span className="text-[10px] text-dim">{p.profile}</span>
+        </div>
+        <div className="truncate text-[11px] text-muted">{p.folderPath}</div>
+        <div className="mt-0.5 text-[10px] text-dim">
+          {ctx[p.id]?.length ? `context: ${(ctx[p.id] ?? []).join(', ')}` : 'no AGENTS.md / .hermes.md'}
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        {p.id !== activeId && (
+          <button onClick={() => void setActive(p.id)} className="rounded bg-surface2 px-2 py-1 text-xs hover:bg-border">
+            Open
+          </button>
+        )}
+        <button
+          onClick={() => { setEditing(p.id); setEditName(p.name); }}
+          className="rounded px-2 py-1 text-xs text-muted hover:text-fg"
+        >
+          Rename
+        </button>
+        <button
+          onClick={() => void update(p.id, { archived: !p.archived })}
+          className="rounded px-2 py-1 text-xs text-muted hover:text-fg"
+        >
+          {p.archived ? 'Unarchive' : 'Archive'}
+        </button>
+        <button
+          onClick={() => void remove(p.id)}
+          className="rounded px-2 py-1 text-xs text-muted hover:text-danger"
+          title="Remove from app — does not delete the folder"
+        >
+          Remove
+        </button>
+      </div>
+    </li>
+  );
 
   return (
     <div className="mx-auto mt-10 max-w-2xl px-6">
@@ -109,48 +188,19 @@ export function ProjectsPage() {
       {projects.length === 0 ? (
         <p className="text-sm text-muted">No projects yet. Create one from a local folder.</p>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {projects.map((p) => (
-            <li
-              key={p.id}
-              className={
-                'flex items-center justify-between rounded-lg border px-4 py-3 ' +
-                (p.id === activeId ? 'border-accent bg-surface2' : 'border-border bg-surface')
-              }
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm">
-                  {p.id === activeId && <span className="text-accent">●</span>}
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-[10px] text-dim">{p.profile}</span>
-                </div>
-                <div className="truncate text-[11px] text-muted">{p.folderPath}</div>
-                <div className="mt-0.5 text-[10px] text-dim">
-                  {ctx[p.id]?.length
-                    ? `context: ${(ctx[p.id] ?? []).join(', ')}`
-                    : 'no AGENTS.md / .hermes.md'}
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                {p.id !== activeId && (
-                  <button
-                    onClick={() => void setActive(p.id)}
-                    className="rounded bg-surface2 px-2 py-1 text-xs hover:bg-border"
-                  >
-                    Open
-                  </button>
-                )}
-                <button
-                  onClick={() => void remove(p.id)}
-                  className="rounded px-2 py-1 text-xs text-muted hover:text-danger"
-                  title="Remove from app — does not delete the folder"
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-2">
+            {live.map((p) => <Row key={p.id} p={p} />)}
+          </ul>
+          {archived.length > 0 && (
+            <>
+              <div className="mb-2 mt-6 text-[10px] uppercase tracking-wide text-dim">Archived</div>
+              <ul className="flex flex-col gap-2">
+                {archived.map((p) => <Row key={p.id} p={p} />)}
+              </ul>
+            </>
+          )}
+        </>
       )}
     </div>
   );

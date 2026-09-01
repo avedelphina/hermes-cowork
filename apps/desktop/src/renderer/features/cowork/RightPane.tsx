@@ -47,7 +47,9 @@ export function RightPane() {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
         {tab === 'files' && <FileBrowser />}
-        {tab === 'artifacts' && <div className="overflow-y-auto"><ArtifactsTab /></div>}
+        {tab === 'artifacts' && (
+          <div className="overflow-y-auto"><ArtifactsTab onOpenFile={() => setTab('files')} /></div>
+        )}
         {tab === 'subtasks' && <div className="overflow-y-auto"><SubtasksTab /></div>}
       </div>
       <div className="border-t border-border p-3 text-[11px]">

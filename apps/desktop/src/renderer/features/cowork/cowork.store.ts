@@ -20,6 +20,8 @@ type CoworkStore = {
   approved: boolean;
   /** Kickoff prompt CoworkPage should send once its event listener is live. */
   pendingKickoff: string | null;
+  /** Project-relative path the Files tab should open (set by an artifact click). */
+  filesTarget: string | null;
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: string | null;
@@ -29,6 +31,9 @@ type CoworkStore = {
   startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
   /** CoworkPage calls this after it has sent the kickoff. */
   clearKickoff: () => void;
+  /** Ask the Files tab to open `absPath` (converted to project-relative). */
+  openInFiles: (absPath: string) => void;
+  clearFilesTarget: () => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
   /** User approved the proposed plan — execution may proceed. */
   approvePlan: () => void;
@@ -51,6 +56,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   status: 'idle',
   approved: false,
   pendingKickoff: null,
+  filesTarget: null,
   transcript: [],
   approvals: [],
   parentTaskId: null,
@@ -61,6 +67,14 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     set({ sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
+  openInFiles: (absPath) =>
+    set((s) => {
+      // Make it project-relative to the task folder; ignore paths outside it.
+      const root = s.cwd.replace(/\/+$/, '');
+      if (!root || !absPath.startsWith(root + '/')) return s;
+      return { filesTarget: absPath.slice(root.length + 1) };
+    }),
+  clearFilesTarget: () => set({ filesTarget: null }),
   setApprovalMode: (approvalMode) => set({ approvalMode }),
   approvePlan: () => set({ approved: true, status: 'running' }),
   setParent: (parentTaskId) => set({ parentTaskId }),
@@ -81,7 +95,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
 
   reset: () => set({
-    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false, pendingKickoff: null,
+    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
+    pendingKickoff: null, filesTarget: null,
     transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
   }),
 

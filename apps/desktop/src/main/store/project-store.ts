@@ -8,18 +8,12 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
-export type Project = {
-  id: string;
-  name: string;
-  folderPath: string;
-  profile: string;
-  createdAt: string;
-  lastOpenedAt: string;
-};
+import type { Project } from '../../shared/types';
+export type { Project };
 
 type Data = { projects: Project[]; activeId: string | null };
 type CreateInput = { name: string; folderPath: string; profile: string };
-type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath'>>;
+type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived'>>;
 
 export class ProjectStore {
   private data: Data = { projects: [], activeId: null };
@@ -33,8 +27,12 @@ export class ProjectStore {
     try {
       if (existsSync(this.filePath)) {
         const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<Data>;
+        const projects = (Array.isArray(parsed.projects) ? parsed.projects : []).map((p) => ({
+          ...p,
+          archived: p.archived ?? false, // migrate pre-archive records
+        }));
         return {
-          projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+          projects,
           activeId: typeof parsed.activeId === 'string' ? parsed.activeId : null,
         };
       }
@@ -62,7 +60,9 @@ export class ProjectStore {
 
   create(input: CreateInput): Project {
     const now = new Date().toISOString();
-    const project: Project = { id: randomUUID(), createdAt: now, lastOpenedAt: now, ...input };
+    const project: Project = {
+      id: randomUUID(), createdAt: now, lastOpenedAt: now, archived: false, ...input,
+    };
     this.data.projects.push(project);
     this.data.activeId = project.id;
     this.write();
@@ -73,6 +73,10 @@ export class ProjectStore {
     const project = this.get(id);
     if (!project) return null;
     Object.assign(project, patch);
+    // Archiving the active project drops the active pointer to the next live one.
+    if (project.archived && this.data.activeId === id) {
+      this.data.activeId = this.data.projects.find((p) => !p.archived)?.id ?? null;
+    }
     this.write();
     return project;
   }
@@ -81,6 +85,7 @@ export class ProjectStore {
     const project = this.get(id);
     if (!project) return;
     project.lastOpenedAt = new Date().toISOString();
+    project.archived = false; // opening a project un-archives it
     this.data.activeId = id;
     this.write();
   }

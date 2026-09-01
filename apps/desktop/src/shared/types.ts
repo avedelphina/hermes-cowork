@@ -8,6 +8,7 @@ export type Project = {
   profile: string;
   createdAt: string;
   lastOpenedAt: string;
+  archived: boolean;
 };
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
 

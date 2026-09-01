@@ -48,6 +48,17 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await win.getByRole('button', { name: /README\.md/ }).click();
   await expect(win.locator('pre')).toContainText('hello from readme');
 
+  // Rename + archive round-trip.
+  await win.getByRole('link', { name: /Projects/i }).first().click();
+  await win.getByRole('button', { name: 'Rename' }).click();
+  await win.locator('input[value="E2E Project"]').fill('Renamed Project');
+  await win.keyboard.press('Enter');
+  await expect(win.locator('li', { hasText: 'Renamed Project' })).toBeVisible();
+
+  await win.locator('li', { hasText: 'Renamed Project' }).getByRole('button', { name: 'Archive' }).click();
+  await expect(win.getByText('Archived', { exact: true })).toBeVisible();
+  await expect(win.getByRole('link', { name: /No project/i })).toBeVisible(); // chip cleared
+
   await app.close();
   rmSync(work, { recursive: true, force: true });
 });
