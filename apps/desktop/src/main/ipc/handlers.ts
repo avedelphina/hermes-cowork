@@ -22,6 +22,7 @@ type Context = {
 export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const authHeader = (): Record<string, string> =>
     ctx.dashboardToken ? { Authorization: `Bearer ${ctx.dashboardToken}` } : {};
+  const base = `http://127.0.0.1:${ctx.dashboardPort}`;
 
   // ── runtime ──
   ipcMain.handle(IpcChannel.RuntimeProbe, async () => {
@@ -35,20 +36,44 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
 
   ipcMain.handle(IpcChannel.RuntimeStatus, async (): Promise<StatusSnapshot> => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}/api/status`, { headers: authHeader() });
-    const body = (await r.json()) as { version: string; gateway?: { running?: boolean; platforms?: string[] } };
+    const r = await fetch(`${base}/api/status`, { headers: authHeader() });
+    if (!r.ok) throw new Error(`status fetch failed: ${r.status}`);
+    // Hermes 0.20.6 shape: flat gateway_running + gateway_platforms map.
+    const body = (await r.json()) as {
+      version: string;
+      gateway_running?: boolean;
+      gateway_platforms?: Record<string, { state?: string }>;
+    };
+    const platforms = Object.entries(body.gateway_platforms ?? {})
+      .filter(([, v]) => v?.state === 'connected')
+      .map(([k]) => k);
     return {
       hermesVersion: body.version,
       dashboardPort: ctx.dashboardPort,
-      gateway: { running: body.gateway?.running ?? false, platforms: body.gateway?.platforms ?? [] },
+      gateway: { running: body.gateway_running ?? false, platforms },
     };
   });
 
   // ── profiles ──
+  // Hermes 0.20.6: GET /api/profiles -> { profiles: [{ name, path, model, provider, ... }] };
+  // the active profile is a separate GET /api/profiles/active -> { active, current }.
   ipcMain.handle(IpcChannel.ProfileList, async (): Promise<ProfileSummary[]> => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}/api/profiles`, { headers: authHeader() });
-    if (!r.ok) throw new Error(`profiles fetch failed: ${r.status}`);
-    return (await r.json()) as ProfileSummary[];
+    const [pRes, aRes] = await Promise.all([
+      fetch(`${base}/api/profiles`, { headers: authHeader() }),
+      fetch(`${base}/api/profiles/active`, { headers: authHeader() }),
+    ]);
+    if (!pRes.ok) throw new Error(`profiles fetch failed: ${pRes.status}`);
+    const { profiles } = (await pRes.json()) as {
+      profiles: Array<{ name: string; path: string; model?: string | null; provider?: string | null }>;
+    };
+    const active = aRes.ok ? ((await aRes.json()) as { active?: string }).active ?? null : null;
+    return profiles.map((p) => ({
+      name: p.name,
+      active: p.name === active,
+      hermesHome: p.path,
+      model: p.model ?? null,
+      provider: p.provider ?? null,
+    }));
   });
 
   ipcMain.handle(IpcChannel.ProfileEnv, async (): Promise<{ globalHermesHome: string; envProfile: string | null }> => ({
@@ -59,7 +84,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const bridge = new AcpBridge(sup);
 
   ipcMain.handle(IpcChannel.ProfileSwitch, async (_e, name: string): Promise<void> => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}/api/profiles/use`, {
+    const r = await fetch(`${base}/api/profiles/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...authHeader() },
       body: JSON.stringify({ name }),

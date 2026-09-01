@@ -2,6 +2,8 @@ export type ProfileSummary = {
   name: string;
   active: boolean;
   hermesHome: string;
+  model: string | null;
+  provider: string | null;
 };
 
 export type StatusSnapshot = {

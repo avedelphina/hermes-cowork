@@ -4,6 +4,8 @@ export const ProfileSummarySchema = z.object({
   name: z.string(),
   active: z.boolean(),
   hermesHome: z.string(),
+  model: z.string().nullable().default(null),
+  provider: z.string().nullable().default(null),
 });
 export type ProfileSummary = z.infer<typeof ProfileSummarySchema>;
 
@@ -17,16 +19,33 @@ export const StatusSchema = z.object({
 });
 export type Status = z.infer<typeof StatusSchema>;
 
-export const SessionSummarySchema = z.object({
-  id: z.string(),
-  title: z.string().nullable(),
-  source: z.string().nullable(), // local, telegram, discord, …
-  model: z.string().nullable(),
-  inputTokens: z.number().int().nonnegative(),
-  outputTokens: z.number().int().nonnegative(),
-  updatedAt: z.string(),
-});
+// Wire shape from Hermes 0.20.6 GET /api/sessions -> { sessions: [ ... ] }.
+// snake_case, unix-float timestamps, most fields nullable.
+export const SessionSummarySchema = z
+  .object({
+    id: z.string(),
+    title: z.string().nullish(),
+    source: z.string().nullish(),
+    model: z.string().nullish(),
+    input_tokens: z.number().nullish(),
+    output_tokens: z.number().nullish(),
+    started_at: z.number().nullish(),
+    ended_at: z.number().nullish(),
+  })
+  .transform((s) => ({
+    id: s.id,
+    title: s.title ?? null,
+    source: s.source ?? null,
+    model: s.model ?? null,
+    inputTokens: s.input_tokens ?? 0,
+    outputTokens: s.output_tokens ?? 0,
+    updatedAt: s.ended_at ?? s.started_at ?? 0,
+  }));
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+export const SessionListSchema = z
+  .object({ sessions: z.array(SessionSummarySchema) })
+  .transform((d) => d.sessions);
 
 export const KanbanTaskSchema = z.object({
   id: z.number().int(),

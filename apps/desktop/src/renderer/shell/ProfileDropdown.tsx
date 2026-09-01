@@ -72,7 +72,9 @@ export function ProfileDropdown() {
                 <span className={p.active ? 'text-accent' : 'text-dim'}>●</span>
                 {p.name}
               </span>
-              <span className="truncate pl-4 text-[10px] text-dim">{p.hermesHome}</span>
+              <span className="truncate pl-4 text-[10px] text-dim">
+                {[p.provider, p.model].filter(Boolean).join(' · ') || p.hermesHome}
+              </span>
             </button>
           ))}
         </div>
