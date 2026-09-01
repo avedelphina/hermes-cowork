@@ -6,6 +6,7 @@ import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, ProfileSummary, StatusSnapshot, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome } from '../orchestrator/hermes-home';
+import { isExistingDir } from '../security/paths';
 
 type Context = {
   hermesBinary: string;
@@ -73,6 +74,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
 
   ipcMain.handle(IpcChannel.AcpStart, async (_e, opts: { profile: string; cwd: string }) => {
+    // Folder scope is the trust boundary: a task only ever runs against an
+    // explicit, existing directory the user picked. See docs/security-model.md.
+    if (!isExistingDir(opts.cwd)) {
+      throw new Error(`Refusing to start: "${opts.cwd}" is not an existing directory.`);
+    }
     return bridge.startSession({
       profile: opts.profile,
       cwd: opts.cwd,

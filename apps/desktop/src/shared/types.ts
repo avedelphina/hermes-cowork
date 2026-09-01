@@ -10,6 +10,25 @@ export type StatusSnapshot = {
   gateway: { running: boolean; platforms: string[] };
 };
 
+/**
+ * What a task/worker may do inside its approved root. See
+ * docs/security-model.md. Default-deny: read-only until the user widens it.
+ */
+export type PermissionPolicy = {
+  /** Absolute path the task is scoped to; all file access is relative to this. */
+  root: string;
+  read: boolean;
+  write: boolean;
+  /** Deleting always prompts for approval regardless of approval mode. */
+  delete: boolean;
+  terminal: boolean;
+  network: boolean;
+};
+
+export function defaultPolicy(root: string): PermissionPolicy {
+  return { root, read: true, write: false, delete: false, terminal: false, network: false };
+}
+
 export type AcpClientMessage =
   | { kind: 'prompt'; sessionId: string; text: string }
   | { kind: 'approve'; sessionId: string; toolCallId: string; allow: boolean };
