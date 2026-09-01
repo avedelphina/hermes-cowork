@@ -61,6 +61,13 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await expect(win.getByRole('heading', { name: 'Profiles' })).toBeVisible();
   await expect(win.getByText('New profile name')).toBeVisible();
 
+  // Hermes read-only surfaces render real data.
+  await win.getByRole('link', { name: /Skills/ }).click();
+  await expect(win.getByRole('heading', { name: 'Skills' })).toBeVisible();
+  await expect(win.locator('li').first()).toBeVisible();
+  await win.getByRole('link', { name: /Cron/ }).click();
+  await expect(win.getByRole('heading', { name: 'Cron jobs' })).toBeVisible();
+
   // Code mode: project file tree + a message composer.
   await win.getByRole('link', { name: 'Code' }).click();
   await expect(win.getByRole('button', { name: /README\.md/ })).toBeVisible();

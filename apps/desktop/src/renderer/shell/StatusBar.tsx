@@ -43,9 +43,28 @@ export function StatusBar() {
             <span className="text-dim">Hermes</span>
             <span>{status?.hermesVersion ?? '—'}</span>
           </div>
-          <div className="mb-1 flex justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <span className="text-dim">Gateway</span>
-            <span>{status?.gateway.running ? (status.gateway.platforms.join(', ') || 'running') : 'stopped'}</span>
+            <span className="flex items-center gap-1">
+              <span>{status?.gateway.running ? (status.gateway.platforms.join(', ') || 'running') : 'stopped'}</span>
+              <button
+                onClick={() => {
+                  const act = status?.gateway.running ? 'restart' : 'start';
+                  void window.hermes.rest.post(`/api/gateway/${act}`, {}).then(() => setTimeout(tick, 1500));
+                }}
+                className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] hover:bg-border"
+              >
+                {status?.gateway.running ? 'restart' : 'start'}
+              </button>
+              {status?.gateway.running && (
+                <button
+                  onClick={() => void window.hermes.rest.post('/api/gateway/stop', {}).then(() => setTimeout(tick, 1500))}
+                  className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] hover:bg-border"
+                >
+                  stop
+                </button>
+              )}
+            </span>
           </div>
           <div className="mb-2 flex justify-between">
             <span className="text-dim">Dashboard</span>
