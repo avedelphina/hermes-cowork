@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { ProfileSummarySchema, StatusSchema, SessionListSchema, KanbanTaskSchema } from './schemas';
+import {
+  ProfileListSchema,
+  ActiveProfileSchema,
+  StatusSchema,
+  SessionListSchema,
+  KanbanTaskSchema,
+} from './schemas';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function get<T>(path: string, schema: z.ZodType<T, z.ZodTypeDef, any>): Promise<T> {
@@ -15,7 +21,13 @@ async function post<T>(path: string, body: unknown, schema: z.ZodType<T, z.ZodTy
 
 export const api = {
   status: () => get('/api/status', StatusSchema),
-  profiles: () => get('/api/profiles', z.array(ProfileSummarySchema)),
+  profiles: async () => {
+    const [list, active] = await Promise.all([
+      get('/api/profiles', ProfileListSchema),
+      get('/api/profiles/active', ActiveProfileSchema).catch(() => null),
+    ]);
+    return list.map((p) => ({ ...p, active: p.name === active }));
+  },
   sessions: (limit = 50) =>
     get(`/api/sessions?limit=${limit}`, SessionListSchema),
   kanbanBoard: () =>

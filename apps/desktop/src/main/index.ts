@@ -65,6 +65,9 @@ void app.whenReady().then(async () => {
         dashboardToken = await fetchDashboardToken(dashboard.port);
       }
     }
+    console.log(
+      `[startup] hermes ${found.path} · dashboard ${dashboardPort || 'DOWN'} · token ${dashboardToken ? 'ok' : 'none'}`,
+    );
   }
 
   registerIpcHandlers(
