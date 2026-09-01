@@ -12,10 +12,10 @@ describe('cowork store', () => {
     expect(useCoworkStore.getState().transcript[0]?.text).toBe('Plan: 7 steps.');
   });
 
-  it('records artifacts from edit-kind tool calls, de-duplicated', () => {
+  it('records artifacts from edit-kind tool calls (path from ACP locations), de-duplicated', () => {
     const call = {
       kind: 'tool-call' as const, sessionId: 's', toolCallId: 't1',
-      name: 'Edit file', op: 'edit', args: { path: '/tmp/draft.md' },
+      name: 'write: /tmp/draft.md', op: 'edit', paths: ['/tmp/draft.md'], args: undefined,
     };
     useCoworkStore.getState().ingestAcp(call);
     useCoworkStore.getState().ingestAcp({ ...call, toolCallId: 't2' });
@@ -27,7 +27,7 @@ describe('cowork store', () => {
   it('ignores read-kind tool calls', () => {
     useCoworkStore.getState().ingestAcp({
       kind: 'tool-call', sessionId: 's', toolCallId: 't1',
-      name: 'skill view (anikke)', op: 'read', args: {},
+      name: 'skill view (anikke)', op: 'read', paths: [], args: {},
     });
     expect(useCoworkStore.getState().artifacts).toHaveLength(0);
   });

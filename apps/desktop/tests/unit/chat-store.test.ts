@@ -15,7 +15,7 @@ describe('chat store', () => {
   it('records tool calls under the current assistant message', () => {
     const { ingest } = useChatStore.getState();
     ingest({ kind: 'token', sessionId: 's1', text: 'reading...' });
-    ingest({ kind: 'tool-call', sessionId: 's1', toolCallId: 't1', name: 'read_file', op: 'read', args: { path: 'a.md' } });
+    ingest({ kind: 'tool-call', sessionId: 's1', toolCallId: 't1', name: 'read_file', op: 'read', paths: [], args: { path: 'a.md' } });
     expect(useChatStore.getState().messages[0]?.toolCalls).toEqual([
       { id: 't1', name: 'read_file', args: { path: 'a.md' } },
     ]);
@@ -35,7 +35,7 @@ describe('chat store', () => {
   it('opens a shell assistant message for a replayed tool call with no prior text', () => {
     const { ingest } = useChatStore.getState();
     ingest({ kind: 'token', sessionId: 's1', text: 'do a thing', role: 'user' });
-    ingest({ kind: 'tool-call', sessionId: 's1', toolCallId: 't1', name: 'read_file', op: 'read', args: {} });
+    ingest({ kind: 'tool-call', sessionId: 's1', toolCallId: 't1', name: 'read_file', op: 'read', paths: [], args: {} });
     const msgs = useChatStore.getState().messages;
     expect(msgs[1]?.role).toBe('assistant');
     expect(msgs[1]?.toolCalls[0]?.id).toBe('t1');

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PlanTab } from './PlanTab';
 import { ArtifactsTab } from './ArtifactsTab';
+import { ChangesTab } from './ChangesTab';
 import { SubtasksTab } from './SubtasksTab';
 import { FileBrowser } from '../files/FileBrowser';
 import { useCoworkStore, MODE_FOR } from './cowork.store';
@@ -8,6 +9,7 @@ import { useCoworkStore, MODE_FOR } from './cowork.store';
 const TABS = [
   { id: 'plan', label: 'Plan' },
   { id: 'files', label: 'Files' },
+  { id: 'changes', label: 'Changes' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'subtasks', label: 'Subtasks' },
 ] as const;
@@ -47,6 +49,7 @@ export function RightPane() {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
         {tab === 'files' && <FileBrowser />}
+        {tab === 'changes' && <div className="overflow-y-auto"><ChangesTab /></div>}
         {tab === 'artifacts' && (
           <div className="overflow-y-auto"><ArtifactsTab onOpenFile={() => setTab('files')} /></div>
         )}

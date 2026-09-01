@@ -127,7 +127,14 @@ function translateSessionUpdate(
       const name = typeof u['title'] === 'string' ? u['title'] : '';
       if (!toolCallId || !name) return [];
       const op = typeof u['kind'] === 'string' ? u['kind'] : 'other';
-      return [{ kind: 'tool-call', sessionId, toolCallId, name, op, args: u['rawInput'] }];
+      // ACP carries the touched files under `locations`; `rawInput` is absent
+      // on the session/update (it only appears in session/request_permission).
+      const paths = Array.isArray(u['locations'])
+        ? (u['locations'] as Array<{ path?: unknown }>)
+            .map((l) => l?.path)
+            .filter((p): p is string => typeof p === 'string')
+        : [];
+      return [{ kind: 'tool-call', sessionId, toolCallId, name, op, paths, args: u['rawInput'] }];
     }
     case 'tool_call_update': {
       if (u['status'] !== 'completed') return [];

@@ -37,6 +37,8 @@ type CoworkStore = {
   parentTaskId: string | null;
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
+  /** File snapshots taken just before an approved edit — for diff + revert. */
+  checkpoints: Array<{ rel: string; before: string | null; at: string }>;
 
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
@@ -55,6 +57,8 @@ type CoworkStore = {
   markStopped: () => void;
   /** Clear the transcript and mark running before an acp.load replay. */
   beginReconnect: () => void;
+  addCheckpoint: (rel: string, before: string | null) => void;
+  dropCheckpoint: (rel: string) => void;
   ingestAcp: (msg: AcpServerMessage) => void;
   upsertPlanTask: (task: KanbanTask) => void;
   setParent: (id: string) => void;
@@ -77,19 +81,27 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   parentTaskId: null,
   planTasks: [],
   artifacts: [],
+  checkpoints: [],
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [] }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null,
-      transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
+      transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [],
     }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
+  addCheckpoint: (rel, before) =>
+    set((s) =>
+      s.checkpoints.some((c) => c.rel === rel)
+        ? s
+        : { checkpoints: [...s.checkpoints, { rel, before, at: new Date().toISOString() }] },
+    ),
+  dropCheckpoint: (rel) => set((s) => ({ checkpoints: s.checkpoints.filter((c) => c.rel !== rel) })),
   openInFiles: (absPath) =>
     set((s) => {
       // Make it project-relative to the task folder; ignore paths outside it.
@@ -132,7 +144,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
     pendingKickoff: null, filesTarget: null,
-    transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
+    transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [],
   }),
 
   ingestAcp: (msg) =>
@@ -146,11 +158,21 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return { transcript: [...s.transcript, { role: 'agent', text: msg.text }] };
         }
         case 'tool-call': {
-          // ACP tags file-mutating tools with kind "edit" / "delete" / "move".
+          // ACP tags file-mutating tools with kind "edit" / "delete" / "move"
+          // and lists the touched files under `paths`.
           if (msg.op === 'edit' || msg.op === 'delete' || msg.op === 'move') {
             const args = (msg.args ?? {}) as { path?: string; file_path?: string; target?: string };
-            const path = args.path ?? args.file_path ?? args.target;
+            const path = msg.paths[0] ?? args.path ?? args.file_path ?? args.target;
             if (path && !s.artifacts.some((a) => a.path === path)) {
+              // Snapshot the pre-change file for diff + revert (fire-and-forget).
+              const root = s.cwd.replace(/\/+$/, '');
+              if (root && path.startsWith(root + '/')) {
+                const rel = path.slice(root.length + 1);
+                void window.hermes?.fs
+                  ?.snapshot(root, rel)
+                  .then((before) => useCoworkStore.getState().addCheckpoint(rel, before))
+                  .catch(() => { /* ignore */ });
+              }
               return { artifacts: [...s.artifacts, { path, addedAt: new Date().toISOString() }] };
             }
           }

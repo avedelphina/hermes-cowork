@@ -71,8 +71,9 @@ export type AcpServerMessage =
   // during session/load.
   | { kind: 'token'; sessionId: string; text: string; role?: 'user' | 'agent' }
   // `op` is ACP's tool-call `kind`: read | edit | delete | move | search |
-  // execute | think | fetch | other. `name` is the human title.
-  | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; op: string; args: unknown }
+  // execute | think | fetch | other. `name` is the human title. `paths` are
+  // the files the tool touches (from ACP `locations`).
+  | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; op: string; paths: string[]; args: unknown }
   | { kind: 'tool-result'; sessionId: string; toolCallId: string; result: unknown }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }

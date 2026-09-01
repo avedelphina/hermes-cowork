@@ -12,7 +12,7 @@ import { profileHome } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
-import { contextFiles, listDir, readFilePreview } from '../fs/project-fs';
+import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { CoworkTask, TaskStatus } from '../../shared/types';
 
 type Context = {
@@ -230,4 +230,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   // ── project filesystem (read-only, scoped to the project root) ──
   ipcMain.handle(IpcChannel.FsList, (_e, id: string, rel?: string) => listDir(projectRoot(id), rel ?? ''));
   ipcMain.handle(IpcChannel.FsRead, (_e, id: string, rel: string) => readFilePreview(projectRoot(id), rel));
+
+  // Checkpoints work off a raw folder (a task's cwd, which may not be a
+  // registered project) — still guarded to stay inside that folder.
+  ipcMain.handle(IpcChannel.FsSnapshot, (_e, root: string, rel: string) =>
+    isExistingDir(root) ? snapshotFile(root, rel) : null,
+  );
+  ipcMain.handle(IpcChannel.FsRevert, (_e, root: string, rel: string, content: string | null) => {
+    if (!isExistingDir(root)) throw new Error('invalid root');
+    revertFile(root, rel, content);
+  });
 }

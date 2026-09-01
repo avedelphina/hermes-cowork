@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { contextFiles, listDir, readFilePreview } from '@main/fs/project-fs';
+import { readFileSync } from 'node:fs';
+import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '@main/fs/project-fs';
 
 let root: string;
 beforeEach(() => {
@@ -57,5 +58,28 @@ describe('readFilePreview', () => {
   it('flags an unknown binary type as unsupported', () => {
     writeFileSync(join(root, 'blob.bin'), Buffer.from([0, 1, 2, 3]));
     expect(readFilePreview(root, 'blob.bin').kind).toBe('unsupported');
+  });
+});
+
+describe('snapshotFile / revertFile', () => {
+  it('snapshots current content, null for a missing file', () => {
+    expect(snapshotFile(root, 'src/a.ts')).toContain('export const a');
+    expect(snapshotFile(root, 'src/nope.ts')).toBeNull();
+  });
+
+  it('revert restores the given content inside the root', () => {
+    revertFile(root, 'src/a.ts', 'reverted\n');
+    expect(readFileSync(join(root, 'src', 'a.ts'), 'utf8')).toBe('reverted\n');
+  });
+
+  it('revert with null deletes a file that did not exist before the edit', () => {
+    writeFileSync(join(root, 'brand-new.ts'), 'x');
+    revertFile(root, 'brand-new.ts', null);
+    expect(snapshotFile(root, 'brand-new.ts')).toBeNull();
+  });
+
+  it('snapshot and revert reject a traversal path', () => {
+    expect(() => snapshotFile(root, '../x')).toThrow(/escapes/);
+    expect(() => revertFile(root, '../../etc/x', 'no')).toThrow(/escapes/);
   });
 });

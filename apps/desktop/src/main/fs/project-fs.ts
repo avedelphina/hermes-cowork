@@ -4,7 +4,7 @@
 // resolved through resolveWithinRoot AND realpath-checked, so neither `..` nor
 // a symlink can escape the root.
 
-import { readdirSync, readFileSync, statSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { basename, extname, join, relative, sep } from 'node:path';
 import { resolveWithinRoot } from '../security/paths';
 import type { DirEntry, DirListing, FilePreview } from '../../shared/types';
@@ -87,4 +87,25 @@ export function readFilePreview(root: string, rel: string): FilePreview {
     return { kind: 'text', name, text: truncated ? buf.slice(0, MAX_PREVIEW_BYTES) : buf, truncated };
   }
   return { kind: 'unsupported', name, size: st.size };
+}
+
+/** Current text of a file for checkpointing; null if it does not exist yet. */
+export function snapshotFile(root: string, rel: string): string | null {
+  const abs = safeAbs(root, rel);
+  try {
+    if (!statSync(abs).isFile()) return null;
+    return readFileSync(abs, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Restore a checkpoint. `content === null` means the file did not exist before
+ * the edit, so revert deletes it. Only ever touches paths inside the root.
+ */
+export function revertFile(root: string, rel: string, content: string | null): void {
+  const abs = safeAbs(root, rel);
+  if (content === null) rmSync(abs, { force: true });
+  else writeFileSync(abs, content, 'utf8');
 }

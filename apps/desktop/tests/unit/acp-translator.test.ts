@@ -53,6 +53,16 @@ describe('translateAcpEvent — session/update (Hermes 0.20.6 wire shapes)', () 
     }
   });
 
+  it('maps a tool_call, pulling touched files from ACP locations', () => {
+    const out = translateAcpEvent(msg({
+      sessionUpdate: 'tool_call', toolCallId: 'tc1', title: 'write: /w/a.txt', kind: 'edit',
+      locations: [{ path: '/w/a.txt' }],
+    }));
+    expect(out).toEqual([
+      { kind: 'tool-call', sessionId: 's1', toolCallId: 'tc1', name: 'write: /w/a.txt', op: 'edit', paths: ['/w/a.txt'], args: undefined },
+    ]);
+  });
+
   it('maps a completed tool_call_update to a tool-result', () => {
     const out = translateAcpEvent(msg({ sessionUpdate: 'tool_call_update', status: 'completed', toolCallId: 't1', rawOutput: { ok: true } }));
     expect(out).toEqual([{ kind: 'tool-result', sessionId: 's1', toolCallId: 't1', result: { ok: true } }]);

@@ -70,6 +70,14 @@ test('cowork: propose plan → approve → execute', async () => {
   expect(readFileSync(path.join(work, 'hello.txt'), 'utf8').trim()).toBe('hello');
   await shot('06-done');
 
+  // The edit is checkpointed — the Changes tab lists it and can revert it.
+  await win.getByRole('button', { name: 'Changes', exact: true }).click();
+  await expect(win.getByText('new file')).toBeVisible();
+  await win.getByRole('button', { name: 'Revert', exact: true }).click();
+  await expect
+    .poll(() => existsSync(path.join(work, 'hello.txt')), { timeout: 15_000 })
+    .toBe(false);
+
   // The task is persisted and resumable: leave, come back via the Tasks list.
   await win.getByRole('link', { name: /Tasks/ }).click();
   const taskRow = win.locator('li', { hasText: 'hello.txt containing the single word hello' });
