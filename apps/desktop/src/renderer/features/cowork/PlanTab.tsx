@@ -1,54 +1,70 @@
-import { useEffect } from 'react';
 import { useCoworkStore } from './cowork.store';
-import { KanbanEventSchema, KanbanTaskSchema } from '../../api/schemas';
+
+/** Pull "1. …" / "2) …" lines out of the agent's first message. */
+function parseSteps(text: string): string[] {
+  return text
+    .split('\n')
+    .map((l) => l.match(/^\s*\d+[.)]\s+(.*\S)\s*$/)?.[1])
+    .filter((s): s is string => !!s);
+}
 
 export function PlanTab() {
-  const planTasks = useCoworkStore((s) => s.planTasks);
-  const upsert = useCoworkStore((s) => s.upsertPlanTask);
-  const parentId = useCoworkStore((s) => s.parentTaskId);
+  const { transcript, approved, status, sessionId } = useCoworkStore();
+  const approvePlan = useCoworkStore((s) => s.approvePlan);
 
-  useEffect(() => {
-    const off = window.hermes.kanbanWs.onEvent((raw) => {
-      const ev = KanbanEventSchema.safeParse(raw);
-      if (!ev.success) return;
-      // Only ingest events for the active task tree (parent + its children).
-      // For M1: parent id arrives via a separate kanban_create observation;
-      // until that lands, ingest all running tasks for the active profile.
-      const payloadTask = (ev.data.payload as { task?: unknown }).task;
-      if (!payloadTask) return;
-      const parsed = KanbanTaskSchema.safeParse(payloadTask);
-      if (!parsed.success) return;
-      const t = parsed.data;
-      // TODO(Task 3.4): scope to the active task tree once kanban_create output
-      // is wired to parentTaskId. Until then, ingest everything.
-      if (parentId !== null && t.id !== parentId) return;
-      upsert(t);
-    });
-    return () => { off(); };
-  }, [parentId, upsert]);
+  const firstAgent = transcript.find((m) => m.role === 'agent')?.text ?? '';
+  const steps = parseSteps(firstAgent);
+  const hasProposal = firstAgent.trim().length > 0;
 
-  if (planTasks.length === 0) {
-    return <div className="p-4 text-xs text-muted">Plan will appear here once Hermes proposes one.</div>;
+  const approve = () => {
+    approvePlan();
+    if (sessionId) {
+      void window.hermes.acp.send({
+        kind: 'prompt',
+        sessionId,
+        text: 'Approved. Proceed with the plan.',
+      });
+    }
+  };
+
+  if (!hasProposal) {
+    return (
+      <div className="p-4 text-xs text-muted">
+        {status === 'running' ? 'Hermes is drafting a plan…' : 'The plan will appear here.'}
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-1 px-3 py-3 text-xs">
-      {planTasks.map((t) => (
-        <PlanRow key={t.id} task={t} />
-      ))}
-    </div>
-  );
-}
+    <div className="flex flex-col gap-2 px-3 py-3 text-xs">
+      {steps.length > 0 ? (
+        <ol className="flex flex-col gap-1">
+          {steps.map((s, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-dim">{i + 1}.</span>
+              <span className={approved ? 'text-fg' : 'text-muted'}>{s}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-muted">See the proposed plan in the transcript.</p>
+      )}
 
-function PlanRow({ task }: { task: import('../../api/schemas').KanbanTask }) {
-  const done = task.status === 'done';
-  const icon = done ? '✓' : task.status === 'running' ? '▸' : '○';
-  const color = done ? 'text-success' : task.status === 'running' ? 'text-accent' : 'text-dim';
-  const muted = done ? 'text-muted line-through' : 'text-fg';
-  return (
-    <div className={'flex items-start gap-2 rounded px-2 py-1 ' + (task.status === 'running' ? 'bg-surface2' : '')}>
-      <span className={color}>{icon}</span>
-      <span className={muted}>{task.title}</span>
+      {!approved ? (
+        <div className="mt-2 flex flex-col gap-1.5">
+          <button
+            onClick={approve}
+            className="rounded bg-accent px-3 py-1.5 font-semibold text-bg"
+          >
+            Approve &amp; run
+          </button>
+          <p className="text-[10px] text-dim">
+            Or type changes in the composer to revise the plan.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-2 text-[10px] text-success">✓ Plan approved — executing.</p>
+      )}
     </div>
   );
 }

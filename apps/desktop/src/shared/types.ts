@@ -28,7 +28,9 @@ export type AcpServerMessage =
   // `role` defaults to 'agent'; 'user' appears when Hermes replays history
   // during session/load.
   | { kind: 'token'; sessionId: string; text: string; role?: 'user' | 'agent' }
-  | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; args: unknown }
+  // `op` is ACP's tool-call `kind`: read | edit | delete | move | search |
+  // execute | think | fetch | other. `name` is the human title.
+  | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; op: string; args: unknown }
   | { kind: 'tool-result'; sessionId: string; toolCallId: string; result: unknown }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }

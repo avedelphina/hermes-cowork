@@ -126,7 +126,8 @@ function translateSessionUpdate(
       const toolCallId = typeof u['toolCallId'] === 'string' ? u['toolCallId'] : '';
       const name = typeof u['title'] === 'string' ? u['title'] : '';
       if (!toolCallId || !name) return [];
-      return [{ kind: 'tool-call', sessionId, toolCallId, name, args: u['rawInput'] }];
+      const op = typeof u['kind'] === 'string' ? u['kind'] : 'other';
+      return [{ kind: 'tool-call', sessionId, toolCallId, name, op, args: u['rawInput'] }];
     }
     case 'tool_call_update': {
       if (u['status'] !== 'completed') return [];

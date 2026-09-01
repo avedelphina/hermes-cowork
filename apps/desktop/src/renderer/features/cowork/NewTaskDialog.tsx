@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { useCoworkStore } from './cowork.store';
+import { useCoworkStore, MODE_FOR } from './cowork.store';
 import { api } from '../../api/rest-client';
 
 const COWORK_SYSTEM_PROMPT = `You are running in Hermes Cowork mode.
 
-Before doing any work, propose a plan using kanban_create — one subtask per concrete step, linked under a parent task whose title is the user's goal.
+First, propose a concise numbered plan — one short line per concrete step —
+and then STOP. Do not take any action, edit any file, or run any command until
+the user replies to approve the plan. If the user asks for changes, revise the
+plan and stop again.
 
-Use kanban_heartbeat regularly during long-running steps.
-Mark subtasks complete with kanban_complete as you finish them.
-Spawn additional profiles via kanban_create with --assignee for parallelizable subtasks.
-For destructive operations (deleting files, dropping tables, irreversible API calls), always request approval inline regardless of mode.`.trim();
+Once approved, work through the steps in order, reporting progress as you go.
+For destructive operations (deleting files, dropping tables, irreversible API
+calls) always ask for confirmation inline, regardless of mode.`.trim();
 
 export function NewTaskDialog() {
   const [goal, setGoal] = useState('');
@@ -40,13 +42,16 @@ export function NewTaskDialog() {
     if (!goal.trim() || !cwd.trim()) return;
     setBusy(true);
     try {
-      const { sessionId } = await window.hermes.acp.start({ profile, cwd });
+      // Cowork tasks get their own ACP child so Stop can hard-cancel them.
+      const { sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true });
       startTask({ sessionId, goal, cwd, profile });
-      // Send the kickoff: system + goal as a single prompt.
+      // Enforce the approval mode agent-side, not just in the UI.
+      const mode = useCoworkStore.getState().approvalMode;
+      await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[mode] }).catch(() => { /* non-fatal */ });
       await window.hermes.acp.send({
         kind: 'prompt',
         sessionId,
-        text: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose a plan now.`,
+        text: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');
     } finally {

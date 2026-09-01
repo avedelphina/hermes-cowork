@@ -63,20 +63,28 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     ctx.win()?.webContents.send(IpcChannel.AcpEvent, semantic);
   });
 
-  ipcMain.handle(IpcChannel.AcpStart, async (_e, opts: { profile: string; cwd?: string }) => {
-    // Chat is not folder-scoped — it defaults to the home directory. A Cowork
-    // task always passes an explicit folder the user picked, which must exist
-    // (the trust boundary — see docs/security-model.md).
-    const cwd = opts.cwd || homedir();
-    if (!isExistingDir(cwd)) {
-      throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
-    }
-    return bridge.startSession({
-      profile: opts.profile,
-      cwd,
-      binaryPath: ctx.hermesBinary,
-      hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
-    });
+  ipcMain.handle(
+    IpcChannel.AcpStart,
+    async (_e, opts: { profile: string; cwd?: string; isolate?: boolean }) => {
+      // Chat is not folder-scoped — it defaults to the home directory. A Cowork
+      // task always passes an explicit folder the user picked, which must exist
+      // (the trust boundary — see docs/security-model.md).
+      const cwd = opts.cwd || homedir();
+      if (!isExistingDir(cwd)) {
+        throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
+      }
+      return bridge.startSession({
+        profile: opts.profile,
+        cwd,
+        isolate: !!opts.isolate,
+        binaryPath: ctx.hermesBinary,
+        hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
+      });
+    },
+  );
+
+  ipcMain.handle(IpcChannel.AcpSetMode, async (_e, opts: { sessionId: string; modeId: string }) => {
+    await bridge.setMode(opts.sessionId, opts.modeId);
   });
 
   ipcMain.handle(

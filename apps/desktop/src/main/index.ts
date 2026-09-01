@@ -6,10 +6,9 @@ import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
 import { AcpSupervisor } from './orchestrator/acp-supervisor';
 import { registerIpcHandlers } from './ipc/handlers';
-import { KanbanWsPump } from './orchestrator/kanban-ws';
+// KanbanWsPump is intentionally not started — see note below.
 
 let win: BrowserWindow | null = null;
-let pump: KanbanWsPump | null = null;
 // Set only when we spawned the dashboard ourselves — a reused external one is
 // left alone.
 let dashboardChild: ChildProcess | null = null;
@@ -82,16 +81,14 @@ void app.whenReady().then(async () => {
     supervisor,
   );
 
-  if (dashboardPort > 0) {
-    pump = new KanbanWsPump({ port: dashboardPort, win: () => win });
-    await pump.start();
-  }
+  // NOTE: the kanban events WebSocket (orchestrator/kanban-ws.ts) needs a
+  // per-connection auth ticket (POST /api/auth/ws-ticket) we do not yet mint,
+  // so it 403s and reconnect-loops. Re-enable once Cowork needs live kanban.
 
   createWindow();
 });
 
 function stopOwnedChildren() {
-  pump?.stop();
   supervisor.shutdownAll();
   if (dashboardChild && dashboardChild.exitCode === null) {
     dashboardChild.kill('SIGTERM');

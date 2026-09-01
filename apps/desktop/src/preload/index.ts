@@ -13,11 +13,13 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd?: string }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
     load: (opts: { sessionId: string; profile?: string; cwd?: string }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
+    setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.AcpSetMode, opts),
     stop: (sessionId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpStop, sessionId),
     onEvent: (cb: (msg: AcpServerMessage) => void) => {
       const listener = (_e: unknown, msg: AcpServerMessage) => cb(msg);

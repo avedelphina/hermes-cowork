@@ -28,6 +28,9 @@ type StartSessionOpts = {
   cwd: string;
   binaryPath: string;
   hermesHome: string;
+  /** Give this session its own ACP child (not the shared pool) so stopSession
+   * can hard-kill the running turn — Hermes 0.20.6 has no session/cancel. */
+  isolate?: boolean;
 };
 
 type PermissionOptionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
@@ -51,6 +54,8 @@ export class AcpBridge extends EventEmitter {
   private pendingPermissions = new Map<string, PendingPermission>();
   /** One warm ACP connection per `${profile}\0${hermesHome}`. */
   private conns = new Map<string, Conn>();
+  /** Handles spawned for a single isolated session — safe to hard-kill. */
+  private isolatedHandles = new Set<string>();
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -58,17 +63,51 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
-   * Open a new Hermes session. Reuses the warm connection for the profile.
+   * Open a new Hermes session. Reuses the warm connection for the profile,
+   * unless `isolate` asks for a dedicated child.
    */
   async startSession(opts: StartSessionOpts): Promise<{ sessionId: string }> {
-    const handle = await this.connFor(opts);
-    const res = (await this.sup.request(handle, 'session/new', {
+    const handle = opts.isolate ? await this.spawnDedicated(opts) : await this.connFor(opts);
+    try {
+      const res = (await this.sup.request(handle, 'session/new', {
+        cwd: opts.cwd,
+        mcpServers: [],
+      })) as { sessionId?: string };
+      if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
+      this.acpToHandle.set(res.sessionId, handle);
+      return { sessionId: res.sessionId };
+    } catch (err) {
+      if (opts.isolate) {
+        this.isolatedHandles.delete(handle);
+        this.sup.shutdown(handle);
+      }
+      throw err;
+    }
+  }
+
+  /** Set the ACP session mode (default | accept_edits | dont_ask). */
+  async setMode(sessionId: string, modeId: string): Promise<void> {
+    const handle = this.acpToHandle.get(sessionId);
+    if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
+    await this.sup.request(handle, 'session/set_mode', { sessionId, modeId });
+  }
+
+  private async spawnDedicated(opts: StartSessionOpts): Promise<string> {
+    const handle = randomUUID();
+    this.isolatedHandles.add(handle);
+    this.sup.spawn({
+      id: handle,
+      profile: opts.profile,
       cwd: opts.cwd,
-      mcpServers: [],
-    })) as { sessionId?: string };
-    if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
-    this.acpToHandle.set(res.sessionId, handle);
-    return { sessionId: res.sessionId };
+      binaryPath: opts.binaryPath,
+      hermesHome: opts.hermesHome,
+    });
+    await this.sup.request(handle, 'initialize', {
+      protocolVersion: ACP_PROTOCOL_VERSION,
+      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
+    });
+    return handle;
   }
 
   /**
@@ -161,8 +200,9 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
-   * Stop a session's current turn and forget it. The pooled ACP child stays
-   * warm for other sessions — only stopAll() actually kills processes.
+   * Stop a session and forget it. An isolated session's child is killed
+   * (that is the only way to cancel a running turn on Hermes 0.20.6, which
+   * has no session/cancel). A pooled child stays warm for its other sessions.
    */
   stopSession(sessionId: string): void {
     const handle = this.acpToHandle.get(sessionId);
@@ -171,19 +211,18 @@ export class AcpBridge extends EventEmitter {
     for (const [tcId, p] of this.pendingPermissions) {
       if (p.handle === handle) this.pendingPermissions.delete(tcId);
     }
-    // Best-effort: ask Hermes to cancel any in-flight turn for this session.
-    try {
-      this.sup.send(handle, { jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
-    } catch {
-      // child already gone — nothing to cancel
+    if (this.isolatedHandles.has(handle)) {
+      this.isolatedHandles.delete(handle);
+      this.sup.shutdown(handle);
     }
   }
 
-  /** Kill every pooled connection (profile switch / app quit). */
+  /** Kill every connection — pooled and isolated (profile switch / app quit). */
   stopAll(): void {
     this.acpToHandle.clear();
     this.pendingPermissions.clear();
     this.conns.clear();
+    this.isolatedHandles.clear();
     this.sup.shutdownAll();
   }
 
@@ -216,6 +255,7 @@ export class AcpBridge extends EventEmitter {
       for (const [key, conn] of this.conns) {
         if (conn.handle === event.sessionId) this.conns.delete(key);
       }
+      this.isolatedHandles.delete(event.sessionId);
     }
 
     for (const semantic of translateAcpEvent(event)) {

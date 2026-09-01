@@ -5,6 +5,9 @@ import type { KanbanTask } from '../../api/schemas';
 
 type Approval = { toolCallId: string; description: string };
 
+/** Cowork approval mode → ACP session mode id. */
+export const MODE_FOR = { ask: 'default', auto: 'accept_edits' } as const;
+
 type CoworkStore = {
   sessionId: string | null;
   goal: string;
@@ -13,6 +16,8 @@ type CoworkStore = {
   approvalMode: 'ask' | 'auto';
   /** 'running' while the agent owns the turn; 'idle' once it finishes/errors/stops. */
   status: 'idle' | 'running';
+  /** false until the user approves the proposed plan. */
+  approved: boolean;
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: string | null;
@@ -21,6 +26,8 @@ type CoworkStore = {
 
   startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string }) => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
+  /** User approved the proposed plan — execution may proceed. */
+  approvePlan: () => void;
   /** Echo a steering/follow-up message into the transcript and mark the turn running. */
   pushUserText: (text: string) => void;
   /** User cancelled the ACP session — record it and go idle. */
@@ -38,6 +45,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   profile: 'default',
   approvalMode: 'ask',
   status: 'idle',
+  approved: false,
   transcript: [],
   approvals: [],
   parentTaskId: null,
@@ -45,9 +53,10 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   artifacts: [],
 
   startTask: ({ sessionId, goal, cwd, profile }) =>
-    set({ sessionId, goal, cwd, profile, status: 'running', transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+    set({ sessionId, goal, cwd, profile, status: 'running', approved: false, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
 
   setApprovalMode: (approvalMode) => set({ approvalMode }),
+  approvePlan: () => set({ approved: true, status: 'running' }),
   setParent: (parentTaskId) => set({ parentTaskId }),
 
   pushUserText: (text) =>
@@ -66,7 +75,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
 
   reset: () => set({
-    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle',
+    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
     transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
   }),
 
@@ -81,11 +90,12 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return { transcript: [...s.transcript, { role: 'agent', text: msg.text }] };
         }
         case 'tool-call': {
-          // Track artifact-creating tools
-          if (msg.name === 'write_file' || msg.name === 'patch') {
-            const args = msg.args as { path?: string };
-            if (args.path) {
-              return { artifacts: [...s.artifacts, { path: args.path, addedAt: new Date().toISOString() }] };
+          // ACP tags file-mutating tools with kind "edit" / "delete" / "move".
+          if (msg.op === 'edit' || msg.op === 'delete' || msg.op === 'move') {
+            const args = (msg.args ?? {}) as { path?: string; file_path?: string; target?: string };
+            const path = args.path ?? args.file_path ?? args.target;
+            if (path && !s.artifacts.some((a) => a.path === path)) {
+              return { artifacts: [...s.artifacts, { path, addedAt: new Date().toISOString() }] };
             }
           }
           return s;
