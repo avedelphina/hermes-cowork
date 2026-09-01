@@ -1,18 +1,14 @@
 import { useEffect } from 'react';
 import { GoalHeader } from './GoalHeader';
 import { Transcript } from './Transcript';
-import { Composer as ChatComposer } from '../chat/Composer';  // reuse for steering
+import { Composer } from '../chat/Composer';
 import { RightPane } from './RightPane';
 import { useCoworkStore } from './cowork.store';
 
-// KNOWN M1 LIMITATION: ChatComposer reads sessionId from useChatStore (the chat store),
-// NOT from useCoworkStore. In Cowork mode the active sessionId lives in cowork.store.
-// Messages typed here will be sent to chat store's sessionId (null in cowork mode),
-// making the composer a no-op for steering. The primary interaction is the auto-flow
-// from the kickoff prompt in NewTaskDialog. This will be addressed in a future milestone.
-
 export function CoworkPage() {
   const ingestAcp = useCoworkStore((s) => s.ingestAcp);
+  const sessionId = useCoworkStore((s) => s.sessionId);
+  const pushUserText = useCoworkStore((s) => s.pushUserText);
 
   useEffect(() => {
     const off = window.hermes.acp.onEvent((evt) => ingestAcp(evt));
@@ -24,7 +20,11 @@ export function CoworkPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <GoalHeader />
         <Transcript />
-        <ChatComposer />
+        <Composer
+          sessionId={sessionId}
+          onEcho={pushUserText}
+          placeholder="Steer the task — redirect, clarify, or add detail… ⌘↵"
+        />
       </div>
       <RightPane />
     </div>

@@ -28,4 +28,36 @@ describe('cowork store', () => {
       { toolCallId: 't1', description: 'drop production table?' },
     ]);
   });
+
+  it('echoes steering messages and tracks turn status', () => {
+    const s = useCoworkStore.getState();
+    s.startTask({ sessionId: 'acp1', goal: 'g', cwd: '/w', profile: 'p' });
+    expect(useCoworkStore.getState().status).toBe('running');
+
+    s.ingestAcp({ kind: 'done', sessionId: 'acp1' });
+    expect(useCoworkStore.getState().status).toBe('idle');
+
+    s.pushUserText('also check the logs');
+    const st = useCoworkStore.getState();
+    expect(st.status).toBe('running');
+    expect(st.transcript.at(-1)).toEqual({ role: 'user', text: 'also check the logs' });
+  });
+
+  it('records a stop as a system line and goes idle', () => {
+    const s = useCoworkStore.getState();
+    s.startTask({ sessionId: 'acp1', goal: 'g', cwd: '/w', profile: 'p' });
+    s.markStopped();
+    const st = useCoworkStore.getState();
+    expect(st.status).toBe('idle');
+    expect(st.transcript.at(-1)?.role).toBe('system');
+  });
+
+  it('surfaces a session-error as a system line and goes idle', () => {
+    const s = useCoworkStore.getState();
+    s.startTask({ sessionId: 'acp1', goal: 'g', cwd: '/w', profile: 'p' });
+    s.ingestAcp({ kind: 'session-error', sessionId: 'acp1', message: 'ACP process exited', fatal: true });
+    const st = useCoworkStore.getState();
+    expect(st.status).toBe('idle');
+    expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '⚠️ ACP process exited' });
+  });
 });

@@ -11,6 +11,8 @@ type CoworkStore = {
   cwd: string;
   profile: string;
   approvalMode: 'ask' | 'auto';
+  /** 'running' while the agent owns the turn; 'idle' once it finishes/errors/stops. */
+  status: 'idle' | 'running';
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: number | null;
@@ -19,6 +21,10 @@ type CoworkStore = {
 
   startTask: (input: { sessionId: string; goal: string; cwd: string; profile: string }) => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
+  /** Echo a steering/follow-up message into the transcript and mark the turn running. */
+  pushUserText: (text: string) => void;
+  /** User cancelled the ACP session — record it and go idle. */
+  markStopped: () => void;
   ingestAcp: (msg: AcpServerMessage) => void;
   upsertPlanTask: (task: KanbanTask) => void;
   setParent: (id: number) => void;
@@ -31,6 +37,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   cwd: '',
   profile: 'default',
   approvalMode: 'ask',
+  status: 'idle',
   transcript: [],
   approvals: [],
   parentTaskId: null,
@@ -38,10 +45,16 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   artifacts: [],
 
   startTask: ({ sessionId, goal, cwd, profile }) =>
-    set({ sessionId, goal, cwd, profile, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
+    set({ sessionId, goal, cwd, profile, status: 'running', transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [] }),
 
   setApprovalMode: (approvalMode) => set({ approvalMode }),
   setParent: (parentTaskId) => set({ parentTaskId }),
+
+  pushUserText: (text) =>
+    set((s) => ({ status: 'running', transcript: [...s.transcript, { role: 'user', text }] })),
+
+  markStopped: () =>
+    set((s) => ({ status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] })),
 
   upsertPlanTask: (task) =>
     set((s) => {
@@ -53,7 +66,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
 
   reset: () => set({
-    sessionId: null, goal: '', cwd: '', profile: 'default',
+    sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle',
     transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [],
   }),
 
@@ -80,9 +93,13 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
         case 'session-error':
-          return { transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }] };
-        case 'tool-result':
+          return {
+            status: 'idle',
+            transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }],
+          };
         case 'done':
+          return { status: 'idle' };
+        case 'tool-result':
           return s;
         default:
           // Unknown kind: never replace state with undefined — that nukes the
