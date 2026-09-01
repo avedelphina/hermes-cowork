@@ -14,7 +14,9 @@ export type RuntimeProbeError =
   | { kind: 'version-failed'; binaryPath: string; stderr: string }
   | { kind: 'too-old'; binaryPath: string; version: string; min: string };
 
-export const MIN_HERMES_VERSION = '0.13.0';
+// Tested floor: ACP handshake, streaming, and shutdown are verified against
+// Hermes 0.20.6 (see docs). Older builds are not exercised.
+export const MIN_HERMES_VERSION = '0.20.0';
 
 type FindResult =
   | { kind: 'found'; path: string }

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { AcpServerMessage } from '@shared/types';
 
 type Message = {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   text: string;
   toolCalls: Array<{ id: string; name: string; args: unknown; result?: unknown }>;
 };
@@ -75,6 +75,10 @@ export const useChatStore = create<ChatStore>((set) => ({
               ...s.pendingApprovals,
               { toolCallId: msg.toolCallId, description: msg.description },
             ],
+          };
+        case 'session-error':
+          return {
+            messages: [...s.messages, { role: 'system', text: `⚠️ ${msg.message}`, toolCalls: [] }],
           };
         case 'done':
           return s;

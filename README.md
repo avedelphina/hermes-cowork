@@ -17,7 +17,7 @@ Unlike Claude Cowork, Hermes Cowork is fully open source (MIT), runs entirely lo
 ## Requirements
 
 - macOS 13+ (Apple Silicon)
-- [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation) ≥ 0.13.0 installed and on `$PATH`
+- [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation) ≥ 0.20.0 installed and on `$PATH` (ACP verified against 0.20.6)
 
 ## Install
 

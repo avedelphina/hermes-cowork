@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "hermes": {
-    "minVersion": "0.13.0"
+    "minVersion": "0.20.0"
   },
   "engines": {
     "node": ">=20.0.0"

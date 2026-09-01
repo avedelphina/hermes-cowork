@@ -19,6 +19,7 @@ export type AcpServerMessage =
   | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; args: unknown }
   | { kind: 'tool-result'; sessionId: string; toolCallId: string; result: unknown }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
+  | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
   | { kind: 'done'; sessionId: string };
 
 declare global {

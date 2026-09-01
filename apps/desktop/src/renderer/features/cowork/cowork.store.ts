@@ -11,7 +11,7 @@ type CoworkStore = {
   cwd: string;
   profile: string;
   approvalMode: 'ask' | 'auto';
-  transcript: Array<{ role: 'agent' | 'user'; text: string }>;
+  transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: number | null;
   planTasks: KanbanTask[];
@@ -79,6 +79,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         }
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
+        case 'session-error':
+          return { transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }] };
         case 'tool-result':
         case 'done':
           return s;

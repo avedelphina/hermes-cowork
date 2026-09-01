@@ -8,7 +8,8 @@
 //  - Translation of incoming server-pushed events → semantic AcpServerMessage.
 //  - Emitting `'done'` when our session/prompt request gets a response.
 //
-// Wire format reference: Agent Client Protocol v0.11.2 (see acp-translator).
+// Wire format reference: ACP protocol v1, verified against Hermes 0.20.6
+// (see acp-translator and docs/acp-notes.md).
 
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -146,24 +147,30 @@ export class AcpBridge extends EventEmitter {
   }
 
   private onSupervisorEvent = (event: AcpEvent): void => {
-    if (event.kind !== 'message') return;
-
     // Stash session/request_permission so respondToPermission can find it.
-    const msg = event.msg;
-    if (msg['method'] === 'session/request_permission') {
-      const id = msg['id'];
-      const params = msg['params'] as Record<string, unknown> | undefined;
-      const toolCall = params?.['toolCall'] as Record<string, unknown> | undefined;
-      const toolCallId = typeof toolCall?.['toolCallId'] === 'string' ? toolCall['toolCallId'] : '';
-      const options = Array.isArray(params?.['options'])
-        ? (params!['options'] as PermissionOption[])
-        : [];
-      if (toolCallId && (typeof id === 'string' || typeof id === 'number')) {
-        this.pendingPermissions.set(toolCallId, {
-          handle: event.sessionId,
-          requestId: id,
-          options,
-        });
+    if (event.kind === 'message') {
+      const msg = event.msg;
+      if (msg['method'] === 'session/request_permission') {
+        const id = msg['id'];
+        const params = msg['params'] as Record<string, unknown> | undefined;
+        const toolCall = params?.['toolCall'] as Record<string, unknown> | undefined;
+        const toolCallId = typeof toolCall?.['toolCallId'] === 'string' ? toolCall['toolCallId'] : '';
+        const options = Array.isArray(params?.['options'])
+          ? (params!['options'] as PermissionOption[])
+          : [];
+        if (toolCallId && (typeof id === 'string' || typeof id === 'number')) {
+          this.pendingPermissions.set(toolCallId, {
+            handle: event.sessionId,
+            requestId: id,
+            options,
+          });
+        }
+      }
+    } else if (event.kind === 'exit') {
+      // Child is gone — drop its ACP-sessionId mapping so a stale prompt
+      // fails fast instead of writing to a dead pipe.
+      for (const [acpId, handle] of this.acpToHandle) {
+        if (handle === event.sessionId) this.acpToHandle.delete(acpId);
       }
     }
 

@@ -13,9 +13,11 @@ export function MessageStream() {
       {messages.map((m, i) => (
         <div key={i} className="mb-6">
           <div className="mb-1 text-[10px] uppercase tracking-wide text-dim">
-            {m.role === 'user' ? 'You' : 'Hermes'}
+            {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : 'Hermes'}
           </div>
-          <div className="whitespace-pre-wrap text-sm text-fg">{m.text}</div>
+          <div className={'whitespace-pre-wrap text-sm ' + (m.role === 'system' ? 'text-danger' : 'text-fg')}>
+            {m.text}
+          </div>
           {m.toolCalls.map((tc) => (
             <ToolCallCard key={tc.id} name={tc.name} args={tc.args} result={tc.result} />
           ))}

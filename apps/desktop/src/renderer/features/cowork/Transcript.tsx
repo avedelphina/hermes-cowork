@@ -10,7 +10,13 @@ export function Transcript() {
         <div className="mt-12 text-center text-muted">Hermes will propose a plan shortly…</div>
       )}
       {transcript.map((m, i) => (
-        <div key={i} className="mb-4 whitespace-pre-wrap">
+        <div
+          key={i}
+          className={
+            'mb-4 whitespace-pre-wrap' +
+            (m.role === 'system' ? ' text-danger' : m.role === 'user' ? ' text-muted' : '')
+          }
+        >
           {m.text}
         </div>
       ))}
