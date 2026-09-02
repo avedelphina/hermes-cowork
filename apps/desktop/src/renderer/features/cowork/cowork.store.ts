@@ -168,10 +168,11 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
             if (path && !s.artifacts.some((a) => a.path === path)) {
               // Snapshot the pre-change file for diff + revert (fire-and-forget).
               const root = s.cwd.replace(/\/+$/, '');
-              if (root && path.startsWith(root + '/')) {
+              const taskId = s.taskId;
+              if (taskId && root && path.startsWith(root + '/')) {
                 const rel = path.slice(root.length + 1);
                 void window.hermes?.fs
-                  ?.snapshot(root, rel)
+                  ?.snapshot(taskId, rel)
                   .then((before) => useCoworkStore.getState().addCheckpoint(rel, before))
                   .catch(() => { /* ignore */ });
               }

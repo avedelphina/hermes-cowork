@@ -228,9 +228,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
   ipcMain.handle(IpcChannel.TaskList, () => tasks.list());
-  ipcMain.handle(IpcChannel.TaskCreate, (_e, input: Omit<CoworkTask, 'id' | 'status' | 'approved' | 'createdAt' | 'updatedAt'>) =>
-    tasks.create(input),
-  );
+  ipcMain.handle(IpcChannel.TaskCreate, (_e, input: Omit<CoworkTask, 'id' | 'status' | 'approved' | 'createdAt' | 'updatedAt'>) => {
+    // The stored cwd is the trust root for this task's checkpoint IPC, so it
+    // must be a real directory (same bar as acp:start).
+    if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
+    return tasks.create(input);
+  });
   ipcMain.handle(IpcChannel.TaskUpdate, (_e, id: string, patch: { status?: TaskStatus; approved?: boolean }) =>
     tasks.update(id, patch),
   );
@@ -240,13 +243,21 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   ipcMain.handle(IpcChannel.FsList, (_e, id: string, rel?: string) => listDir(projectRoot(id), rel ?? ''));
   ipcMain.handle(IpcChannel.FsRead, (_e, id: string, rel: string) => readFilePreview(projectRoot(id), rel));
 
-  // Checkpoints work off a raw folder (a task's cwd, which may not be a
-  // registered project) — still guarded to stay inside that folder.
-  ipcMain.handle(IpcChannel.FsSnapshot, (_e, root: string, rel: string) =>
-    isExistingDir(root) ? snapshotFile(root, rel) : null,
-  );
-  ipcMain.handle(IpcChannel.FsRevert, (_e, root: string, rel: string, content: string | null) => {
-    if (!isExistingDir(root)) throw new Error('invalid root');
+  // Checkpoints are scoped to a task's working folder. The renderer only ever
+  // sends a taskId — the root is resolved here from the task registry, never
+  // trusted from the renderer.
+  const taskRoot = (taskId: string): string => {
+    const t = tasks.get(taskId);
+    if (!t) throw new Error(`unknown task ${taskId}`);
+    return t.cwd;
+  };
+  ipcMain.handle(IpcChannel.FsSnapshot, (_e, taskId: string, rel: string) => {
+    const root = taskRoot(taskId);
+    return isExistingDir(root) ? snapshotFile(root, rel) : null;
+  });
+  ipcMain.handle(IpcChannel.FsRevert, (_e, taskId: string, rel: string, content: string | null) => {
+    const root = taskRoot(taskId);
+    if (!isExistingDir(root)) throw new Error('invalid task root');
     revertFile(root, rel, content);
   });
 }

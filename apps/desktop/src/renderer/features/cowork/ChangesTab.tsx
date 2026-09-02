@@ -4,25 +4,27 @@ import { useCoworkStore } from './cowork.store';
 
 export function ChangesTab() {
   const checkpoints = useCoworkStore((s) => s.checkpoints);
-  const cwd = useCoworkStore((s) => s.cwd);
+  const taskId = useCoworkStore((s) => s.taskId);
   const dropCheckpoint = useCoworkStore((s) => s.dropCheckpoint);
   const [current, setCurrent] = useState<Record<string, string | null>>({});
   const [openRel, setOpenRel] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!taskId) return;
     for (const c of checkpoints) {
-      window.hermes.fs.snapshot(cwd, c.rel)
+      window.hermes.fs.snapshot(taskId, c.rel)
         .then((text) => setCurrent((m) => ({ ...m, [c.rel]: text })))
         .catch(() => { /* ignore */ });
     }
-  }, [checkpoints, cwd]);
+  }, [checkpoints, taskId]);
 
   if (checkpoints.length === 0) {
     return <div className="p-4 text-xs text-muted">Edits appear here with a diff and a revert button.</div>;
   }
 
   const revert = async (rel: string, before: string | null) => {
-    await window.hermes.fs.revert(cwd, rel, before);
+    if (!taskId) return;
+    await window.hermes.fs.revert(taskId, rel, before);
     dropCheckpoint(rel);
     setCurrent((m) => ({ ...m, [rel]: before }));
   };

@@ -43,11 +43,16 @@ _(not yet enforced)_ so the gap is visible rather than implied.
   directory (`isExistingDir`) or the start is refused. _Enforced._
 - **File access under a root**: `resolveWithinRoot(root, candidate)` returns the
   resolved path or `null` if it escapes via `..`, an absolute path, or lands on
-  the root's parent. Lexical only — symlink-aware callers must `realpath` first.
-  _Helper landed; wired into the file browser in Task 2.5._
-- **Workers** (Phase 5): each worker gets its own `root` and policy; a worker
-  may never read or write outside it, nor inherit another profile's private
-  memory. _Not yet enforced._
+  the root's parent; `project-fs.ts` also `realpath`-checks so a symlink target
+  outside the root is rejected. _Enforced (file browser + checkpoints)._
+- **The renderer never supplies a filesystem root.** `fs:list` / `fs:read`
+  take a `projectId` (root from `ProjectStore`); `fs:snapshot` / `fs:revert`
+  take a `taskId` (root from `TaskStore`). A task's `cwd` is validated as an
+  existing directory when the task is recorded (`task:create`) — the same bar
+  as `acp:start`. _Enforced._
+- **Workers** (Phase 5): each worker runs as an isolated ACP child in the
+  coordinator task's `cwd`; its checkpoints resolve through the worker's own
+  persisted task record. Cross-profile memory isolation is Hermes' own.
 
 ## Approval lifecycle
 

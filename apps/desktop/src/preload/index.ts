@@ -65,10 +65,10 @@ const api = {
   fs: {
     list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
     read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
-    snapshot: (root: string, rel: string): Promise<string | null> =>
-      ipcRenderer.invoke(IpcChannel.FsSnapshot, root, rel),
-    revert: (root: string, rel: string, content: string | null): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.FsRevert, root, rel, content),
+    snapshot: (taskId: string, rel: string): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.FsSnapshot, taskId, rel),
+    revert: (taskId: string, rel: string, content: string | null): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel, content),
   },
   tasks: {
     list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
