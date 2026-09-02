@@ -43,12 +43,17 @@ export function ModelPicker({ sessionId, className }: Props) {
       setDraft(models.currentModelId ?? '');
       return;
     }
+    const prev = models;
     setBusy(true);
     setModels({ ...models, currentModelId: modelId }); // optimistic
     try {
       await window.hermes.acp.setModel({ sessionId, modelId });
       const fresh = await window.hermes.acp.models(sessionId);
       if (fresh) { setModels(fresh); setDraft(fresh.currentModelId ?? ''); }
+    } catch {
+      // Hermes rejected the switch — roll back to what was actually live.
+      setModels(prev);
+      setDraft(prev.currentModelId ?? '');
     } finally {
       setBusy(false);
     }
