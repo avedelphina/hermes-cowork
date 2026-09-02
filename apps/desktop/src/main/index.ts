@@ -31,8 +31,20 @@ function createWindow() {
 
   win.on('ready-to-show', () => win?.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Only hand real web links to the OS — never file:, mailto:, or custom
+    // app schemes.
+    try {
+      const scheme = new URL(url).protocol;
+      if (scheme === 'https:' || scheme === 'http:') void shell.openExternal(url);
+    } catch {
+      // not a valid URL — ignore
+    }
     return { action: 'deny' };
+  });
+  // Block any real navigation away from the app itself (routing is pushState).
+  win.webContents.on('will-navigate', (e, url) => {
+    const appUrl = process.env['ELECTRON_RENDERER_URL'] ?? 'file://';
+    if (!url.startsWith(appUrl)) e.preventDefault();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {

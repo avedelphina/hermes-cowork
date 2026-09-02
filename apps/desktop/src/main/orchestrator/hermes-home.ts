@@ -33,9 +33,20 @@ export function resolveHermesHomes(
 }
 
 /**
+/** Hermes profile names are a single path segment: letters, digits, `.`, `_`, `-`. */
+export function isValidProfileName(name: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && name !== '.' && name !== '..';
+}
+
+/**
  * Absolute home for a given profile. The `default` profile *is* the global
- * home; every other name lives at `<global>/profiles/<name>`.
+ * home; every other name lives at `<global>/profiles/<name>`. The name is
+ * validated so a value like `../../x` cannot escape the profiles directory.
  */
 export function profileHome(global: string, profile: string): string {
-  return !profile || profile === 'default' ? global : join(global, 'profiles', profile);
+  if (!profile || profile === 'default') return global;
+  if (!isValidProfileName(profile)) {
+    throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
+  }
+  return join(global, 'profiles', profile);
 }

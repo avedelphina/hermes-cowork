@@ -8,7 +8,7 @@ import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
-import { profileHome } from '../orchestrator/hermes-home';
+import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
@@ -30,6 +30,27 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const authHeader = (): Record<string, string> =>
     ctx.dashboardToken ? { Authorization: `Bearer ${ctx.dashboardToken}` } : {};
   const base = `http://127.0.0.1:${ctx.dashboardPort}`;
+
+  // Reject a renderer-supplied profile that is not one Hermes actually knows.
+  // Cached briefly so a task start is not gated on a network round-trip.
+  let profileCache: { names: Set<string>; at: number } | null = null;
+  const assertKnownProfile = async (name: string): Promise<void> => {
+    if (name === 'default') return;
+    if (!isValidProfileName(name)) throw new Error(`invalid profile name: ${JSON.stringify(name)}`);
+    if (!profileCache || Date.now() - profileCache.at > 10_000) {
+      try {
+        const r = await fetch(`${base}/api/profiles`, { headers: authHeader() });
+        const body = (await r.json()) as { profiles?: Array<{ name?: string }> };
+        profileCache = {
+          names: new Set((body.profiles ?? []).map((p) => p.name).filter((n): n is string => !!n)),
+          at: Date.now(),
+        };
+      } catch {
+        profileCache = { names: new Set(), at: Date.now() };
+      }
+    }
+    if (!profileCache.names.has(name)) throw new Error(`unknown profile: ${name}`);
+  };
 
   // ── runtime ──
   ipcMain.handle(IpcChannel.RuntimeProbe, async () => {
@@ -73,12 +94,13 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.AcpStart,
     async (_e, opts: { profile: string; cwd?: string; isolate?: boolean }) => {
       // Chat is not folder-scoped — it defaults to the home directory. A Cowork
-      // task always passes an explicit folder the user picked, which must exist
-      // (the trust boundary — see docs/security-model.md).
-      const cwd = opts.cwd || homedir();
+      // task always passes an explicit folder the user picked. An explicit cwd
+      // that does not exist fails closed (never a silent widening to $HOME).
+      const cwd = opts.cwd ? opts.cwd : homedir();
       if (!isExistingDir(cwd)) {
         throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
       }
+      await assertKnownProfile(opts.profile);
       return bridge.startSession({
         profile: opts.profile,
         cwd,
@@ -97,7 +119,13 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.AcpLoad,
     async (_e, opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }) => {
       const profile = opts.profile ?? 'default';
-      const cwd = opts.cwd && isExistingDir(opts.cwd) ? opts.cwd : homedir();
+      // An explicit cwd must exist — a moved/deleted project folder must fail,
+      // not silently widen the task's scope to $HOME.
+      if (opts.cwd && !isExistingDir(opts.cwd)) {
+        throw new Error(`Cannot resume: "${opts.cwd}" is not an existing directory.`);
+      }
+      const cwd = opts.cwd ? opts.cwd : homedir();
+      await assertKnownProfile(profile);
       return bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -122,40 +150,49 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
 
   // ── REST proxy ──
-  ipcMain.handle(IpcChannel.RestGet, async (_e, path: string) => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}${path}`, { headers: authHeader() });
-    if (!r.ok) throw new Error(`GET ${path}: ${r.status}`);
-    return r.json();
-  });
-
-  ipcMain.handle(IpcChannel.RestPost, async (_e, path: string, body: unknown) => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeader() },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`POST ${path}: ${r.status}`);
+  // The renderer may only reach the exact dashboard routes the UI uses. The
+  // proxy carries the dashboard bearer token, so an open path is an open door.
+  const PROFILE_SEG = '[A-Za-z0-9][A-Za-z0-9._-]*';
+  const ALLOW: Record<'GET' | 'POST' | 'PATCH' | 'DELETE', RegExp[]> = {
+    GET: [
+      /^\/api\/status$/,
+      /^\/api\/profiles$/,
+      /^\/api\/profiles\/active$/,
+      /^\/api\/sessions(\?limit=\d+)?$/,
+      /^\/api\/sessions\/stats$/,
+      /^\/api\/cron\/jobs$/,
+      /^\/api\/memory$/,
+      /^\/api\/skills$/,
+      /^\/api\/plugins\/kanban\/board$/,
+    ],
+    POST: [
+      /^\/api\/profiles$/,
+      /^\/api\/gateway\/(start|stop|restart)$/,
+    ],
+    PATCH: [/^\/api\/skills\/toggle$/],
+    DELETE: [new RegExp(`^/api/profiles/${PROFILE_SEG}$`)],
+  };
+  const check = (method: keyof typeof ALLOW, path: string) => {
+    if (!ALLOW[method].some((re) => re.test(path))) {
+      throw new Error(`dashboard route not allowed: ${method} ${path}`);
+    }
+  };
+  const proxy = async (method: keyof typeof ALLOW, path: string, body?: unknown) => {
+    check(method, path);
+    const init: RequestInit = { method, headers: authHeader() };
+    if (body !== undefined) {
+      init.headers = { 'content-type': 'application/json', ...authHeader() };
+      init.body = JSON.stringify(body);
+    }
+    const r = await fetch(`${base}${path}`, init);
+    if (!r.ok) throw new Error(`${method} ${path}: ${r.status}`);
     return r.json().catch(() => null);
-  });
+  };
 
-  ipcMain.handle(IpcChannel.RestPatch, async (_e, path: string, body: unknown) => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}${path}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', ...authHeader() },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`PATCH ${path}: ${r.status}`);
-    return r.json().catch(() => null);
-  });
-
-  ipcMain.handle(IpcChannel.RestDelete, async (_e, path: string) => {
-    const r = await fetch(`http://127.0.0.1:${ctx.dashboardPort}${path}`, {
-      method: 'DELETE',
-      headers: authHeader(),
-    });
-    if (!r.ok) throw new Error(`DELETE ${path}: ${r.status}`);
-    return r.json().catch(() => null);
-  });
+  ipcMain.handle(IpcChannel.RestGet, (_e, path: string) => proxy('GET', path));
+  ipcMain.handle(IpcChannel.RestPost, (_e, path: string, body: unknown) => proxy('POST', path, body ?? {}));
+  ipcMain.handle(IpcChannel.RestPatch, (_e, path: string, body: unknown) => proxy('PATCH', path, body ?? {}));
+  ipcMain.handle(IpcChannel.RestDelete, (_e, path: string) => proxy('DELETE', path));
 
   // ── kanban WS ──
   ipcMain.handle(IpcChannel.KanbanWsSubscribe, (_e, _boardSlug: string | null) => undefined);
