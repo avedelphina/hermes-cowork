@@ -58,7 +58,9 @@ What's in:
 
 Download the latest DMG from the
 [Releases page](https://github.com/avedelphina/hermes-cowork/releases/latest)
-and drag it to Applications. (Releases begin once the DMG is signed.)
+and drag it to Applications. The DMG is not yet signed or notarised, so on
+first launch right-click the app and choose **Open**, or run
+`xattr -dr com.apple.quarantine "/Applications/Hermes Cowork.app"`.
 
 ## Develop
 
