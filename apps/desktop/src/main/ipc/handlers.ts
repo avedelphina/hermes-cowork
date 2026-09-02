@@ -115,6 +115,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     await bridge.setMode(opts.sessionId, opts.modeId);
   });
 
+  ipcMain.handle(IpcChannel.AcpSetModel, async (_e, opts: { sessionId: string; modelId: string }) => {
+    await bridge.setModel(opts.sessionId, opts.modelId);
+  });
+
+  ipcMain.handle(IpcChannel.AcpModels, (_e, sessionId: string) => bridge.getModels(sessionId));
+
   ipcMain.handle(
     IpcChannel.AcpLoad,
     async (_e, opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }) => {

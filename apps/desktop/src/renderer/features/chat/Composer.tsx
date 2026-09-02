@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useChatStore } from './chat.store';
+import { ModelPicker } from '../../shell/ModelPicker';
 
 type Props = {
   /** Active ACP session to send to. Omit to use the chat store's session. */
@@ -41,6 +42,11 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
 
   return (
     <div className="border-t border-border px-6 py-3">
+      {sessionId && (
+        <div className="mb-2 flex justify-end">
+          <ModelPicker key={sessionId} sessionId={sessionId} />
+        </div>
+      )}
       <textarea
         value={text}
         aria-label="Message input"

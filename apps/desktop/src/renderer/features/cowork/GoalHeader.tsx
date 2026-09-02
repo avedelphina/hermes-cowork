@@ -1,4 +1,5 @@
 import { useCoworkStore } from './cowork.store';
+import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
   const { goal, cwd, profile, planTasks, sessionId, status, markStopped, beginReconnect } = useCoworkStore();
@@ -56,6 +57,7 @@ export function GoalHeader() {
             <span className="text-success">step {done + 1} of {total}</span>
           </>
         )}
+        {sessionId && <ModelPicker key={sessionId} sessionId={sessionId} className="ml-auto" />}
       </div>
     </div>
   );

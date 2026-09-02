@@ -11,6 +11,8 @@ export const IpcChannel = {
   AcpLoad: 'acp:load',
   AcpSend: 'acp:send',
   AcpSetMode: 'acp:set-mode',
+  AcpSetModel: 'acp:set-model',
+  AcpModels: 'acp:models',  // read cached available/current models for a session
   AcpStop: 'acp:stop',
   AcpEvent: 'acp:event',  // main → renderer push
 
