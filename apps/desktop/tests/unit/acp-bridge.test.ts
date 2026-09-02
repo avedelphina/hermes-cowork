@@ -315,3 +315,75 @@ describe('AcpBridge — child exit', () => {
     expect(semanticEvents.filter((e) => e.kind === 'session-error')).toEqual([]);
   });
 });
+
+describe('AcpBridge model switching', () => {
+  beforeEach(() => vi.mocked(cp.spawn).mockReset());
+
+  async function openWith(modelsResult: unknown) {
+    const { bridge, proc } = makeBridge();
+    const p = bridge.startSession({
+      profile: 'default', cwd: '/tmp',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({
+      jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string,
+      result: { sessionId: 'sess-m', models: modelsResult },
+    }));
+    await p;
+    return { bridge, proc };
+  }
+
+  it('captures availableModels from session/new and normalizes them', async () => {
+    const { bridge } = await openWith({
+      currentModelId: 'a',
+      availableModels: [
+        { modelId: 'a', name: 'Model A' },
+        { modelId: 'b' },                       // name falls back to modelId
+        { bogus: true },                        // dropped
+      ],
+    });
+    expect(bridge.getModels('sess-m')).toEqual({
+      currentModelId: 'a',
+      availableModels: [
+        { modelId: 'a', name: 'Model A' },
+        { modelId: 'b', name: 'b' },
+      ],
+    });
+  });
+
+  it('returns null models when the list is empty or absent', async () => {
+    const { bridge } = await openWith({ availableModels: [] });
+    expect(bridge.getModels('sess-m')).toBeNull();
+    expect(bridge.getModels('never-opened')).toBeNull();
+  });
+
+  it('setModel sends session/set_model and updates the cached current id', async () => {
+    const { bridge, proc } = await openWith({
+      currentModelId: 'a',
+      availableModels: [{ modelId: 'a', name: 'A' }, { modelId: 'b', name: 'B' }],
+    });
+    const done = bridge.setModel('sess-m', 'b');
+    await flush();
+    const req = proc.findOutgoing('session/set_model')!;
+    expect(req['params']).toEqual({ sessionId: 'sess-m', modelId: 'b' });
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: req['id'] as string, result: {} }));
+    await done;
+    expect(bridge.getModels('sess-m')?.currentModelId).toBe('b');
+  });
+
+  it('setModel rejects for an unknown session', async () => {
+    const { bridge } = makeBridge();
+    await expect(bridge.setModel('nope', 'x')).rejects.toThrow(/unknown ACP session/);
+  });
+
+  it('forgets model state when the session is stopped', async () => {
+    const { bridge } = await openWith({
+      currentModelId: 'a', availableModels: [{ modelId: 'a', name: 'A' }, { modelId: 'b', name: 'B' }],
+    });
+    bridge.stopSession('sess-m');
+    expect(bridge.getModels('sess-m')).toBeNull();
+  });
+});

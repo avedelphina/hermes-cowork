@@ -45,8 +45,16 @@ Result carries far more than `sessionId` (we currently read only that):
                 { "id": "dont_ask",      "name": "Don't Ask",    "description": "Auto-allow file edits for this session except sensitive paths." } ] } }
 ```
 
-- **`models.currentModelId` + `availableModels`** → feed Task 1.2 (show resolved
-  model/provider) and a future model switcher, no extra dashboard call needed.
+- **`models.currentModelId` + `availableModels`** → cached main-side by
+  `AcpBridge` (`modelsBySession`) and surfaced through the `acp:models` IPC.
+  The `ModelPicker` (Chat composer + Cowork `GoalHeader`) reads it and switches
+  live via `session/set_model` `{ sessionId, modelId }`.
+  **Verified against a live 0.20.6 on 2026-09-02:** `session/new` returns
+  `models.availableModels[]` as `{ modelId, name, description }` (e.g.
+  `{ "modelId": "anthropic:claude-sonnet-5", "name": "Anthropic · claude-sonnet-5",
+  "description": "Provider: Anthropic" }`), `currentModelId` a plain string;
+  `session/set_model` replies `{}` on success. Resumed sessions
+  (`session/load`) usually carry no `models`, so the picker hides itself there.
 - **`modes`** → Task 3.3 "Ask before acting" should map to a real ACP mode
   (`default` vs `accept_edits`/`dont_ask`), enforced agent-side, not a renderer
   toggle. Mode-set method still to be confirmed (likely `session/set_mode`).

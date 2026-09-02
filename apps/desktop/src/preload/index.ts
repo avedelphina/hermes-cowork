@@ -2,7 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
-  AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot, DirListing, FilePreview,
+  AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
   CoworkTask, TaskStatus,
 } from '../shared/types';
 
@@ -23,6 +23,10 @@ const api = {
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
     setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.AcpSetMode, opts),
+    setModel: (opts: { sessionId: string; modelId: string }): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.AcpSetModel, opts),
+    models: (sessionId: string): Promise<AcpModels | null> =>
+      ipcRenderer.invoke(IpcChannel.AcpModels, sessionId),
     stop: (sessionId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpStop, sessionId),
     onEvent: (cb: (msg: AcpServerMessage) => void) => {
       const listener = (_e: unknown, msg: AcpServerMessage) => cb(msg);

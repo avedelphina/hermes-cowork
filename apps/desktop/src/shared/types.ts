@@ -64,6 +64,10 @@ export function defaultPolicy(root: string): PermissionPolicy {
   return { root, read: true, write: false, delete: false, terminal: false, network: false };
 }
 
+// ACP session model state (from session/new `models`, ACP protocol v1).
+export type AcpModelInfo = { modelId: string; name: string; description?: string };
+export type AcpModels = { currentModelId: string | null; availableModels: AcpModelInfo[] };
+
 export type AcpClientMessage =
   | { kind: 'prompt'; sessionId: string; text: string }
   | { kind: 'approve'; sessionId: string; toolCallId: string; allow: boolean };

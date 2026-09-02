@@ -18,7 +18,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { AcpSupervisor, AcpEvent } from './acp-supervisor';
-import type { AcpServerMessage } from '../../shared/types';
+import type { AcpServerMessage, AcpModels, AcpModelInfo } from '../../shared/types';
 import { translateAcpEvent } from './acp-translator';
 
 const ACP_PROTOCOL_VERSION = 1;
@@ -49,8 +49,34 @@ type PendingPermission = {
 
 type Conn = { handle: string; ready: Promise<void> };
 
+/** Coerce the ACP `models` blob into our shape, or null if it is unusable. */
+function normalizeModels(raw: unknown): AcpModels | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as { currentModelId?: unknown; availableModels?: unknown };
+  const list = Array.isArray(r.availableModels) ? r.availableModels : [];
+  const availableModels: AcpModelInfo[] = list
+    .map((m): AcpModelInfo | null => {
+      if (!m || typeof m !== 'object') return null;
+      const o = m as { modelId?: unknown; name?: unknown; description?: unknown };
+      if (typeof o.modelId !== 'string') return null;
+      return {
+        modelId: o.modelId,
+        name: typeof o.name === 'string' ? o.name : o.modelId,
+        ...(typeof o.description === 'string' ? { description: o.description } : {}),
+      };
+    })
+    .filter((m): m is AcpModelInfo => m !== null);
+  if (availableModels.length === 0) return null;
+  return {
+    currentModelId: typeof r.currentModelId === 'string' ? r.currentModelId : null,
+    availableModels,
+  };
+}
+
 export class AcpBridge extends EventEmitter {
   private acpToHandle = new Map<string, string>();
+  /** Model state as reported by session/new (and session/load when present). */
+  private modelsBySession = new Map<string, AcpModels>();
   private pendingPermissions = new Map<string, PendingPermission>();
   /** One warm ACP connection per `${profile}\0${hermesHome}`. */
   private conns = new Map<string, Conn>();
@@ -72,9 +98,11 @@ export class AcpBridge extends EventEmitter {
       const res = (await this.sup.request(handle, 'session/new', {
         cwd: opts.cwd,
         mcpServers: [],
-      })) as { sessionId?: string };
+      })) as { sessionId?: string; models?: unknown };
       if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
       this.acpToHandle.set(res.sessionId, handle);
+      const models = normalizeModels(res.models);
+      if (models) this.modelsBySession.set(res.sessionId, models);
       return { sessionId: res.sessionId };
     } catch (err) {
       if (opts.isolate) {
@@ -90,6 +118,20 @@ export class AcpBridge extends EventEmitter {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
     await this.sup.request(handle, 'session/set_mode', { sessionId, modeId });
+  }
+
+  /** Cached model state for a session, or null if we never saw session/new for it. */
+  getModels(sessionId: string): AcpModels | null {
+    return this.modelsBySession.get(sessionId) ?? null;
+  }
+
+  /** Switch the model for a live session (ACP `session/set_model`). */
+  async setModel(sessionId: string, modelId: string): Promise<void> {
+    const handle = this.acpToHandle.get(sessionId);
+    if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
+    await this.sup.request(handle, 'session/set_model', { sessionId, modelId });
+    const cur = this.modelsBySession.get(sessionId);
+    if (cur) this.modelsBySession.set(sessionId, { ...cur, currentModelId: modelId });
   }
 
   private async spawnDedicated(opts: StartSessionOpts): Promise<string> {
@@ -118,12 +160,14 @@ export class AcpBridge extends EventEmitter {
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
     const handle = opts.isolate ? await this.spawnDedicated(opts) : await this.connFor(opts);
     try {
-      await this.sup.request(handle, 'session/load', {
+      const res = (await this.sup.request(handle, 'session/load', {
         sessionId: opts.sessionId,
         cwd: opts.cwd,
         mcpServers: [],
-      });
+      })) as { models?: unknown } | null;
       this.acpToHandle.set(opts.sessionId, handle);
+      const models = normalizeModels(res?.models);
+      if (models) this.modelsBySession.set(opts.sessionId, models);
       return { sessionId: opts.sessionId };
     } catch (err) {
       if (opts.isolate) {
@@ -216,6 +260,7 @@ export class AcpBridge extends EventEmitter {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) return;
     this.acpToHandle.delete(sessionId);
+    this.modelsBySession.delete(sessionId);
     for (const [tcId, p] of this.pendingPermissions) {
       if (p.handle === handle) this.pendingPermissions.delete(tcId);
     }
@@ -228,6 +273,7 @@ export class AcpBridge extends EventEmitter {
   /** Kill every connection — pooled and isolated (profile switch / app quit). */
   stopAll(): void {
     this.acpToHandle.clear();
+    this.modelsBySession.clear();
     this.pendingPermissions.clear();
     this.conns.clear();
     this.isolatedHandles.clear();
@@ -264,7 +310,7 @@ export class AcpBridge extends EventEmitter {
         : event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`;
 
       if (event.kind === 'exit') {
-        for (const id of affected) this.acpToHandle.delete(id);
+        for (const id of affected) { this.acpToHandle.delete(id); this.modelsBySession.delete(id); }
         for (const [key, conn] of this.conns) {
           if (conn.handle === event.sessionId) this.conns.delete(key);
         }
