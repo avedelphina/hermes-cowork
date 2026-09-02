@@ -81,6 +81,57 @@ describe('AcpBridge.startSession', () => {
     await expect(startPromise).resolves.toEqual({ sessionId: 'sess-real-123' });
   });
 
+  it('resumes via session/load and keeps the id it was given (load has no sessionId)', async () => {
+    const { bridge, proc } = makeBridge();
+
+    const loadPromise = bridge.loadSession({
+      sessionId: 'past-sess-9', profile: 'default', cwd: '/Users/x',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+
+    await flush();
+    proc.stdout!.push(
+      encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }),
+    );
+
+    await flush();
+    const loadReq = proc.findOutgoing('session/load')!;
+    expect(loadReq['params']).toEqual({ sessionId: 'past-sess-9', cwd: '/Users/x', mcpServers: [] });
+    // Hermes 0.20.6 replies with { _meta, models, modes } — no sessionId.
+    proc.stdout!.push(
+      encodeFrame({ jsonrpc: '2.0', id: loadReq['id'] as string, result: { models: {}, modes: {} } }),
+    );
+
+    await expect(loadPromise).resolves.toEqual({ sessionId: 'past-sess-9' });
+  });
+
+  it('reuses one warm connection for a second session of the same profile', async () => {
+    const { bridge, proc } = makeBridge();
+    const common = {
+      profile: 'default', cwd: '/Users/x',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    };
+
+    const first = bridge.startSession(common);
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 's1' } }));
+    await first;
+
+    const initCalls = proc.written.filter((m) => m['method'] === 'initialize').length;
+    const spawnCalls = vi.mocked(cp.spawn).mock.calls.length;
+
+    // Second open: no new spawn, no second initialize — straight to session/load.
+    const second = bridge.loadSession({ ...common, sessionId: 'past-1' });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/load')!['id'] as string, result: {} }));
+    await expect(second).resolves.toEqual({ sessionId: 'past-1' });
+
+    expect(proc.written.filter((m) => m['method'] === 'initialize').length).toBe(initCalls);
+    expect(vi.mocked(cp.spawn).mock.calls.length).toBe(spawnCalls);
+  });
+
   it('shuts the orphan child down if the handshake fails', async () => {
     const { bridge, proc } = makeBridge();
     const startPromise = bridge.startSession({
@@ -219,5 +270,48 @@ describe('AcpBridge.respondToPermission', () => {
     const { bridge, proc } = makeBridge();
     bridge.respondToPermission('does-not-exist', true);
     expect(proc.written).toEqual([]);
+  });
+});
+
+describe('AcpBridge — child exit', () => {
+  beforeEach(() => vi.mocked(cp.spawn).mockReset());
+
+  it('re-keys a crash onto the ACP sessionId(s) the child served', async () => {
+    const { bridge, proc, semanticEvents } = makeBridge();
+    const startPromise = bridge.startSession({
+      profile: 'default', cwd: '/tmp',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'sess-42' } }));
+    await startPromise;
+    semanticEvents.length = 0;
+
+    proc.emit('exit', 1);
+    await flush();
+
+    expect(semanticEvents).toContainEqual({
+      kind: 'session-error', sessionId: 'sess-42', message: expect.stringContaining('code 1'), fatal: true,
+    });
+  });
+
+  it('stays silent on a clean (code 0) exit', async () => {
+    const { bridge, proc, semanticEvents } = makeBridge();
+    const startPromise = bridge.startSession({
+      profile: 'default', cwd: '/tmp',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 's' } }));
+    await startPromise;
+    semanticEvents.length = 0;
+
+    proc.emit('exit', 0);
+    await flush();
+    expect(semanticEvents.filter((e) => e.kind === 'session-error')).toEqual([]);
   });
 });

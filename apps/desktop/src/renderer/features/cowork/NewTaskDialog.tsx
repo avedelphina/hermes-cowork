@@ -1,23 +1,51 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { useCoworkStore } from './cowork.store';
+import { useCoworkStore, MODE_FOR } from './cowork.store';
+import { useProjectStore, activeProject } from '../projects/project.store';
+import { api } from '../../api/rest-client';
 
 const COWORK_SYSTEM_PROMPT = `You are running in Hermes Cowork mode.
 
-Before doing any work, propose a plan using kanban_create — one subtask per concrete step, linked under a parent task whose title is the user's goal.
+First, propose a concise numbered plan — one short line per concrete step —
+and then STOP. Do not take any action, edit any file, or run any command until
+the user replies to approve the plan. If the user asks for changes, revise the
+plan and stop again.
 
-Use kanban_heartbeat regularly during long-running steps.
-Mark subtasks complete with kanban_complete as you finish them.
-Spawn additional profiles via kanban_create with --assignee for parallelizable subtasks.
-For destructive operations (deleting files, dropping tables, irreversible API calls), always request approval inline regardless of mode.`.trim();
+Once approved, work through the steps in order, reporting progress as you go.
+For destructive operations (deleting files, dropping tables, irreversible API
+calls) always ask for confirmation inline, regardless of mode.`.trim();
 
 export function NewTaskDialog() {
+  // Wait for projects so the folder/profile prefill below sees the active one.
+  const projectsLoaded = useProjectStore((s) => s.loaded);
+  if (!projectsLoaded) {
+    return <div className="mx-auto mt-12 max-w-xl px-6 text-sm text-muted">Loading…</div>;
+  }
+  return <Dialog />;
+}
+
+function Dialog() {
+  const proj = activeProject();
   const [goal, setGoal] = useState('');
-  const [cwd, setCwd] = useState('');
-  const [profile, setProfile] = useState('default');
+  const [cwd, setCwd] = useState(() => proj?.folderPath ?? '');
+  const [profile, setProfile] = useState(() => proj?.profile ?? 'default');
+  const [profiles, setProfiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [, navigate] = useLocation();
   const startTask = useCoworkStore((s) => s.startTask);
+
+  useEffect(() => {
+    api.profiles()
+      .then((ps) => {
+        setProfiles(ps.map((p) => p.name));
+        // Only fall back to the Hermes active profile when no project set one.
+        if (!activeProject()) {
+          const active = ps.find((p) => p.active)?.name;
+          if (active) setProfile(active);
+        }
+      })
+      .catch(() => { /* keep the default */ });
+  }, []);
 
   const pickFolder = async () => {
     const path = await window.hermes.dialog.pickFolder();
@@ -28,13 +56,19 @@ export function NewTaskDialog() {
     if (!goal.trim() || !cwd.trim()) return;
     setBusy(true);
     try {
-      const { sessionId } = await window.hermes.acp.start({ profile, cwd });
-      startTask({ sessionId, goal, cwd, profile });
-      // Send the kickoff: system + goal as a single prompt.
-      await window.hermes.acp.send({
-        kind: 'prompt',
-        sessionId,
-        text: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose a plan now.`,
+      // Cowork tasks get their own ACP child so Stop can hard-cancel them.
+      const { sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true });
+      const mode = useCoworkStore.getState().approvalMode;
+      await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[mode] }).catch(() => { /* non-fatal */ });
+      const task = await window.hermes.tasks.create({
+        goal, cwd, profile, acpSessionId: sessionId,
+        projectId: activeProject()?.id ?? null,
+      });
+      // Hand the kickoff to CoworkPage: it registers the event listener before
+      // sending, so the streamed plan is not lost between routes.
+      startTask({
+        taskId: task.id, sessionId, goal, cwd, profile,
+        kickoff: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');
     } finally {
@@ -69,11 +103,23 @@ export function NewTaskDialog() {
       </div>
 
       <label className="mb-1 block text-xs text-muted">Profile</label>
-      <input
-        value={profile}
-        onChange={(e) => setProfile(e.target.value)}
-        className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-      />
+      {profiles.length > 0 ? (
+        <select
+          value={profile}
+          onChange={(e) => setProfile(e.target.value)}
+          className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+        >
+          {profiles.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={profile}
+          onChange={(e) => setProfile(e.target.value)}
+          className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+        />
+      )}
 
       <div className="flex justify-end gap-2">
         <button onClick={() => navigate('/cowork')} className="rounded px-3 py-2 text-sm text-muted hover:text-fg">

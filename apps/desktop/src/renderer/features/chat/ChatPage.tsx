@@ -1,50 +1,15 @@
-import { useEffect } from 'react';
 import { SessionList } from './SessionList';
-import { MessageStream } from './MessageStream';
-import { Composer } from './Composer';
 import { useChatStore } from './chat.store';
+import { ChatSurface, useChatSurface } from './ChatSurface';
 
 export function ChatPage() {
-  const startSession = useChatStore((s) => s.startSession);
-  const ingest = useChatStore((s) => s.ingest);
-
-  useEffect(() => {
-    let cancelled = false;
-    let spawnedSessionId: string | null = null;
-
-    const init = async () => {
-      const { sessionId } = await window.hermes.acp.start({
-        profile: 'default',
-        // cwd: '/' is a placeholder — Task 26 adds a folder picker
-        cwd: '/',
-      });
-      spawnedSessionId = sessionId;
-      // StrictMode double-mount: shutdown the orphaned child if we were
-      // unmounted before the spawn returned.
-      if (cancelled) {
-        void window.hermes.acp.stop(sessionId);
-        return;
-      }
-      startSession(sessionId);
-    };
-    void init();
-
-    const off = window.hermes.acp.onEvent((evt) => ingest(evt));
-
-    return () => {
-      cancelled = true;
-      off();
-      if (spawnedSessionId) void window.hermes.acp.stop(spawnedSessionId);
-    };
-  }, [startSession, ingest]);
+  const sessionId = useChatStore((s) => s.sessionId);
+  const { profile, ensureSession, pick } = useChatSurface();
 
   return (
     <div className="flex h-full flex-1">
-      <SessionList onPick={(_id) => { /* M1: load existing session — placeholder */ }} />
-      <div className="flex flex-1 flex-col">
-        <MessageStream />
-        <Composer />
-      </div>
+      <SessionList activeId={sessionId} onPick={(id) => void pick(id)} />
+      <ChatSurface profile={profile} ensureSession={ensureSession} />
     </div>
   );
 }

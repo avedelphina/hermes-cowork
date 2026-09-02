@@ -2,15 +2,28 @@ import { describe, it, expect } from 'vitest';
 import { ProfileSummarySchema, KanbanTaskSchema } from '@renderer/api/schemas';
 
 describe('ProfileSummarySchema', () => {
-  it('parses valid input', () => {
+  it('maps the Hermes 0.20.6 profile row shape', () => {
     const out = ProfileSummarySchema.parse({
       name: 'research',
-      active: true,
-      hermesHome: '/Users/x/.hermes/profiles/research',
+      path: '/Users/x/.hermes/profiles/research',
+      model: 'model-router',
+      provider: 'azure-foundry',
+      is_default: false,
     });
-    expect(out.name).toBe('research');
+    expect(out).toEqual({
+      name: 'research',
+      hermesHome: '/Users/x/.hermes/profiles/research',
+      model: 'model-router',
+      provider: 'azure-foundry',
+      active: false,
+    });
   });
-  it('rejects missing fields', () => {
+  it('defaults model/provider to null when absent', () => {
+    const out = ProfileSummarySchema.parse({ name: 'x', path: '/p' });
+    expect(out.model).toBeNull();
+    expect(out.provider).toBeNull();
+  });
+  it('rejects missing required fields', () => {
     expect(() => ProfileSummarySchema.parse({ name: 'x' })).toThrow();
   });
 });

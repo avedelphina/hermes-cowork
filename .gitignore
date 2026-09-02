@@ -10,6 +10,10 @@ out/
 release/
 *.tsbuildinfo
 
+# Test artifacts
+test-results/
+playwright-report/
+
 # Editors
 .vscode/
 .idea/

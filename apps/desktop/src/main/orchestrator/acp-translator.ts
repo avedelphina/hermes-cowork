@@ -4,10 +4,11 @@
 // the semantic AcpServerMessage shape the renderer consumes. Lives at the IPC
 // seam so the renderer never has to know about the wire format.
 //
-// Wire format reference: Agent Client Protocol v0.11.2 (ACP). The Hermes
-// `acp_adapter/` Python package wraps the `acp` library, which sends client
-// methods like `session/update` and `session/request_permission` to us
-// (we are the "client" in ACP terms; Hermes is the "agent").
+// Wire format reference: ACP protocol v1, verified against Hermes 0.20.6
+// (see docs/acp-notes.md). The Hermes `acp_adapter/` Python package wraps the
+// `acp` library, which sends client methods like `session/update` and
+// `session/request_permission` to us (we are the "client" in ACP terms;
+// Hermes is the "agent").
 
 import type { AcpEvent } from './acp-supervisor';
 import type { AcpServerMessage } from '../../shared/types';
@@ -28,18 +29,16 @@ function isJsonRpcRequest(msg: unknown): msg is JsonRpcRequest {
 }
 
 /**
- * Translate one supervisor event into zero-or-more semantic events.
+ * Translate one supervisor 'message' event into zero-or-more semantic events.
+ * Inspect the JSON-RPC method and map ACP client methods to semantic UI
+ * events; ignore JSON-RPC responses (replies to our own outgoing requests).
  *
- *  - 'message'  → inspect the JSON-RPC method, map ACP client methods to
- *                 semantic UI events; ignore JSON-RPC responses (those are
- *                 replies to our outgoing requests, not server-pushed events)
- *  - 'exit'     → currently dropped (TODO: surface to renderer as a system
- *                 note so the user knows the ACP child died?)
- *  - 'error'    → currently dropped (TODO: same question)
+ * 'exit' / 'error' are handled in AcpBridge (it re-keys them onto the ACP
+ * sessionId), so they are dropped here.
  *
- * Returning [] is correct for frames we deliberately don't surface
- * (e.g. JSON-RPC *responses* to our own outgoing prompt/permission requests,
- * or session/update variants we don't render yet like usage_update).
+ * Returning [] is correct for frames we deliberately don't surface — e.g.
+ * responses to our own prompt/permission requests, or session/update variants
+ * we don't render yet like usage_update.
  */
 export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
   if (event.kind !== 'message') return [];
@@ -79,8 +78,11 @@ export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
  *   "tool_call_update"      → tool-result if status==="completed"; otherwise
  *                             dropped (intermediate progress is not surfaced)
  *
- * Variants we deliberately drop in M1:
- *   user_message_chunk, plan, available_commands_update, current_mode_update,
+ *   "user_message_chunk"    → token with role 'user' (only during a
+ *                             session/load history replay)
+ *
+ * Variants we deliberately drop:
+ *   plan, available_commands_update, current_mode_update,
  *   config_option_update, session_info_update, usage_update.
  */
 function translateSessionUpdate(
@@ -99,11 +101,24 @@ function translateSessionUpdate(
       const text = extractTextFromContentBlock(u['content']);
       return text ? [{ kind: 'token', sessionId, text }] : [];
     }
+    case 'user_message_chunk': {
+      // Only seen while Hermes replays history during session/load.
+      const text = extractTextFromContentBlock(u['content']);
+      return text ? [{ kind: 'token', sessionId, text, role: 'user' }] : [];
+    }
     case 'tool_call': {
       const toolCallId = typeof u['toolCallId'] === 'string' ? u['toolCallId'] : '';
       const name = typeof u['title'] === 'string' ? u['title'] : '';
       if (!toolCallId || !name) return [];
-      return [{ kind: 'tool-call', sessionId, toolCallId, name, args: u['rawInput'] }];
+      const op = typeof u['kind'] === 'string' ? u['kind'] : 'other';
+      // ACP carries the touched files under `locations`; `rawInput` is absent
+      // on the session/update (it only appears in session/request_permission).
+      const paths = Array.isArray(u['locations'])
+        ? (u['locations'] as Array<{ path?: unknown }>)
+            .map((l) => l?.path)
+            .filter((p): p is string => typeof p === 'string')
+        : [];
+      return [{ kind: 'tool-call', sessionId, toolCallId, name, op, paths, args: u['rawInput'] }];
     }
     case 'tool_call_update': {
       if (u['status'] !== 'completed') return [];

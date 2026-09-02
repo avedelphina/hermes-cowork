@@ -1,16 +1,16 @@
 export const IpcChannel = {
   // status / runtime
-  RuntimeStatus: 'runtime:status',
-  RuntimeRescan: 'runtime:rescan',
   RuntimeProbe: 'runtime:probe',
 
-  // profiles
-  ProfileList: 'profile:list',
+  // profiles — list/status come straight from the dashboard via the REST proxy
   ProfileSwitch: 'profile:switch',
+  ProfileEnv: 'profile:env',  // resolved global home + HERMES_HOME profile hint
 
   // ACP
   AcpStart: 'acp:start',
+  AcpLoad: 'acp:load',
   AcpSend: 'acp:send',
+  AcpSetMode: 'acp:set-mode',
   AcpStop: 'acp:stop',
   AcpEvent: 'acp:event',  // main → renderer push
 
@@ -18,6 +18,7 @@ export const IpcChannel = {
   RestGet: 'rest:get',
   RestPost: 'rest:post',
   RestPatch: 'rest:patch',
+  RestDelete: 'rest:delete',
 
   // kanban WebSocket pump
   KanbanWsSubscribe: 'kanban-ws:subscribe',
@@ -25,6 +26,29 @@ export const IpcChannel = {
 
   // dialog
   ShowFolderPicker: 'dialog:folder',
+
+  // app
+  Notify: 'app:notify', // desktop notification when the window is unfocused
+
+  // projects
+  ProjectList: 'project:list',
+  ProjectCreate: 'project:create',
+  ProjectUpdate: 'project:update',
+  ProjectSetActive: 'project:set-active',
+  ProjectRemove: 'project:remove',
+  ProjectContextFiles: 'project:context-files', // which context files exist in a folder
+
+  // cowork tasks
+  TaskList: 'task:list',
+  TaskCreate: 'task:create',
+  TaskUpdate: 'task:update',
+  TaskRemove: 'task:remove',
+
+  // project filesystem (scoped to a project root)
+  FsList: 'fs:list',
+  FsRead: 'fs:read',
+  FsSnapshot: 'fs:snapshot', // capture current text for a checkpoint
+  FsRevert: 'fs:revert',     // restore checkpointed text (guarded write)
 } as const;
 
 export type IpcChannelKey = (typeof IpcChannel)[keyof typeof IpcChannel];

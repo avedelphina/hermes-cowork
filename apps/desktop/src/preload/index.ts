@@ -1,22 +1,28 @@
 // apps/desktop/src/preload/index.ts
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
-import type { ProfileSummary, StatusSnapshot, AcpClientMessage, AcpServerMessage } from '../shared/types';
+import type {
+  AcpClientMessage, AcpServerMessage, Project, ProjectSnapshot, DirListing, FilePreview,
+  CoworkTask, TaskStatus,
+} from '../shared/types';
 
 const api = {
   runtime: {
-    status: (): Promise<StatusSnapshot> => ipcRenderer.invoke(IpcChannel.RuntimeStatus),
-    rescan: (): Promise<StatusSnapshot> => ipcRenderer.invoke(IpcChannel.RuntimeRescan),
     probe: () => ipcRenderer.invoke(IpcChannel.RuntimeProbe),
   },
   profile: {
-    list: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IpcChannel.ProfileList),
     switch: (name: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ProfileSwitch, name),
+    env: (): Promise<{ globalHermesHome: string; envProfile: string | null }> =>
+      ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd: string }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
+    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
+      ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
+    setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.AcpSetMode, opts),
     stop: (sessionId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpStop, sessionId),
     onEvent: (cb: (msg: AcpServerMessage) => void) => {
       const listener = (_e: unknown, msg: AcpServerMessage) => cb(msg);
@@ -28,6 +34,7 @@ const api = {
     get: <T>(path: string): Promise<T> => ipcRenderer.invoke(IpcChannel.RestGet, path),
     post: <T>(path: string, body: unknown): Promise<T> => ipcRenderer.invoke(IpcChannel.RestPost, path, body),
     patch: <T>(path: string, body: unknown): Promise<T> => ipcRenderer.invoke(IpcChannel.RestPatch, path, body),
+    del: <T>(path: string): Promise<T> => ipcRenderer.invoke(IpcChannel.RestDelete, path),
   },
   kanbanWs: {
     subscribe: (boardSlug: string | null): Promise<void> =>
@@ -40,6 +47,38 @@ const api = {
   },
   dialog: {
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.ShowFolderPicker),
+  },
+  app: {
+    notify: (opts: { title: string; body: string }): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Notify, opts),
+  },
+  projects: {
+    list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),
+    create: (input: { name: string; folderPath: string; profile: string }): Promise<Project> =>
+      ipcRenderer.invoke(IpcChannel.ProjectCreate, input),
+    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string }): Promise<Project | null> =>
+      ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
+    setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
+    remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),
+    contextFiles: (id: string): Promise<string[]> => ipcRenderer.invoke(IpcChannel.ProjectContextFiles, id),
+  },
+  fs: {
+    list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
+    read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
+    snapshot: (taskId: string, rel: string): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.FsSnapshot, taskId, rel),
+    revert: (taskId: string, rel: string, content: string | null): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel, content),
+  },
+  tasks: {
+    list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
+    create: (input: {
+      goal: string; cwd: string; profile: string; acpSessionId: string;
+      projectId: string | null; parentTaskId?: string | null;
+    }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
+    update: (id: string, patch: { status?: TaskStatus; approved?: boolean }): Promise<CoworkTask | null> =>
+      ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.TaskRemove, id),
   },
 };
 

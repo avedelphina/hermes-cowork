@@ -1,11 +1,15 @@
 // apps/desktop/src/main/orchestrator/dashboard.ts
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer, type AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 export type DashboardState =
   | { kind: 'unknown' }
   | { kind: 'starting'; pid: number }
-  | { kind: 'ready'; port: number; pid: number | null }
+  // `child` is set only when *we* spawned the dashboard; the caller owns its
+  // lifecycle. A reused external dashboard has child === null and must not be
+  // killed by us.
+  | { kind: 'ready'; port: number; pid: number | null; child: ChildProcess | null }
   | { kind: 'crashed'; lastError: string };
 
 export type DashboardOptions = {
@@ -42,12 +46,32 @@ export async function probeDashboard(port: number): Promise<boolean> {
   }
 }
 
-export async function ensureDashboard(opts: DashboardOptions): Promise<DashboardState> {
-  const port = opts.port ?? DEFAULT_PORT;
+/** Resolve to `port` if we can bind it on loopback, else an OS-assigned free port. */
+async function usablePort(port: number): Promise<number> {
+  const tryListen = (p: number): Promise<number | null> =>
+    new Promise((resolve) => {
+      const srv = createServer();
+      srv.once('error', () => resolve(null));
+      srv.listen(p, '127.0.0.1', () => {
+        const chosen = (srv.address() as AddressInfo).port;
+        srv.close(() => resolve(chosen));
+      });
+    });
+  // ponytail: small TOCTOU window between close() and the dashboard binding —
+  // acceptable for a single-user desktop app; the 20s readiness probe catches
+  // a lost race.
+  return (await tryListen(port)) ?? (await tryListen(0)) ?? port;
+}
 
-  if (await probeDashboard(port)) {
-    return { kind: 'ready', port, pid: null };
+export async function ensureDashboard(opts: DashboardOptions): Promise<DashboardState> {
+  const preferred = opts.port ?? DEFAULT_PORT;
+
+  // Reuse an already-running Hermes dashboard — do not take ownership of it.
+  if (await probeDashboard(preferred)) {
+    return { kind: 'ready', port: preferred, pid: null, child: null };
   }
+
+  const port = await usablePort(preferred);
 
   const child = spawn(
     opts.binaryPath,
@@ -66,11 +90,11 @@ export async function ensureDashboard(opts: DashboardOptions): Promise<Dashboard
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     if (await probeDashboard(port)) {
-      return { kind: 'ready', port, pid: child.pid ?? null };
+      return { kind: 'ready', port, pid: child.pid ?? null, child };
     }
     await sleep(400);
   }
 
   child.kill('SIGTERM');
-  return { kind: 'crashed', lastError: 'dashboard did not become ready in 20s' };
+  return { kind: 'crashed', lastError: `dashboard did not become ready on port ${port} in 20s` };
 }

@@ -1,7 +1,8 @@
 import { useCoworkStore } from './cowork.store';
 
-export function ArtifactsTab() {
+export function ArtifactsTab({ onOpenFile }: { onOpenFile?: () => void }) {
   const artifacts = useCoworkStore((s) => s.artifacts);
+  const openInFiles = useCoworkStore((s) => s.openInFiles);
   if (artifacts.length === 0) {
     return <div className="p-4 text-xs text-muted">Files Hermes reads or writes appear here.</div>;
   }
@@ -10,7 +11,8 @@ export function ArtifactsTab() {
       {artifacts.map((a, i) => (
         <button
           key={i}
-          onClick={() => { /* placeholder open */ }}
+          onClick={() => { openInFiles(a.path); onOpenFile?.(); }}
+          title="Open in Files"
           className="rounded border border-border bg-surface px-2 py-1.5 text-left hover:bg-surface2"
         >
           <div className="truncate text-fg">{a.path}</div>

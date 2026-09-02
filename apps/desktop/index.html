@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hermes Cowork</title>
+    <script>
+      // Apply a forced theme before first paint to avoid a flash.
+      try {
+        var t = localStorage.getItem('hermes-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-bg text-fg">
     <div id="root"></div>

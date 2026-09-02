@@ -1,14 +1,17 @@
 import { app, BrowserWindow, shell } from 'electron';
+import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { findHermesBinary, verifyHermesVersion } from './orchestrator/hermes-runtime';
+import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
 import { AcpSupervisor } from './orchestrator/acp-supervisor';
 import { registerIpcHandlers } from './ipc/handlers';
-import { KanbanWsPump } from './orchestrator/kanban-ws';
+// KanbanWsPump is intentionally not started — see note below.
 
 let win: BrowserWindow | null = null;
-let pump: KanbanWsPump | null = null;
+// Set only when we spawned the dashboard ourselves — a reused external one is
+// left alone.
+let dashboardChild: ChildProcess | null = null;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -28,8 +31,20 @@ function createWindow() {
 
   win.on('ready-to-show', () => win?.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Only hand real web links to the OS — never file:, mailto:, or custom
+    // app schemes.
+    try {
+      const scheme = new URL(url).protocol;
+      if (scheme === 'https:' || scheme === 'http:') void shell.openExternal(url);
+    } catch {
+      // not a valid URL — ignore
+    }
     return { action: 'deny' };
+  });
+  // Block any real navigation away from the app itself (routing is pushState).
+  win.webContents.on('will-navigate', (e, url) => {
+    const appUrl = process.env['ELECTRON_RENDERER_URL'] ?? 'file://';
+    if (!url.startsWith(appUrl)) e.preventDefault();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -43,6 +58,7 @@ const supervisor = new AcpSupervisor();
 
 void app.whenReady().then(async () => {
   const found = findHermesBinary();
+  const homes = resolveHermesHomes();
   let hermesBinary = '';
   let dashboardPort = 0;
   let dashboardToken: string | null = null;
@@ -51,13 +67,18 @@ void app.whenReady().then(async () => {
     const versionCheck = await verifyHermesVersion(found.path);
     if (versionCheck.kind === 'ok') {
       hermesBinary = found.path;
-      const hermesHome = process.env['HERMES_HOME'] ?? join(homedir(), '.hermes');
-      const dashboard = await ensureDashboard({ binaryPath: found.path, hermesHome });
+      // The dashboard enumerates every profile, so it must run against the
+      // global home — never a profile-scoped one.
+      const dashboard = await ensureDashboard({ binaryPath: found.path, hermesHome: homes.global });
       if (dashboard.kind === 'ready') {
         dashboardPort = dashboard.port;
+        dashboardChild = dashboard.child;
         dashboardToken = await fetchDashboardToken(dashboard.port);
       }
     }
+    console.log(
+      `[startup] hermes ${found.path} · dashboard ${dashboardPort || 'DOWN'} · token ${dashboardToken ? 'ok' : 'none'}`,
+    );
   }
 
   registerIpcHandlers(
@@ -65,30 +86,34 @@ void app.whenReady().then(async () => {
       hermesBinary,
       dashboardPort,
       dashboardToken,
-      defaultHermesHome: process.env['HERMES_HOME'] ?? join(homedir(), '.hermes'),
-      activeHermesHome: process.env['HERMES_HOME'] ?? join(homedir(), '.hermes'),
+      globalHermesHome: homes.global,
+      envProfile: homes.envProfile,
       win: () => win,
     },
     supervisor,
   );
 
-  if (dashboardPort > 0) {
-    pump = new KanbanWsPump({ port: dashboardPort, win: () => win });
-    await pump.start();
-  }
+  // NOTE: the kanban events WebSocket (orchestrator/kanban-ws.ts) needs a
+  // per-connection auth ticket (POST /api/auth/ws-ticket) we do not yet mint,
+  // so it 403s and reconnect-loops. Re-enable once Cowork needs live kanban.
 
   createWindow();
 });
 
-app.on('window-all-closed', () => {
+function stopOwnedChildren() {
   supervisor.shutdownAll();
+  if (dashboardChild && dashboardChild.exitCode === null) {
+    dashboardChild.kill('SIGTERM');
+    dashboardChild = null;
+  }
+}
+
+app.on('window-all-closed', () => {
+  stopOwnedChildren();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  pump?.stop();
-  supervisor.shutdownAll();
-});
+app.on('before-quit', stopOwnedChildren);
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
