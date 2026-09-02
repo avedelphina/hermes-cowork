@@ -11,7 +11,7 @@ files:
 
 mac:
   category: public.app-category.developer-tools
-  # icon: build/icon.icns  # TODO: add real icon — see build/ICON_TODO.txt
+  icon: build/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: false  # set true once Apple Developer cert is configured
