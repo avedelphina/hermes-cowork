@@ -45,27 +45,12 @@ describe('ensureDashboard', () => {
     vi.mocked(childProcess.spawn).mockReset();
   });
 
-  it('reuses an existing dashboard without taking ownership (child === null)', async () => {
+  it('always spawns an owned dashboard, even when another dashboard is running', async () => {
+    // The existing dashboard must not be reused because its HERMES_HOME is
+    // unknowable from /api/status. The readiness probe after spawn succeeds.
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ version: '0.20.6' }), { status: 200 }),
     );
-    const result = await ensureDashboard({
-      binaryPath: '/Users/x/.local/bin/hermes',
-      hermesHome: '/Users/x/.hermes',
-    });
-    expect(result.kind).toBe('ready');
-    expect(childProcess.spawn).not.toHaveBeenCalled();
-    if (result.kind === 'ready') {
-      expect(result.child).toBeNull();
-      expect(result.pid).toBeNull();
-    }
-  });
-
-  it('spawns and returns the owned child when no dashboard is running', async () => {
-    // First probe (reuse check) fails; every probe after the spawn succeeds.
-    vi.mocked(fetch)
-      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
-      .mockResolvedValue(new Response(JSON.stringify({ version: '0.20.6' }), { status: 200 }));
 
     const fake = Object.assign(new EventEmitter(), { pid: 4321, kill: vi.fn(), exitCode: null });
     vi.mocked(childProcess.spawn).mockReturnValue(fake as unknown as ReturnType<typeof childProcess.spawn>);
