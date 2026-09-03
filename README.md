@@ -22,7 +22,7 @@ local-first, and lets multiple isolated agent profiles cooperate on one task.
 
 ## Status
 
-**macOS Apple Silicon.** Both modes work end to end against a real Hermes.
+**v0.1.1 — macOS Apple Silicon.** Both modes work end to end against a real Hermes.
 Windows/Linux packaging and a signed/notarised DMG are not done yet
 (build steps in [`docs/release-checklist.md`](docs/release-checklist.md)).
 

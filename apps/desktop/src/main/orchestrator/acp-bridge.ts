@@ -147,7 +147,7 @@ export class AcpBridge extends EventEmitter {
     await this.sup.request(handle, 'initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
+      clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.1' },
     });
     return handle;
   }
@@ -198,7 +198,7 @@ export class AcpBridge extends EventEmitter {
             fs: { readTextFile: false, writeTextFile: false },
             terminal: false,
           },
-          clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.0' },
+          clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.1' },
         })
         .then(() => undefined)
         .catch((err) => {
