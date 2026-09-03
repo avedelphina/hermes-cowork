@@ -1,10 +1,13 @@
 import { useRest } from './useRest';
 
 function Page({ title, children }: { title: string; children: React.ReactNode }) {
+  // Parent <main> is overflow-hidden, so this pane owns its own scroll.
   return (
-    <div className="mx-auto mt-10 max-w-3xl px-6">
-      <h2 className="mb-4 text-lg font-semibold">{title}</h2>
-      {children}
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto mt-10 max-w-3xl px-6 pb-12">
+        <h2 className="mb-4 text-lg font-semibold">{title}</h2>
+        {children}
+      </div>
     </div>
   );
 }

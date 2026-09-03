@@ -12,6 +12,7 @@ import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
 import { isExistingDir } from '../security/paths';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
+import { ChatSessionStore } from '../store/chat-session-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { CoworkTask, TaskStatus } from '../../shared/types';
 
@@ -231,22 +232,31 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   ipcMain.handle(
     IpcChannel.ProjectCreate,
-    (_e, input: { name: string; folderPath: string; profile: string }) => {
-      if (!isExistingDir(input.folderPath)) {
-        throw new Error(`"${input.folderPath}" is not an existing directory.`);
+    (_e, input: { name: string; folderPath: string | null; profile: string }) => {
+      // A folder is optional (chat-only projects). If given, it must exist.
+      const folderPath = input.folderPath?.trim() ? input.folderPath : null;
+      if (folderPath !== null && !isExistingDir(folderPath)) {
+        throw new Error(`"${folderPath}" is not an existing directory.`);
       }
-      const name = input.name.trim() || input.folderPath.split('/').filter(Boolean).pop() || 'Project';
-      return projects.create({ name, folderPath: input.folderPath, profile: input.profile });
+      const name =
+        input.name.trim() ||
+        folderPath?.split('/').filter(Boolean).pop() ||
+        'Project';
+      return projects.create({ name, folderPath, profile: input.profile });
     },
   );
 
   ipcMain.handle(
     IpcChannel.ProjectUpdate,
-    (_e, id: string, patch: { name?: string; profile?: string; folderPath?: string }) => {
-      if (patch.folderPath !== undefined && !isExistingDir(patch.folderPath)) {
-        throw new Error(`"${patch.folderPath}" is not an existing directory.`);
+    (_e, id: string, patch: { name?: string; profile?: string; folderPath?: string | null }) => {
+      const next = { ...patch };
+      if (patch.folderPath !== undefined) {
+        next.folderPath = patch.folderPath?.trim() ? patch.folderPath : null;
+        if (next.folderPath !== null && !isExistingDir(next.folderPath)) {
+          throw new Error(`"${next.folderPath}" is not an existing directory.`);
+        }
       }
-      return projects.update(id, patch);
+      return projects.update(id, next);
     },
   );
 
@@ -263,6 +273,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const projectRoot = (id: string): string => {
     const p = projects.get(id);
     if (!p) throw new Error(`unknown project ${id}`);
+    if (!p.folderPath) throw new Error(`project ${id} has no folder`);
     return p.folderPath;
   };
 
@@ -281,6 +292,20 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     tasks.update(id, patch),
   );
   ipcMain.handle(IpcChannel.TaskRemove, (_e, id: string) => tasks.remove(id));
+
+  // ── chat sessions ──
+  const chats = new ChatSessionStore(join(userData, 'chats.json'));
+  ipcMain.handle(IpcChannel.ChatList, () => chats.list());
+  ipcMain.handle(
+    IpcChannel.ChatCreate,
+    (_e, input: { acpSessionId: string; projectId: string | null; title: string | null }) =>
+      chats.create(input),
+  );
+  ipcMain.handle(
+    IpcChannel.ChatUpdate,
+    (_e, id: string, patch: { title?: string | null; projectId?: string | null }) => chats.update(id, patch),
+  );
+  ipcMain.handle(IpcChannel.ChatRemove, (_e, id: string) => chats.remove(id));
 
   // ── project filesystem (read-only, scoped to the project root) ──
   ipcMain.handle(IpcChannel.FsList, (_e, id: string, rel?: string) => listDir(projectRoot(id), rel ?? ''));

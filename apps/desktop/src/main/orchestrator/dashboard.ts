@@ -66,11 +66,11 @@ async function usablePort(port: number): Promise<number> {
 export async function ensureDashboard(opts: DashboardOptions): Promise<DashboardState> {
   const preferred = opts.port ?? DEFAULT_PORT;
 
-  // Reuse an already-running Hermes dashboard — do not take ownership of it.
-  if (await probeDashboard(preferred)) {
-    return { kind: 'ready', port: preferred, pid: null, child: null };
-  }
-
+  // Always own the dashboard used by Cowork. A dashboard on the preferred
+  // port may have been started with a different HERMES_HOME (for example a
+  // profile-scoped home), and /api/status does not identify its home. Reusing
+  // it would make the profile list/REST proxy disagree with ACP's environment.
+  // Pick the preferred port when free, otherwise an OS-assigned loopback port.
   const port = await usablePort(preferred);
 
   const child = spawn(

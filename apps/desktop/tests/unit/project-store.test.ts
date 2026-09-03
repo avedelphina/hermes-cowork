@@ -18,6 +18,13 @@ describe('ProjectStore', () => {
     expect(JSON.parse(readFileSync(file, 'utf8')).activeId).toBe(p.id);
   });
 
+  it('accepts a folderless (chat-only) project', () => {
+    const store = new ProjectStore(file);
+    const p = store.create({ name: 'Chat only', folderPath: null, profile: 'x' });
+    expect(p.folderPath).toBeNull();
+    expect(new ProjectStore(file).get(p.id)?.folderPath).toBeNull();
+  });
+
   it('reloads state from disk', () => {
     const a = new ProjectStore(file).create({ name: 'A', folderPath: '/a', profile: 'x' });
     const reopened = new ProjectStore(file);

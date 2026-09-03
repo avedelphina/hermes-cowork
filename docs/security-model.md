@@ -98,13 +98,16 @@ The renderer is treated as untrusted (a compromised page must not be able to
 reach the filesystem or the dashboard beyond what the UI needs).
 
 - **No filesystem root from the renderer** — see above; roots come from
-  `ProjectStore` / `TaskStore` by id.
+  `ProjectStore` / `TaskStore` by id. `ChatSessionStore` holds no folder — a
+  chat's `cwd` is derived from its project (or `$HOME`), never sent by the
+  renderer.
 - **Profile names** — validated (`isValidProfileName`: one path segment, no
   `.`/`..`/separators) before they touch `HERMES_HOME`, and checked against the
   dashboard's live profile list on `acp:start` / `acp:load`. _Enforced._
 - **Explicit `cwd` fails closed** — `acp:start` and `acp:load` reject a
   supplied `cwd` that is not an existing directory; they never silently widen
-  scope to `$HOME`. `$HOME` is used only when no `cwd` was given (chat). _Enforced._
+  scope to `$HOME`. `$HOME` is used only when no `cwd` was given (a chat with no
+  project folder). _Enforced._
 - **Dashboard REST proxy is allow-listed** — the renderer can only reach the
   exact GET/POST/PATCH/DELETE routes the UI uses; anything else throws. The
   proxy carries the dashboard bearer token, so this is the door. _Enforced._

@@ -3,7 +3,6 @@ import { Link, useLocation } from 'wouter';
 const TABS = [
   { id: 'chat', label: 'Chat', href: '/chat' },
   { id: 'cowork', label: 'Cowork', href: '/cowork' },
-  { id: 'code', label: 'Code', href: '/code' },
 ] as const;
 
 export function ModeTabs() {

@@ -4,13 +4,29 @@
 export type Project = {
   id: string;
   name: string;
-  folderPath: string;
+  /** Local folder the project is scoped to. Null for chat-only projects
+   * (Cowork tasks require a folder; plain Chat does not). */
+  folderPath: string | null;
   profile: string;
   createdAt: string;
   lastOpenedAt: string;
   archived: boolean;
 };
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
+
+/**
+ * A persisted Chat conversation. Like CoworkTask, this is only the metadata
+ * around one ACP session — the conversation itself lives in Hermes and is
+ * replayed on resume via session/load. Unlike a task, a chat has no folder.
+ */
+export type ChatSession = {
+  id: string;
+  acpSessionId: string;
+  title: string | null;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type TaskStatus =
   | 'planning'          // kickoff sent, agent drafting the plan

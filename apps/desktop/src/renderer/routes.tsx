@@ -4,7 +4,6 @@ import { ChatPage } from './features/chat/ChatPage';
 import { CoworkPage } from './features/cowork/CoworkPage';
 import { NewTaskDialog } from './features/cowork/NewTaskDialog';
 import { TasksPage } from './features/cowork/TasksPage';
-import { CodePage } from './features/code/CodePage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { ProfilesManager } from './features/profiles/ProfilesManager';
 import { SkillsPage, MemoryPage, CronPage, KanbanPage, InsightsPage } from './features/hermes/HermesSurfaces';
@@ -18,7 +17,6 @@ export function Routes() {
       <Route path="/cowork/tasks"><TasksPage /></Route>
       <Route path="/cowork/projects"><ProjectsPage /></Route>
       <Route path="/profiles"><ProfilesManager /></Route>
-      <Route path="/code"><CodePage /></Route>
       <Route path="/kanban"><KanbanPage /></Route>
       <Route path="/memory"><MemoryPage /></Route>
       <Route path="/skills"><SkillsPage /></Route>

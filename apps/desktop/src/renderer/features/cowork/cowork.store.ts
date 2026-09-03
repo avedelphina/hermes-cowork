@@ -149,7 +149,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
 
   ingestAcp: (msg) =>
     set((s) => {
-      // Ignore events for other ACP sessions (worker sessions, chat/code).
+      // Ignore events for other ACP sessions (worker sessions, chat).
       if (s.sessionId && msg.sessionId !== s.sessionId) return s;
       switch (msg.kind) {
         case 'token': {

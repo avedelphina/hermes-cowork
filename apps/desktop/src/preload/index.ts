@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
-  CoworkTask, TaskStatus,
+  CoworkTask, TaskStatus, ChatSession,
 } from '../shared/types';
 
 const api = {
@@ -58,9 +58,9 @@ const api = {
   },
   projects: {
     list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),
-    create: (input: { name: string; folderPath: string; profile: string }): Promise<Project> =>
+    create: (input: { name: string; folderPath: string | null; profile: string }): Promise<Project> =>
       ipcRenderer.invoke(IpcChannel.ProjectCreate, input),
-    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string }): Promise<Project | null> =>
+    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string | null }): Promise<Project | null> =>
       ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
     setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
     remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),
@@ -73,6 +73,14 @@ const api = {
       ipcRenderer.invoke(IpcChannel.FsSnapshot, taskId, rel),
     revert: (taskId: string, rel: string, content: string | null): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel, content),
+  },
+  chats: {
+    list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
+    create: (input: { acpSessionId: string; projectId: string | null; title: string | null }): Promise<ChatSession> =>
+      ipcRenderer.invoke(IpcChannel.ChatCreate, input),
+    update: (id: string, patch: { title?: string | null; projectId?: string | null }): Promise<ChatSession | null> =>
+      ipcRenderer.invoke(IpcChannel.ChatUpdate, id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ChatRemove, id),
   },
   tasks: {
     list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
