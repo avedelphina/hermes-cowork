@@ -1,4 +1,8 @@
-# Hermes Cowork
+<p align="center">
+  <img src="apps/desktop/build/icon.png" width="128" alt="Hermes Cowork icon">
+</p>
+
+<h1 align="center">Hermes Cowork</h1>
 
 > A Claude-Cowork-style desktop app for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Open source. Local-first. Multi-agent.
 

@@ -5,32 +5,65 @@
       <stop offset="0.55" stop-color="#7C3AED"/>
       <stop offset="1" stop-color="#9333EA"/>
     </linearGradient>
-    <linearGradient id="feather" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#C9D4FF"/>
+    <linearGradient id="helmet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE1A2"/>
+      <stop offset="0.42" stop-color="#F8A70E"/>
+      <stop offset="1" stop-color="#DD6405"/>
+    </linearGradient>
+    <linearGradient id="wingfill" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#12AE9C"/>
+      <stop offset="0.55" stop-color="#79DA9A"/>
+      <stop offset="1" stop-color="#FBC62F"/>
     </linearGradient>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
-      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#1E1B4B" flood-opacity="0.34"/>
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#17123B" flood-opacity="0.35"/>
     </filter>
-    <path id="wing" d="M-168,232 C-196,86 -150,-70 -30,-165 C60,-235 165,-210 212,-176
-                       C122,-150 42,-95 -18,12 C-74,110 -120,188 -168,232 Z"/>
-    <clipPath id="wingClip"><path d="M-168,232 C-196,86 -150,-70 -30,-165 C60,-235 165,-210 212,-176
-                       C122,-150 42,-95 -18,12 C-74,110 -120,188 -168,232 Z"/></clipPath>
   </defs>
 
   <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#bg)"/>
 
-  <g transform="translate(506 520) rotate(-8) scale(1.08)" filter="url(#soft)">
-    <use href="#wing" fill="url(#feather)"/>
-    <!-- gold leading-edge tip -->
-    <path d="M-30,-165 C60,-235 165,-210 212,-176 C150,-162 96,-140 48,-104
-             C40,-138 18,-158 -30,-165 Z" fill="#FBBF24"/>
-    <!-- feather separations, clipped to the wing -->
-    <g clip-path="url(#wingClip)" stroke="#7C3AED" stroke-width="16"
-       stroke-linecap="round" fill="none" opacity="0.55">
-      <path d="M168,-140 C50,-110 -40,-24 -112,182"/>
-      <path d="M104,-88 C18,-52 -58,34 -110,196"/>
-      <path d="M40,-36 C-16,4 -74,84 -110,204"/>
+  <g filter="url(#soft)">
+    <!-- WINGS: single-path feathered silhouette, mirrored -->
+    <g fill="url(#wingfill)">
+      <path transform="translate(350 356) scale(-1.06 1.06) rotate(-14)"
+            d="M0,0 Q90,-120 250,-176 Q250,-140 230,-118 Q262,-110 210,-78
+               Q250,-70 196,-40 Q230,-30 158,-2 Q186,10 120,34
+               Q150,46 92,62 Q60,74 28,54 Q6,40 0,0 Z"/>
+      <path transform="translate(674 356) scale(1.06 1.06) rotate(-14)"
+            d="M0,0 Q90,-120 250,-176 Q250,-140 230,-118 Q262,-110 210,-78
+               Q250,-70 196,-40 Q230,-30 158,-2 Q186,10 120,34
+               Q150,46 92,62 Q60,74 28,54 Q6,40 0,0 Z"/>
+    </g>
+    <g stroke="#0E8F80" stroke-width="7" fill="none" opacity="0.35" stroke-linecap="round">
+      <path transform="translate(350 356) scale(-1.06 1.06) rotate(-14)" d="M34,24 Q120,-56 208,-112"/>
+      <path transform="translate(674 356) scale(1.06 1.06) rotate(-14)" d="M34,24 Q120,-56 208,-112"/>
+    </g>
+
+    <!-- HELMET -->
+    <g transform="translate(512 502)">
+      <path fill="url(#helmet)" d="M0,-300
+        C140,-300 246,-196 252,-30
+        C255,70 238,150 205,215
+        C188,238 176,262 168,286
+        C150,300 120,300 92,300
+        C60,300 40,300 0,312
+        C-40,300 -60,300 -92,300
+        C-120,300 -150,300 -168,286
+        C-176,262 -188,238 -205,215
+        C-238,150 -255,70 -252,-30
+        C-246,-196 -140,-300 0,-300 Z"/>
+      <!-- angled eye slots + nose guard -->
+      <g fill="#2E1A5E">
+        <path d="M-192,-44 L-46,-84 L-46,-20 L-192,20 Z"/>
+        <path d="M192,-44 L46,-84 L46,-20 L192,20 Z"/>
+        <path d="M-28,44 L28,44 L28,232 C28,254 15,266 0,266 C-15,266 -28,254 -28,232 Z"/>
+      </g>
+      <!-- rim light -->
+      <path fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" opacity="0.5"
+            d="M-208,-150 C-146,-252 -20,-288 118,-262"/>
+      <!-- crown keel -->
+      <path fill="none" stroke="#FFCF7A" stroke-width="12" stroke-linecap="round" opacity="0.55"
+            d="M2,-298 C-2,-232 0,-168 2,-118"/>
     </g>
   </g>
 </svg>
