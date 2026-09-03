@@ -16,7 +16,7 @@ export function TitleBar() {
         <Link
           href="/cowork/projects"
           className="rounded-md bg-surface2 px-3 py-1 text-xs text-muted hover:text-fg"
-          title={project?.folderPath}
+          title={project?.folderPath ?? undefined}
         >
           📁 {project?.name ?? 'No project'}
         </Link>

@@ -68,11 +68,6 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await win.getByRole('link', { name: /Cron/ }).click();
   await expect(win.getByRole('heading', { name: 'Cron jobs' })).toBeVisible();
 
-  // Code mode: project file tree + a message composer.
-  await win.getByRole('link', { name: 'Code' }).click();
-  await expect(win.getByRole('button', { name: /README\.md/ })).toBeVisible();
-  await expect(win.getByRole('textbox', { name: 'Message input' })).toBeVisible();
-
   await win.getByRole('link', { name: /Projects/i }).first().click();
   await win.locator('li', { hasText: 'Renamed Project' }).getByRole('button', { name: 'Archive' }).click();
   await expect(win.getByText('Archived', { exact: true })).toBeVisible();

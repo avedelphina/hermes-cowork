@@ -10,22 +10,28 @@ type Message = {
 
 type ChatStore = {
   sessionId: string | null;
+  /** Persisted ChatSession row id (from chats.json), or null before the first send. */
+  chatId: string | null;
   messages: Message[];
   pendingApprovals: Array<{ toolCallId: string; description: string }>;
   startSession: (sessionId: string) => void;
+  setChatId: (chatId: string | null) => void;
   ingest: (msg: AcpServerMessage) => void;
   reset: () => void;
 };
 
 export const useChatStore = create<ChatStore>((set) => ({
   sessionId: null,
+  chatId: null,
   messages: [],
   pendingApprovals: [],
 
   startSession: (sessionId) =>
     set({ sessionId, messages: [], pendingApprovals: [] }),
 
-  reset: () => set({ sessionId: null, messages: [], pendingApprovals: [] }),
+  setChatId: (chatId) => set({ chatId }),
+
+  reset: () => set({ sessionId: null, chatId: null, messages: [], pendingApprovals: [] }),
 
   ingest: (msg) =>
     set((s) => {

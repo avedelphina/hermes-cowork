@@ -45,7 +45,7 @@ export function ProjectsPage() {
   const create = async () => {
     setError(null);
     try {
-      await window.hermes.projects.create({ name, folderPath: folder, profile });
+      await window.hermes.projects.create({ name, folderPath: folder.trim() || null, profile });
       await load();
       setCreating(false);
       setName('');
@@ -97,7 +97,9 @@ export function ProjectsPage() {
           )}
           <span className="text-[10px] text-dim">{p.profile}</span>
         </div>
-        <div className="truncate text-[11px] text-muted">{p.folderPath}</div>
+        <div className="truncate text-[11px] text-muted">
+          {p.folderPath ?? 'no folder — chat only'}
+        </div>
         <div className="mt-0.5 text-[10px] text-dim">
           {ctx[p.id]?.length ? `context: ${(ctx[p.id] ?? []).join(', ')}` : 'no AGENTS.md / .hermes.md'}
         </div>
@@ -145,7 +147,9 @@ export function ProjectsPage() {
 
       {creating && (
         <div className="mb-6 rounded-lg border border-border bg-surface p-4">
-          <label className="mb-1 block text-xs text-muted">Folder</label>
+          <label className="mb-1 block text-xs text-muted">
+            Folder <span className="text-dim">(optional — required for Cowork tasks)</span>
+          </label>
           <div className="mb-3 flex gap-2">
             <input
               value={folder}
@@ -177,7 +181,7 @@ export function ProjectsPage() {
           {error && <p className="mb-2 text-xs text-danger">{error}</p>}
           <button
             onClick={() => void create()}
-            disabled={!folder.trim()}
+            disabled={!name.trim() && !folder.trim()}
             className="rounded bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50"
           >
             Create project

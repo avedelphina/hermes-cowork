@@ -1,7 +1,8 @@
 // apps/desktop/src/main/store/project-store.ts
 //
-// Persistent list of projects — a project is a name + a local folder + the
-// Hermes profile to run it as. Stored as plain JSON under userData (no
+// Persistent list of projects — a project is a name + an optional local folder
+// + the Hermes profile to run it as. A folderless project is chat-only (Cowork
+// tasks require a folder). Stored as plain JSON under userData (no
 // electron-store: it is ESM-only and the main bundle is CJS). Removing a
 // project never touches its folder.
 
@@ -12,7 +13,7 @@ import type { Project } from '../../shared/types';
 export type { Project };
 
 type Data = { projects: Project[]; activeId: string | null };
-type CreateInput = { name: string; folderPath: string; profile: string };
+type CreateInput = { name: string; folderPath: string | null; profile: string };
 type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived'>>;
 
 export class ProjectStore {

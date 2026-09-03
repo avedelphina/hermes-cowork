@@ -10,7 +10,7 @@ import { useProjectStore } from './features/projects/project.store';
 
 type Probe = Awaited<ReturnType<typeof window.hermes.runtime.probe>>;
 
-const MODE_KEYS: Record<string, string> = { '1': '/chat', '2': '/cowork', '3': '/code' };
+const MODE_KEYS: Record<string, string> = { '1': '/chat', '2': '/cowork' };
 
 export function App() {
   const [probe, setProbe] = useState<Probe | null>(null);

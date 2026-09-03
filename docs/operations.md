@@ -15,11 +15,13 @@
    app shows a runtime error with the failing probe.
 2. Pick a profile from the title-bar chip. The active profile drives which
    Hermes identity and model a task runs as.
-3. Create a **Project** (Projects page, or the title-bar `📁` chip): a name, a
-   local folder, and the profile to run it as. Removing a project never
+3. Create a **Project** (Projects page, or the title-bar `📁` chip): a name,
+   the profile to run it as, and an optional local folder. A folderless project
+   is chat-only; Cowork tasks require a folder. Removing a project never
    deletes its folder.
-4. Chat and Cowork tasks run inside the active project's folder. Hermes loads
-   `AGENTS.md` / `.hermes.md` from that folder automatically — see
+4. A Cowork task runs inside its working folder; a Chat runs in the active
+   project's folder when it has one, otherwise `$HOME`. When a folder is set,
+   Hermes loads `AGENTS.md` / `.hermes.md` from it automatically — see
    `docs/project-context.md`.
 
 ## Where local state lives
@@ -30,6 +32,7 @@
 |----------------|---------------------------------------------|
 | `projects.json`| projects + the active project pointer       |
 | `tasks.json`   | Cowork tasks (metadata only — transcripts stay in Hermes) |
+| `chats.json`   | Chat conversations (metadata only — transcripts stay in Hermes) |
 
 Both migrate forward automatically on version upgrades. A corrupt file is
 replaced with an empty one on next launch (state is recoverable from Hermes).

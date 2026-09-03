@@ -46,6 +46,12 @@ export const IpcChannel = {
   TaskUpdate: 'task:update',
   TaskRemove: 'task:remove',
 
+  // chat sessions (plain chatbot conversations, folderless)
+  ChatList: 'chat:list',
+  ChatCreate: 'chat:create',
+  ChatUpdate: 'chat:update',
+  ChatRemove: 'chat:remove',
+
   // project filesystem (scoped to a project root)
   FsList: 'fs:list',
   FsRead: 'fs:read',

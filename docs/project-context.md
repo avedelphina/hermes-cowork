@@ -1,8 +1,9 @@
 # Project context
 
-A Cowork/Chat session runs with its working directory set to the active
-project's folder (see the Projects page). **Hermes loads project instructions
-from that folder itself** — verified against Hermes 0.20.6:
+A Cowork task runs with its working directory set to its folder; a Chat uses
+the active project's folder when that project has one (see the Projects page),
+otherwise `$HOME`. When the `cwd` is a project folder, **Hermes loads project
+instructions from that folder itself** — verified against Hermes 0.20.6:
 
 | File          | Loaded | Notes                                        |
 |---------------|--------|----------------------------------------------|
