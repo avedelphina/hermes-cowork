@@ -22,9 +22,10 @@ local-first, and lets multiple isolated agent profiles cooperate on one task.
 
 ## Status
 
-**v0.1.1 — macOS Apple Silicon.** Both modes work end to end against a real Hermes.
-Windows/Linux packaging and a signed/notarised DMG are not done yet
-(build steps in [`docs/release-checklist.md`](docs/release-checklist.md)).
+**v0.2.0 — macOS Apple Silicon.** Both modes work end to end against a real
+Hermes. The DMG is signed with a Developer ID and notarised. Windows/Linux
+packaging is not done yet (build steps in
+[`docs/release-checklist.md`](docs/release-checklist.md)).
 
 What's in:
 
@@ -66,9 +67,9 @@ What's in:
 
 Download the latest DMG from the
 [Releases page](https://github.com/avedelphina/hermes-cowork/releases/latest)
-and drag it to Applications. The DMG is not yet signed or notarised, so on
-first launch right-click the app and choose **Open**, or run
-`xattr -dr com.apple.quarantine "/Applications/Hermes Cowork.app"`.
+and drag it to Applications. The DMG is signed with a Developer ID and
+notarised by Apple — it opens with a normal double-click, no quarantine
+workaround needed.
 
 ## Develop
 

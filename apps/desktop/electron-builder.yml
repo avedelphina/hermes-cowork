@@ -9,12 +9,24 @@ files:
   - out/**/*
   - "!node_modules/**/*"
 
+# GitHub Releases. electron-builder generates latest-mac.yml + .blockmap here
+# so a future electron-updater wiring has a feed to read.
+publish:
+  provider: github
+  owner: avedelphina
+  repo: hermes-cowork
+
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
-  notarize: false  # set true once Apple Developer cert is configured
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Off by default so `pnpm build:mac` works with no Apple credentials.
+  # The release workflow turns it on with --config.mac.notarize=true once
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID are in the env.
+  notarize: false
   target:
     - target: dmg
       arch: [arm64]
