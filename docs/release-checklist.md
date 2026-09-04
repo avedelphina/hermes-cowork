@@ -28,23 +28,46 @@ Signing identity in the login keychain:
 `Developer ID Application: TOMÁŠ KRÁČMAR (P32JC2N6Y9)` — Team ID `P32JC2N6Y9`.
 electron-builder auto-discovers it (`CSC_IDENTITY_AUTO_DISCOVERY` default).
 
-### Local build (current method)
+### CI workflow (preferred)
+
+`.github/workflows/release.yml` runs on a pushed `v*` tag: verifies the tag
+matches `package.json`, runs typecheck/lint/test/build, then
+`electron-builder --mac --arm64 --publish always --config.mac.notarize=true`
+— signs with the Developer ID cert from `CSC_LINK`, notarises via
+`notarytool`, staples, and publishes a **draft** GitHub release with the
+DMG + `latest-mac.yml` + `.blockmap`. Review the draft, then publish.
+
+Repository secrets (already set — Settings → Secrets and variables → Actions):
+`CSC_LINK` (base64 of the Developer ID `.p12`), `CSC_KEY_PASSWORD`,
+`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+
+So a release is just:
 
 ```bash
-export APPLE_ID="<apple account email>"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"   # appleid.apple.com
-export APPLE_TEAM_ID="P32JC2N6Y9"
-
-pnpm --filter @hermes-cowork/desktop exec electron-builder \
-  --mac --arm64 --config.mac.notarize=true
+git tag v<version> && git push origin v<version>
 ```
 
-Notarisation adds a few minutes (electron-builder waits on `notarytool` and
-staples the ticket). Output:
-`apps/desktop/release/Hermes Cowork-<version>-arm64.dmg` plus
-`latest-mac.yml` and `.blockmap`.
+### Local build (fallback)
 
-Verify the shipped artifact:
+On a Mac with the Developer ID identity in the login keychain
+(`Developer ID Application: TOMÁŠ KRÁČMAR (P32JC2N6Y9)`), and a stored
+notary profile — one-time:
+
+```bash
+xcrun notarytool store-credentials hermes-notary \
+  --apple-id "<apple account email>" --team-id P32JC2N6Y9
+# paste the app-specific password at the prompt (not on the command line)
+```
+
+then per build:
+
+```bash
+pnpm --filter @hermes-cowork/desktop exec electron-builder \
+  --mac --arm64 --config.mac.notarize=true --config.mac.notarize.keychainProfile=hermes-notary
+```
+
+Output: `apps/desktop/release/Hermes Cowork-<version>-arm64.dmg` plus
+`latest-mac.yml` and `.blockmap`. Verify:
 
 ```bash
 app="apps/desktop/release/mac-arm64/Hermes Cowork.app"
@@ -53,13 +76,8 @@ spctl -a -vvv -t install "$app"          # expect: "source=Notarized Developer I
 xcrun stapler validate "$app"
 ```
 
-### CI workflow (later)
-
-A tag-triggered `.github/workflows/release.yml` can do the same on a
-`macos-14` runner. Secrets needed: `CSC_LINK` (base64 of the exported
-Developer ID `.p12`), `CSC_KEY_PASSWORD`, `APPLE_ID`,
-`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Deferred until the local
-flow has produced at least one good release.
+Never `export APPLE_APP_SPECIFIC_PASSWORD` on a shared machine — it shows up
+in `ps` output. Use the keychain profile.
 
 ## Post-package smoke
 
@@ -73,10 +91,12 @@ flow has produced at least one good release.
 
 - [ ] Merge the release branch to `main`; the tag must sit on a `main` commit
       whose `package.json` version equals the tag.
-- [ ] `git tag v<version> && git push origin v<version>`.
-- [ ] `gh release create v<version> "apps/desktop/release/Hermes Cowork-<version>-arm64.dmg" \
-        --title "Hermes Cowork v<version>" --notes-file <changelog section>`
-      (also attach `latest-mac.yml` + the `.blockmap` for a future updater).
+- [ ] `git tag v<version> && git push origin v<version>` — the Release
+      workflow builds and opens a draft.
+- [ ] Review the draft release, paste the `CHANGELOG.md` section, publish.
+- [ ] (Local fallback only) `gh release create v<version>
+      "apps/desktop/release/Hermes Cowork-<version>-arm64.dmg"
+      "apps/desktop/release/latest-mac.yml" ... --title "Hermes Cowork v<version>"`.
 - [ ] Confirm the download link in `README.md` resolves to the new DMG.
 
 ## Upstream sync
