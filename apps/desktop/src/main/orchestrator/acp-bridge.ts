@@ -290,17 +290,18 @@ export class AcpBridge extends EventEmitter {
 
   private onSupervisorEvent = (event: AcpEvent): void => {
     // An isolated child serves exactly one ACP session. Hermes broadcasts
-    // session/update for every session sharing the HERMES_HOME (gateway
-    // conversations included) down every ACP client, so frames for a foreign
-    // session can arrive here — drop them, and bind unlabelled frames to the
-    // one session this child owns.
+    // session/update for every session sharing the HERMES_HOME — gateway
+    // conversations (Delta Chat, Telegram, …) included — down every connected
+    // ACP client, so a live turn from an unrelated session streams in here
+    // too. Only surface a session-scoped frame whose sessionId is an exact
+    // match for the one session this child owns; drop foreign and unlabelled.
     if (event.kind === 'message' && this.isolatedHandles.has(event.sessionId)) {
-      const owned = this.ownedSessionFor(event.sessionId);
-      if (owned) {
+      const method = event.msg['method'];
+      if (method === 'session/update' || method === 'session/request_permission') {
+        const owned = this.ownedSessionFor(event.sessionId);
         const params = event.msg['params'] as Record<string, unknown> | undefined;
         const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : undefined;
-        if (frameSid && frameSid !== owned) return;
-        if (params && !frameSid) params['sessionId'] = owned;
+        if (owned && frameSid !== owned) return;
       }
     }
 

@@ -430,10 +430,10 @@ describe('AcpBridge — isolated session boundary', () => {
     expect(semanticEvents).toContainEqual({ kind: 'token', sessionId: 'task-1', text: 'my plan' });
   });
 
-  it('binds an unlabelled session/update to the owned session', async () => {
+  it('drops an unlabelled session/update (cannot be attributed to the owned session)', async () => {
     const { proc, semanticEvents } = await openIsolated();
     proc.stdout!.push(chunk(undefined, 'unlabelled chunk'));
     await flush();
-    expect(semanticEvents).toContainEqual({ kind: 'token', sessionId: 'task-1', text: 'unlabelled chunk' });
+    expect(semanticEvents).toEqual([]);
   });
 });
