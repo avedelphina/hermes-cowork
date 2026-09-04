@@ -11,27 +11,73 @@
       `pnpm install`, `pnpm --filter @hermes-cowork/desktop dev` launches with
       no manual steps (no `node_modules` surgery).
 - [ ] Bump `version` in `package.json` and `apps/desktop/package.json`.
+- [ ] Add a `CHANGELOG.md` section for the version.
 - [ ] Update `README.md` status line and `docs/acp-notes.md` if the tested
       Hermes version changed; bump `MIN_HERMES_VERSION` only against a version
       actually exercised.
 
-## Package
+## Signing + notarisation
 
-- [ ] `pnpm --filter @hermes-cowork/desktop build:mac` produces
-      `apps/desktop/release/Hermes Cowork-<version>-arm64.dmg`.
-- [ ] Signing + notarisation (needs an Apple Developer cert on the build
-      machine): set `mac.notarize: true` in `electron-builder.yml`, export
-      `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and a signing
-      identity (`CSC_LINK` / `CSC_KEY_PASSWORD` or keychain), then re-run
-      `build:mac`. Verify with `spctl -a -vvv "Hermes Cowork.app"`.
-- [ ] Install the DMG on a clean machine, launch, run one Cowork task
-      end to end (plan → approve → edit → revert), one two-worker task.
+`apps/desktop/electron-builder.yml` carries `hardenedRuntime: true`, the
+entitlements at `apps/desktop/build/entitlements.mac.plist`, and
+`publish: github`. `notarize` is left `false` in the file so a plain
+`pnpm build:mac` needs no credentials; pass `--config.mac.notarize=true` to
+turn it on.
+
+Signing identity in the login keychain:
+`Developer ID Application: TOMÁŠ KRÁČMAR (P32JC2N6Y9)` — Team ID `P32JC2N6Y9`.
+electron-builder auto-discovers it (`CSC_IDENTITY_AUTO_DISCOVERY` default).
+
+### Local build (current method)
+
+```bash
+export APPLE_ID="<apple account email>"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"   # appleid.apple.com
+export APPLE_TEAM_ID="P32JC2N6Y9"
+
+pnpm --filter @hermes-cowork/desktop exec electron-builder \
+  --mac --arm64 --config.mac.notarize=true
+```
+
+Notarisation adds a few minutes (electron-builder waits on `notarytool` and
+staples the ticket). Output:
+`apps/desktop/release/Hermes Cowork-<version>-arm64.dmg` plus
+`latest-mac.yml` and `.blockmap`.
+
+Verify the shipped artifact:
+
+```bash
+app="apps/desktop/release/mac-arm64/Hermes Cowork.app"
+codesign --verify --deep --strict --verbose=2 "$app"
+spctl -a -vvv -t install "$app"          # expect: "source=Notarized Developer ID"
+xcrun stapler validate "$app"
+```
+
+### CI workflow (later)
+
+A tag-triggered `.github/workflows/release.yml` can do the same on a
+`macos-14` runner. Secrets needed: `CSC_LINK` (base64 of the exported
+Developer ID `.p12`), `CSC_KEY_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Deferred until the local
+flow has produced at least one good release.
+
+## Post-package smoke
+
+- [ ] Install the DMG on a clean machine, double-click launch (no quarantine
+      workaround), run one Cowork task end to end (plan → approve → edit →
+      revert) and one two-worker task.
+- [ ] `codesign` / `spctl` / `stapler` checks above pass on the shipped DMG's
+      app.
 
 ## Ship
 
-- [ ] Tag `v<version>`, push the tag.
-- [ ] Attach the DMG to the GitHub release; paste the changelog.
-- [ ] Confirm the download link in `README.md` resolves.
+- [ ] Merge the release branch to `main`; the tag must sit on a `main` commit
+      whose `package.json` version equals the tag.
+- [ ] `git tag v<version> && git push origin v<version>`.
+- [ ] `gh release create v<version> "apps/desktop/release/Hermes Cowork-<version>-arm64.dmg" \
+        --title "Hermes Cowork v<version>" --notes-file <changelog section>`
+      (also attach `latest-mac.yml` + the `.blockmap` for a future updater).
+- [ ] Confirm the download link in `README.md` resolves to the new DMG.
 
 ## Upstream sync
 
