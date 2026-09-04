@@ -2,6 +2,13 @@
 
 Deferred ideas — not scheduled, revisit when the core Chat/Cowork split settles.
 
+## Remote agents (distributed multi-agent)
+
+Bigger deferred initiative, its own doc:
+[`docs/remote-agents-roadmap.md`](remote-agents-roadmap.md). Calling a Hermes
+profile running on a different machine — the actual differentiator this app
+has over other cowork-style clones. Spike-first plan; nothing started yet.
+
 ## Read-only transcript viewer for external sessions
 
 Hermes dashboard `/api/sessions` lists conversations started outside this app
