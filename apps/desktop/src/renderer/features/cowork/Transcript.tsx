@@ -10,14 +10,22 @@ export function Transcript() {
         <div className="mt-12 text-center text-muted">Hermes will propose a plan shortly…</div>
       )}
       {transcript.map((m, i) => (
-        <div
-          key={i}
-          className={
-            'mb-4 whitespace-pre-wrap' +
-            (m.role === 'system' ? ' text-danger' : m.role === 'user' ? ' text-muted' : '')
-          }
-        >
-          {m.text}
+        <div key={i} className="mb-4">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
+            {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : 'Hermes'}
+          </div>
+          <div
+            className={
+              'whitespace-pre-wrap' +
+              (m.role === 'system'
+                ? ' text-danger'
+                : m.role === 'user'
+                  ? ' rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-fg'
+                  : ' text-fg')
+            }
+          >
+            {m.text}
+          </div>
         </div>
       ))}
       {approvals.map((a) => (

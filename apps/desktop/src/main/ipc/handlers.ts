@@ -218,7 +218,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   ipcMain.handle(IpcChannel.ShowFolderPicker, async () => {
     const w = ctx.win();
     if (!w) return null;
-    const result = await dialog.showOpenDialog(w, { properties: ['openDirectory'] });
+    const result = await dialog.showOpenDialog(w, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
