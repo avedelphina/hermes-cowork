@@ -49,6 +49,37 @@ describe('cowork store', () => {
     expect(useCoworkStore.getState().artifacts).toHaveLength(0);
   });
 
+  it('tracks the plan step list from plan events', () => {
+    useCoworkStore.getState().ingestAcp({
+      kind: 'plan', sessionId: 's',
+      entries: [{ content: 'A', status: 'in_progress' }, { content: 'B', status: 'pending' }],
+    });
+    expect(useCoworkStore.getState().planEntries).toEqual([
+      { content: 'A', status: 'in_progress' }, { content: 'B', status: 'pending' },
+    ]);
+  });
+
+  it('does not re-gate when a plan event only ticks statuses', () => {
+    const s = useCoworkStore.getState();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'pending' }] });
+    s.approvePlan();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'completed' }] });
+    expect(useCoworkStore.getState().approved).toBe(true);
+  });
+
+  it('re-arms the approval gate when a new plan is proposed after approval', () => {
+    const s = useCoworkStore.getState();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'Old step', status: 'pending' }] });
+    s.approvePlan();
+    expect(useCoworkStore.getState().approved).toBe(true);
+
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'Brand new step', status: 'pending' }] });
+    const st = useCoworkStore.getState();
+    expect(st.approved).toBe(false);
+    expect(st.planEntries).toEqual([{ content: 'Brand new step', status: 'pending' }]);
+    expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '📋 New plan proposed — review and approve.' });
+  });
+
   it('queues approvals', () => {
     useCoworkStore.getState().ingestAcp({
       kind: 'approval-request', sessionId: 's', toolCallId: 't1', description: 'drop production table?',

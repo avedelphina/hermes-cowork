@@ -1,12 +1,18 @@
 import { useCoworkStore } from './cowork.store';
 import { Markdown } from '../../components/Markdown';
 
+const STATUS_MARK: Record<string, string> = {
+  completed: '✓',
+  in_progress: '▸',
+  pending: '○',
+};
+
 export function PlanTab() {
-  const { transcript, approved, status, sessionId } = useCoworkStore();
+  const { transcript, planEntries, approved, status, sessionId } = useCoworkStore();
   const approvePlan = useCoworkStore((s) => s.approvePlan);
 
   const firstAgent = transcript.find((m) => m.role === 'agent')?.text ?? '';
-  const hasProposal = firstAgent.trim().length > 0;
+  const hasProposal = planEntries.length > 0 || firstAgent.trim().length > 0;
 
   const approve = () => {
     approvePlan();
@@ -29,7 +35,20 @@ export function PlanTab() {
 
   return (
     <div className="flex flex-col gap-2 px-3 py-3 text-xs">
-      <Markdown text={firstAgent} className={approved ? 'text-fg' : 'text-muted'} />
+      {planEntries.length > 0 ? (
+        <ol className="flex flex-col gap-1">
+          {planEntries.map((e, i) => (
+            <li key={i} className="flex gap-2">
+              <span className={e.status === 'completed' ? 'text-success' : e.status === 'in_progress' ? 'text-accent' : 'text-dim'}>
+                {STATUS_MARK[e.status] ?? '○'}
+              </span>
+              <span className={e.status === 'pending' && !approved ? 'text-muted' : 'text-fg'}>{e.content}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <Markdown text={firstAgent} className={approved ? 'text-fg' : 'text-muted'} />
+      )}
 
       {!approved ? (
         <div className="mt-2 flex flex-col gap-1.5">

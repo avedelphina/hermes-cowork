@@ -48,6 +48,24 @@ describe('translateAcpEvent — session/update (Hermes 0.20.6 wire shapes)', () 
     expect(out).toEqual([{ kind: 'tool-result', sessionId: 's1', toolCallId: 't1', result: { ok: true } }]);
   });
 
+  it('maps a plan update to a plan event, keeping content + status and dropping blanks', () => {
+    const out = translateAcpEvent(msg({
+      sessionUpdate: 'plan',
+      entries: [
+        { content: 'Review the workspace', priority: 'medium', status: 'in_progress' },
+        { content: 'Draft the doc', priority: 'medium', status: 'pending' },
+        { priority: 'low' },
+      ],
+    }));
+    expect(out).toEqual([{
+      kind: 'plan', sessionId: 's1',
+      entries: [
+        { content: 'Review the workspace', status: 'in_progress' },
+        { content: 'Draft the doc', status: 'pending' },
+      ],
+    }]);
+  });
+
   it('ignores JSON-RPC responses to our own requests', () => {
     expect(translateAcpEvent({ kind: 'message', sessionId: 'h1', msg: { jsonrpc: '2.0', id: 'x', result: {} } } as AcpEvent)).toEqual([]);
   });

@@ -89,6 +89,22 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
+   * Point an ACP session at `handle`. If it was previously served by a
+   * *different isolated* child (e.g. CoworkPage re-loaded the task on a
+   * remount, spawning a fresh child each time), shut the old one down — an
+   * orphaned child keeps receiving Hermes' broadcast of every session on the
+   * HERMES_HOME and its events would double up in the renderer.
+   */
+  private bindSession(sessionId: string, handle: string): void {
+    const prev = this.acpToHandle.get(sessionId);
+    if (prev && prev !== handle && this.isolatedHandles.has(prev)) {
+      this.isolatedHandles.delete(prev);
+      this.sup.shutdown(prev);
+    }
+    this.acpToHandle.set(sessionId, handle);
+  }
+
+  /**
    * Open a new Hermes session. Reuses the warm connection for the profile,
    * unless `isolate` asks for a dedicated child.
    */
@@ -100,7 +116,7 @@ export class AcpBridge extends EventEmitter {
         mcpServers: [],
       })) as { sessionId?: string; models?: unknown };
       if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
-      this.acpToHandle.set(res.sessionId, handle);
+      this.bindSession(res.sessionId, handle);
       const models = normalizeModels(res.models);
       if (models) this.modelsBySession.set(res.sessionId, models);
       return { sessionId: res.sessionId };
@@ -165,7 +181,7 @@ export class AcpBridge extends EventEmitter {
         cwd: opts.cwd,
         mcpServers: [],
       })) as { models?: unknown } | null;
-      this.acpToHandle.set(opts.sessionId, handle);
+      this.bindSession(opts.sessionId, handle);
       const models = normalizeModels(res?.models);
       if (models) this.modelsBySession.set(opts.sessionId, models);
       return { sessionId: opts.sessionId };

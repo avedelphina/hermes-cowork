@@ -97,6 +97,9 @@ export type AcpServerMessage =
   // the files the tool touches (from ACP `locations`).
   | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; op: string; paths: string[]; args: unknown }
   | { kind: 'tool-result'; sessionId: string; toolCallId: string; result: unknown }
+  // ACP `plan` update: the agent's current step list. Emitted as a live
+  // checklist during execution and re-emitted whole when the agent re-plans.
+  | { kind: 'plan'; sessionId: string; entries: Array<{ content: string; status: string }> }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
   | { kind: 'done'; sessionId: string };

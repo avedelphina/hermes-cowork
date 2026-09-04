@@ -437,3 +437,38 @@ describe('AcpBridge — isolated session boundary', () => {
     expect(semanticEvents).toEqual([]);
   });
 });
+
+describe('AcpBridge — isolated child re-load', () => {
+  beforeEach(() => vi.mocked(cp.spawn).mockReset());
+
+  it('shuts the previous isolated child down when the same session is re-loaded', async () => {
+    const { sup, bridge, proc } = makeBridge();
+    const spawnSpy = vi.spyOn(sup, 'spawn');
+    const shutdownSpy = vi.spyOn(sup, 'shutdown');
+
+    // First: a fresh isolated task.
+    const start = bridge.startSession({
+      profile: 'default', cwd: '/tmp', isolate: true,
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'task-1' } }));
+    await start;
+    const firstHandle = spawnSpy.mock.calls[0]![0].id;
+
+    // CoworkPage remounts and re-loads the same session — a second dedicated child.
+    const load = bridge.loadSession({
+      sessionId: 'task-1', profile: 'default', cwd: '/tmp', isolate: true,
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/load')!['id'] as string, result: {} }));
+    await load;
+
+    expect(shutdownSpy).toHaveBeenCalledWith(firstHandle);
+  });
+});
