@@ -1,19 +1,11 @@
 import { useCoworkStore } from './cowork.store';
-
-/** Pull "1. …" / "2) …" lines out of the agent's first message. */
-function parseSteps(text: string): string[] {
-  return text
-    .split('\n')
-    .map((l) => l.match(/^\s*\d+[.)]\s+(.*\S)\s*$/)?.[1])
-    .filter((s): s is string => !!s);
-}
+import { Markdown } from '../../components/Markdown';
 
 export function PlanTab() {
   const { transcript, approved, status, sessionId } = useCoworkStore();
   const approvePlan = useCoworkStore((s) => s.approvePlan);
 
   const firstAgent = transcript.find((m) => m.role === 'agent')?.text ?? '';
-  const steps = parseSteps(firstAgent);
   const hasProposal = firstAgent.trim().length > 0;
 
   const approve = () => {
@@ -37,18 +29,7 @@ export function PlanTab() {
 
   return (
     <div className="flex flex-col gap-2 px-3 py-3 text-xs">
-      {steps.length > 0 ? (
-        <ol className="flex flex-col gap-1">
-          {steps.map((s, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="text-dim">{i + 1}.</span>
-              <span className={approved ? 'text-fg' : 'text-muted'}>{s}</span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-muted">See the proposed plan in the transcript.</p>
-      )}
+      <Markdown text={firstAgent} className={approved ? 'text-fg' : 'text-muted'} />
 
       {!approved ? (
         <div className="mt-2 flex flex-col gap-1.5">
