@@ -43,10 +43,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @hermes-cowork/desktop build:mac
+      - run: pnpm --filter @hermes-cowork/desktop exec electron-vite build
+      # `electron-builder.yml` sets `publish: github` (for the tag-triggered
+      # release.yml). On CI, electron-builder tries to construct a GitHub
+      # publisher as soon as that config is present, even without a
+      # `--publish` flag — and hard-fails with no GH_TOKEN here. `--publish
+      # never` overrides it; this job only proves packaging works.
+      - run: pnpm --filter @hermes-cowork/desktop exec electron-builder --mac --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # No GH_TOKEN in this job, so the github publish config is inert here.
       - uses: actions/upload-artifact@v4
         with:
           name: hermes-cowork-dmg
