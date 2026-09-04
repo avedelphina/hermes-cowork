@@ -1,5 +1,6 @@
 import { useCoworkStore } from './cowork.store';
 import { ApprovalCard } from './ApprovalCard';
+import { Markdown } from '../../components/Markdown';
 
 export function Transcript() {
   const { transcript, approvals } = useCoworkStore();
@@ -14,18 +15,20 @@ export function Transcript() {
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
             {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : 'Hermes'}
           </div>
-          <div
-            className={
-              'whitespace-pre-wrap' +
-              (m.role === 'system'
-                ? ' text-danger'
-                : m.role === 'user'
-                  ? ' rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-fg'
-                  : ' text-fg')
-            }
-          >
-            {m.text}
-          </div>
+          {m.role === 'agent' ? (
+            <Markdown text={m.text} className="text-fg" />
+          ) : (
+            <div
+              className={
+                'whitespace-pre-wrap' +
+                (m.role === 'system'
+                  ? ' text-danger'
+                  : ' rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-fg')
+              }
+            >
+              {m.text}
+            </div>
+          )}
         </div>
       ))}
       {approvals.map((a) => (
