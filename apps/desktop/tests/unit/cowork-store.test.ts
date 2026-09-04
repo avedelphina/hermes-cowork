@@ -2,9 +2,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useCoworkStore } from '@renderer/features/cowork/cowork.store';
 
-beforeEach(() => useCoworkStore.getState().reset());
+/** Bind the store to a session id — ingestAcp() drops events until then. */
+const bind = (sessionId = 's') =>
+  useCoworkStore.getState().startTask({
+    taskId: 't', sessionId, goal: 'g', cwd: '/w', profile: 'p', kickoff: 'k',
+  });
+
+beforeEach(() => {
+  useCoworkStore.getState().reset();
+  bind();
+});
 
 describe('cowork store', () => {
+  it('drops events for other sessions and before any task is bound', () => {
+    useCoworkStore.getState().reset();
+    useCoworkStore.getState().ingestAcp({ kind: 'token', sessionId: 's', text: 'leak' });
+    bind('s');
+    useCoworkStore.getState().ingestAcp({ kind: 'token', sessionId: 'other', text: 'leak' });
+    expect(useCoworkStore.getState().transcript).toEqual([]);
+  });
+
   it('appends agent tokens', () => {
     const { ingestAcp } = useCoworkStore.getState();
     ingestAcp({ kind: 'token', sessionId: 's', text: 'Plan: ' });
@@ -30,6 +47,37 @@ describe('cowork store', () => {
       name: 'skill view (anikke)', op: 'read', paths: [], args: {},
     });
     expect(useCoworkStore.getState().artifacts).toHaveLength(0);
+  });
+
+  it('tracks the plan step list from plan events', () => {
+    useCoworkStore.getState().ingestAcp({
+      kind: 'plan', sessionId: 's',
+      entries: [{ content: 'A', status: 'in_progress' }, { content: 'B', status: 'pending' }],
+    });
+    expect(useCoworkStore.getState().planEntries).toEqual([
+      { content: 'A', status: 'in_progress' }, { content: 'B', status: 'pending' },
+    ]);
+  });
+
+  it('does not re-gate when a plan event only ticks statuses', () => {
+    const s = useCoworkStore.getState();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'pending' }] });
+    s.approvePlan();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'completed' }] });
+    expect(useCoworkStore.getState().approved).toBe(true);
+  });
+
+  it('re-arms the approval gate when a new plan is proposed after approval', () => {
+    const s = useCoworkStore.getState();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'Old step', status: 'pending' }] });
+    s.approvePlan();
+    expect(useCoworkStore.getState().approved).toBe(true);
+
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'Brand new step', status: 'pending' }] });
+    const st = useCoworkStore.getState();
+    expect(st.approved).toBe(false);
+    expect(st.planEntries).toEqual([{ content: 'Brand new step', status: 'pending' }]);
+    expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '📋 New plan proposed — review and approve.' });
   });
 
   it('queues approvals', () => {

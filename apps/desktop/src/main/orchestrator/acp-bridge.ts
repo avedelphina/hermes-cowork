@@ -89,6 +89,22 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
+   * Point an ACP session at `handle`. If it was previously served by a
+   * *different isolated* child (e.g. CoworkPage re-loaded the task on a
+   * remount, spawning a fresh child each time), shut the old one down — an
+   * orphaned child keeps receiving Hermes' broadcast of every session on the
+   * HERMES_HOME and its events would double up in the renderer.
+   */
+  private bindSession(sessionId: string, handle: string): void {
+    const prev = this.acpToHandle.get(sessionId);
+    if (prev && prev !== handle && this.isolatedHandles.has(prev)) {
+      this.isolatedHandles.delete(prev);
+      this.sup.shutdown(prev);
+    }
+    this.acpToHandle.set(sessionId, handle);
+  }
+
+  /**
    * Open a new Hermes session. Reuses the warm connection for the profile,
    * unless `isolate` asks for a dedicated child.
    */
@@ -100,7 +116,7 @@ export class AcpBridge extends EventEmitter {
         mcpServers: [],
       })) as { sessionId?: string; models?: unknown };
       if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
-      this.acpToHandle.set(res.sessionId, handle);
+      this.bindSession(res.sessionId, handle);
       const models = normalizeModels(res.models);
       if (models) this.modelsBySession.set(res.sessionId, models);
       return { sessionId: res.sessionId };
@@ -165,7 +181,7 @@ export class AcpBridge extends EventEmitter {
         cwd: opts.cwd,
         mcpServers: [],
       })) as { models?: unknown } | null;
-      this.acpToHandle.set(opts.sessionId, handle);
+      this.bindSession(opts.sessionId, handle);
       const models = normalizeModels(res?.models);
       if (models) this.modelsBySession.set(opts.sessionId, models);
       return { sessionId: opts.sessionId };
@@ -280,7 +296,31 @@ export class AcpBridge extends EventEmitter {
     this.sup.shutdownAll();
   }
 
+  /** The single ACP session an isolated child owns, or undefined if unmapped. */
+  private ownedSessionFor(handle: string): string | undefined {
+    for (const [sessionId, h] of this.acpToHandle) {
+      if (h === handle) return sessionId;
+    }
+    return undefined;
+  }
+
   private onSupervisorEvent = (event: AcpEvent): void => {
+    // An isolated child serves exactly one ACP session. Hermes broadcasts
+    // session/update for every session sharing the HERMES_HOME — gateway
+    // conversations (Delta Chat, Telegram, …) included — down every connected
+    // ACP client, so a live turn from an unrelated session streams in here
+    // too. Only surface a session-scoped frame whose sessionId is an exact
+    // match for the one session this child owns; drop foreign and unlabelled.
+    if (event.kind === 'message' && this.isolatedHandles.has(event.sessionId)) {
+      const method = event.msg['method'];
+      if (method === 'session/update' || method === 'session/request_permission') {
+        const owned = this.ownedSessionFor(event.sessionId);
+        const params = event.msg['params'] as Record<string, unknown> | undefined;
+        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : undefined;
+        if (owned && frameSid !== owned) return;
+      }
+    }
+
     // Stash session/request_permission so respondToPermission can find it.
     if (event.kind === 'message') {
       const msg = event.msg;

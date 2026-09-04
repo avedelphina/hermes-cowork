@@ -35,6 +35,8 @@ type CoworkStore = {
   transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }>;
   approvals: Approval[];
   parentTaskId: string | null;
+  /** The agent's current step list, from ACP `plan` updates. */
+  planEntries: Array<{ content: string; status: string }>;
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
   /** File snapshots taken just before an approved edit — for diff + revert. */
@@ -79,19 +81,20 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   transcript: [],
   approvals: [],
   parentTaskId: null,
+  planEntries: [],
   planTasks: [],
   artifacts: [],
   checkpoints: [],
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [] }),
+    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [] }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null,
-      transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [],
+      transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [],
     }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
@@ -130,7 +133,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       return { status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] };
     }),
 
-  beginReconnect: () => set({ transcript: [], approvals: [], status: 'running' }),
+  beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], status: 'running' }),
 
   upsertPlanTask: (task) =>
     set((s) => {
@@ -144,13 +147,14 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
     pendingKickoff: null, filesTarget: null,
-    transcript: [], approvals: [], parentTaskId: null, planTasks: [], artifacts: [], checkpoints: [],
+    transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [],
   }),
 
   ingestAcp: (msg) =>
     set((s) => {
-      // Ignore events for other ACP sessions (worker sessions, chat).
-      if (s.sessionId && msg.sessionId !== s.sessionId) return s;
+      // Ignore events for other ACP sessions (worker sessions, chat), and any
+      // event that arrives before this task is bound to a session.
+      if (!s.sessionId || msg.sessionId !== s.sessionId) return s;
       switch (msg.kind) {
         case 'token': {
           const last = s.transcript[s.transcript.length - 1];
@@ -180,6 +184,23 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
             }
           }
           return s;
+        }
+        case 'plan': {
+          const next = msg.entries.map((e) => e.content).join(' ');
+          const prev = s.planEntries.map((e) => e.content).join(' ');
+          // Hermes re-plans in place after a steering message and just keeps
+          // going. If the step list actually changed after the current plan
+          // was approved, that new plan needs its own approval gate.
+          if (s.approved && s.planEntries.length > 0 && next !== prev) {
+            persistTask(s.taskId, { approved: false, status: 'awaiting_approval' });
+            if (s.goal) notify('New plan ready for approval', s.goal);
+            return {
+              planEntries: msg.entries,
+              approved: false,
+              transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
+            };
+          }
+          return { planEntries: msg.entries };
         }
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };

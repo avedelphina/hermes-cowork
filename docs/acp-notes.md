@@ -53,8 +53,13 @@ Result carries far more than `sessionId` (we currently read only that):
   `models.availableModels[]` as `{ modelId, name, description }` (e.g.
   `{ "modelId": "anthropic:claude-sonnet-5", "name": "Anthropic · claude-sonnet-5",
   "description": "Provider: Anthropic" }`), `currentModelId` a plain string;
-  `session/set_model` replies `{}` on success. Resumed sessions
-  (`session/load`) usually carry no `models`, so the picker hides itself there.
+  `session/set_model` replies `{}` on success.
+  **Re-verified 2026-09-04 (0.20.6, profile `anikke`):** `session/new` **and**
+  `session/load` both return `models` with the full configured set (170 ids
+  across every provider: openrouter, anthropic, openai-codex, copilot,
+  kimi-coding, ollama-cloud, opencode-go, azure-foundry, `custom:local-…`).
+  `currentModelId` is included in `availableModels`. The earlier note that
+  resumed sessions carry no `models` no longer holds for this build.
 - **`modes`** → Task 3.3 "Ask before acting" should map to a real ACP mode
   (`default` vs `accept_edits`/`dont_ask`), enforced agent-side, not a renderer
   toggle. Mode-set method still to be confirmed (likely `session/set_mode`).
@@ -70,6 +75,18 @@ For a trivial prompt: `agent_message_chunk`, `usage_update`,
   matches `acp-translator.extractTextFromContentBlock`. ✅
 - `usage_update`, `available_commands_update`, `session_info_update`: dropped by
   the translator. ✅
+- `plan` (seen 2026-09-04): `update.entries[] = { content, priority, status }`,
+  `status` ∈ `pending | in_progress | completed`. Emitted as a live checklist
+  during execution and **re-emitted whole when the agent re-plans** (e.g. after
+  a steering message). `acp-translator` maps it to a `plan` event;
+  `cowork.store` re-arms the approval gate when the step list changes after the
+  current plan was approved.
+- `available_commands_update` (0.20.6, 2026-09-04) lists:
+  `help, model, tools, context, reset, compress, steer, queue, version`.
+  There is **no** `approve` command — a re-plan gate must be app-side.
+- `session/prompt` always resolved with `stopReason: "end_turn"` in the
+  2026-09-04 capture, including the turn that proposes a plan and stops — so
+  `stopReason` cannot distinguish "awaiting approval" from "turn done".
 
 Not yet exercised against 0.20.6 (trivial prompt can't force them): `tool_call`,
 `tool_call_update`, `agent_thought_chunk`, `session/request_permission`,

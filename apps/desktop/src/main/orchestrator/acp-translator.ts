@@ -77,12 +77,14 @@ export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
  *   "tool_call"             → tool-call (a tool invocation begins)
  *   "tool_call_update"      → tool-result if status==="completed"; otherwise
  *                             dropped (intermediate progress is not surfaced)
+ *   "plan"                  → plan (the agent's current step list; re-emitted
+ *                             whole on a re-plan — see cowork.store re-gate)
  *
  *   "user_message_chunk"    → token with role 'user' (only during a
  *                             session/load history replay)
  *
  * Variants we deliberately drop:
- *   plan, available_commands_update, current_mode_update,
+ *   available_commands_update, current_mode_update,
  *   config_option_update, session_info_update, usage_update.
  */
 function translateSessionUpdate(
@@ -125,6 +127,19 @@ function translateSessionUpdate(
       const toolCallId = typeof u['toolCallId'] === 'string' ? u['toolCallId'] : '';
       if (!toolCallId) return [];
       return [{ kind: 'tool-result', sessionId, toolCallId, result: u['rawOutput'] }];
+    }
+    case 'plan': {
+      const raw = Array.isArray(u['entries']) ? u['entries'] : [];
+      const entries = raw
+        .map((e) => {
+          const o = (e ?? {}) as { content?: unknown; status?: unknown };
+          return {
+            content: typeof o.content === 'string' ? o.content : '',
+            status: typeof o.status === 'string' ? o.status : 'pending',
+          };
+        })
+        .filter((e) => e.content);
+      return entries.length ? [{ kind: 'plan', sessionId, entries }] : [];
     }
     default:
       return [];

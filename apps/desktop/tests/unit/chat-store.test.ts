@@ -3,7 +3,19 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useChatStore } from '@renderer/features/chat/chat.store';
 
 describe('chat store', () => {
-  beforeEach(() => useChatStore.getState().reset());
+  beforeEach(() => {
+    useChatStore.getState().reset();
+    // ingest() drops events until the chat is bound to a session.
+    useChatStore.getState().startSession('s1');
+  });
+
+  it('drops events for other sessions and before any session is bound', () => {
+    useChatStore.getState().reset();
+    useChatStore.getState().ingest({ kind: 'token', sessionId: 'other', text: 'leak' });
+    useChatStore.getState().startSession('s1');
+    useChatStore.getState().ingest({ kind: 'token', sessionId: 'other', text: 'leak' });
+    expect(useChatStore.getState().messages).toEqual([]);
+  });
 
   it('appends tokens to the assistant message', () => {
     const { ingest } = useChatStore.getState();
