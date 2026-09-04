@@ -12,10 +12,19 @@ export function MessageStream({ agentName = 'Hermes' }: { agentName?: string }) 
       )}
       {messages.map((m, i) => (
         <div key={i} className="mb-6">
-          <div className="mb-1 text-[10px] uppercase tracking-wide text-dim">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
             {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : agentName}
           </div>
-          <div className={'whitespace-pre-wrap text-sm ' + (m.role === 'system' ? 'text-danger' : 'text-fg')}>
+          <div
+            className={
+              'whitespace-pre-wrap text-sm ' +
+              (m.role === 'system'
+                ? 'text-danger'
+                : m.role === 'user'
+                  ? 'rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-fg'
+                  : 'text-fg')
+            }
+          >
             {m.text}
           </div>
           {m.toolCalls.map((tc) => (
