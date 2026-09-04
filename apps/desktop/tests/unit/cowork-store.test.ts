@@ -2,9 +2,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useCoworkStore } from '@renderer/features/cowork/cowork.store';
 
-beforeEach(() => useCoworkStore.getState().reset());
+/** Bind the store to a session id — ingestAcp() drops events until then. */
+const bind = (sessionId = 's') =>
+  useCoworkStore.getState().startTask({
+    taskId: 't', sessionId, goal: 'g', cwd: '/w', profile: 'p', kickoff: 'k',
+  });
+
+beforeEach(() => {
+  useCoworkStore.getState().reset();
+  bind();
+});
 
 describe('cowork store', () => {
+  it('drops events for other sessions and before any task is bound', () => {
+    useCoworkStore.getState().reset();
+    useCoworkStore.getState().ingestAcp({ kind: 'token', sessionId: 's', text: 'leak' });
+    bind('s');
+    useCoworkStore.getState().ingestAcp({ kind: 'token', sessionId: 'other', text: 'leak' });
+    expect(useCoworkStore.getState().transcript).toEqual([]);
+  });
+
   it('appends agent tokens', () => {
     const { ingestAcp } = useCoworkStore.getState();
     ingestAcp({ kind: 'token', sessionId: 's', text: 'Plan: ' });

@@ -387,3 +387,53 @@ describe('AcpBridge model switching', () => {
     expect(bridge.getModels('sess-m')).toBeNull();
   });
 });
+
+describe('AcpBridge — isolated session boundary', () => {
+  beforeEach(() => vi.mocked(cp.spawn).mockReset());
+
+  async function openIsolated() {
+    const { bridge, proc, semanticEvents } = makeBridge();
+    const p = bridge.startSession({
+      profile: 'default', cwd: '/tmp', isolate: true,
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'task-1' } }));
+    await p;
+    semanticEvents.length = 0;
+    return { proc, semanticEvents };
+  }
+
+  const chunk = (sessionId: string | undefined, text: string) =>
+    encodeFrame({
+      jsonrpc: '2.0',
+      method: 'session/update',
+      params: {
+        ...(sessionId ? { sessionId } : {}),
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } },
+      },
+    });
+
+  it('drops session/update for a foreign session that shares the HERMES_HOME', async () => {
+    const { proc, semanticEvents } = await openIsolated();
+    proc.stdout!.push(chunk('dc-gateway-99', 'leaked DC reply'));
+    await flush();
+    expect(semanticEvents).toEqual([]);
+  });
+
+  it('keeps session/update for the session the isolated child owns', async () => {
+    const { proc, semanticEvents } = await openIsolated();
+    proc.stdout!.push(chunk('task-1', 'my plan'));
+    await flush();
+    expect(semanticEvents).toContainEqual({ kind: 'token', sessionId: 'task-1', text: 'my plan' });
+  });
+
+  it('binds an unlabelled session/update to the owned session', async () => {
+    const { proc, semanticEvents } = await openIsolated();
+    proc.stdout!.push(chunk(undefined, 'unlabelled chunk'));
+    await flush();
+    expect(semanticEvents).toContainEqual({ kind: 'token', sessionId: 'task-1', text: 'unlabelled chunk' });
+  });
+});

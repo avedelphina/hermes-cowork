@@ -35,8 +35,9 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   ingest: (msg) =>
     set((s) => {
-      // Ignore events for other ACP sessions (workers, other modes).
-      if (s.sessionId && msg.sessionId !== s.sessionId) return s;
+      // Ignore events for other ACP sessions (workers, other modes), and any
+      // event that arrives before this chat is bound to a session.
+      if (!s.sessionId || msg.sessionId !== s.sessionId) return s;
       switch (msg.kind) {
         case 'token': {
           const role = msg.role === 'user' ? 'user' : 'assistant';

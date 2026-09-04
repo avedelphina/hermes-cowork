@@ -280,7 +280,30 @@ export class AcpBridge extends EventEmitter {
     this.sup.shutdownAll();
   }
 
+  /** The single ACP session an isolated child owns, or undefined if unmapped. */
+  private ownedSessionFor(handle: string): string | undefined {
+    for (const [sessionId, h] of this.acpToHandle) {
+      if (h === handle) return sessionId;
+    }
+    return undefined;
+  }
+
   private onSupervisorEvent = (event: AcpEvent): void => {
+    // An isolated child serves exactly one ACP session. Hermes broadcasts
+    // session/update for every session sharing the HERMES_HOME (gateway
+    // conversations included) down every ACP client, so frames for a foreign
+    // session can arrive here — drop them, and bind unlabelled frames to the
+    // one session this child owns.
+    if (event.kind === 'message' && this.isolatedHandles.has(event.sessionId)) {
+      const owned = this.ownedSessionFor(event.sessionId);
+      if (owned) {
+        const params = event.msg['params'] as Record<string, unknown> | undefined;
+        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : undefined;
+        if (frameSid && frameSid !== owned) return;
+        if (params && !frameSid) params['sessionId'] = owned;
+      }
+    }
+
     // Stash session/request_permission so respondToPermission can find it.
     if (event.kind === 'message') {
       const msg = event.msg;
