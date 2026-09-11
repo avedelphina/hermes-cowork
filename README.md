@@ -73,12 +73,13 @@ workaround needed.
 
 ## Develop
 
-Requires **Node 20** (see `.nvmrc`) and **pnpm 10** (pinned via `packageManager`;
-run `corepack enable` once so the right version is selected automatically).
+Requires **Node 22.12+** (see `.nvmrc`; Electron 44 needs it) and **pnpm 10**
+(pinned via `packageManager`; run `corepack enable` once so the right version
+is selected automatically).
 
 ```bash
 corepack enable        # first time only — activates the pinned pnpm
-nvm use                # or otherwise select Node 20
+nvm use                # or otherwise select Node 22
 pnpm install           # electron/esbuild binaries download via approved postinstall
 pnpm dev
 ```
