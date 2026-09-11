@@ -1,5 +1,5 @@
 // apps/desktop/src/main/ipc/handlers.ts
-import { app, ipcMain, BrowserWindow, dialog, Notification } from 'electron';
+import { app, ipcMain, BrowserWindow, dialog, Notification, type IpcMainInvokeEvent } from 'electron';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -10,6 +10,7 @@ import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
+import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
@@ -25,6 +26,8 @@ type Context = {
   /** Profile HERMES_HOME was scoped to at launch, or null. */
   envProfile: string | null;
   win: () => BrowserWindow | null;
+  /** What counts as the app's own renderer document (see security/app-url). */
+  appUrl: AppUrlConfig;
 };
 
 // ── IPC input guards ──
@@ -46,6 +49,23 @@ const TASK_STATUSES: readonly TaskStatus[] = [
 ];
 
 export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
+  // Every privileged channel is registered through this wrapper, never
+  // ipcMain directly (a unit test enforces it). A call is served only when it
+  // comes from our window's top-level frame while that frame shows the app's
+  // own document — a page that somehow got navigated in, or any subframe,
+  // gets nothing even though the preload bridge is present.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: any[]) => unknown): void => {
+    ipcMain.handle(channel, (e, ...args) => {
+      const frame = e.senderFrame;
+      const win = ctx.win();
+      if (!win || e.sender !== win.webContents || !frame || frame.parent !== null || !isAppUrl(frame.url, ctx.appUrl)) {
+        throw new Error(`IPC ${channel} refused: untrusted sender ${frame?.url ?? '(gone)'}`);
+      }
+      return fn(e, ...args);
+    });
+  };
+
   const authHeader = (): Record<string, string> =>
     ctx.dashboardToken ? { Authorization: `Bearer ${ctx.dashboardToken}` } : {};
   const base = `http://127.0.0.1:${ctx.dashboardPort}`;
@@ -76,7 +96,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   };
 
   // ── runtime ──
-  ipcMain.handle(IpcChannel.RuntimeProbe, async () => {
+  handle(IpcChannel.RuntimeProbe, async () => {
     const found = findHermesBinary();
     if (found.kind === 'not-found') return { kind: 'not-found' as const, searched: found.searched };
     const v = await verifyHermesVersion(found.path);
@@ -91,14 +111,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   // handlers here.
 
   // ── profiles ──
-  ipcMain.handle(IpcChannel.ProfileEnv, async (): Promise<{ globalHermesHome: string; envProfile: string | null }> => ({
+  handle(IpcChannel.ProfileEnv, async (): Promise<{ globalHermesHome: string; envProfile: string | null }> => ({
     globalHermesHome: ctx.globalHermesHome,
     envProfile: ctx.envProfile,
   }));
 
   const bridge = new AcpBridge(sup);
 
-  ipcMain.handle(IpcChannel.ProfileSwitch, async (_e, rawName: unknown): Promise<void> => {
+  handle(IpcChannel.ProfileSwitch, async (_e, rawName: unknown): Promise<void> => {
     const name = str(rawName, 'profile');
     if (name !== 'default' && !isValidProfileName(name)) throw new Error(`invalid profile name: ${JSON.stringify(name)}`);
     const r = await fetch(`${base}/api/profiles/active`, {
@@ -120,7 +140,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     ctx.win()?.webContents.send(IpcChannel.AcpEvent, semantic);
   });
 
-  ipcMain.handle(
+  handle(
     IpcChannel.AcpStart,
     async (_e, raw: unknown) => {
       const o = obj(raw, 'acp:start options');
@@ -143,19 +163,19 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     },
   );
 
-  ipcMain.handle(IpcChannel.AcpSetMode, async (_e, raw: unknown) => {
+  handle(IpcChannel.AcpSetMode, async (_e, raw: unknown) => {
     const o = obj(raw, 'acp:set-mode options');
     await bridge.setMode(str(o['sessionId'], 'sessionId'), str(o['modeId'], 'modeId'));
   });
 
-  ipcMain.handle(IpcChannel.AcpSetModel, async (_e, raw: unknown) => {
+  handle(IpcChannel.AcpSetModel, async (_e, raw: unknown) => {
     const o = obj(raw, 'acp:set-model options');
     await bridge.setModel(str(o['sessionId'], 'sessionId'), str(o['modelId'], 'modelId'));
   });
 
-  ipcMain.handle(IpcChannel.AcpModels, (_e, sessionId: unknown) => bridge.getModels(str(sessionId, 'sessionId')));
+  handle(IpcChannel.AcpModels, (_e, sessionId: unknown) => bridge.getModels(str(sessionId, 'sessionId')));
 
-  ipcMain.handle(
+  handle(
     IpcChannel.AcpLoad,
     async (_e, raw: unknown) => {
       const o = obj(raw, 'acp:load options');
@@ -183,7 +203,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     },
   );
 
-  ipcMain.handle(IpcChannel.AcpSend, async (_e, raw: unknown) => {
+  handle(IpcChannel.AcpSend, async (_e, raw: unknown) => {
     const msg = obj(raw, 'acp:send message') as AcpClientMessage;
     const sessionId = str(msg.sessionId, 'sessionId');
     if (msg.kind === 'prompt') {
@@ -195,7 +215,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
   });
 
-  ipcMain.handle(IpcChannel.AcpStop, async (_e, sessionId: unknown) => {
+  handle(IpcChannel.AcpStop, async (_e, sessionId: unknown) => {
     bridge.stopSession(str(sessionId, 'sessionId'));
   });
 
@@ -239,16 +259,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return r.json().catch(() => null);
   };
 
-  ipcMain.handle(IpcChannel.RestGet, (_e, path: unknown) => proxy('GET', str(path, 'path')));
-  ipcMain.handle(IpcChannel.RestPost, (_e, path: unknown, body: unknown) => proxy('POST', str(path, 'path'), body ?? {}));
-  ipcMain.handle(IpcChannel.RestPatch, (_e, path: unknown, body: unknown) => proxy('PATCH', str(path, 'path'), body ?? {}));
-  ipcMain.handle(IpcChannel.RestDelete, (_e, path: unknown) => proxy('DELETE', str(path, 'path')));
+  handle(IpcChannel.RestGet, (_e, path: unknown) => proxy('GET', str(path, 'path')));
+  handle(IpcChannel.RestPost, (_e, path: unknown, body: unknown) => proxy('POST', str(path, 'path'), body ?? {}));
+  handle(IpcChannel.RestPatch, (_e, path: unknown, body: unknown) => proxy('PATCH', str(path, 'path'), body ?? {}));
+  handle(IpcChannel.RestDelete, (_e, path: unknown) => proxy('DELETE', str(path, 'path')));
 
   // ── kanban WS ──
-  ipcMain.handle(IpcChannel.KanbanWsSubscribe, (_e, _boardSlug: string | null) => undefined);
+  handle(IpcChannel.KanbanWsSubscribe, (_e, _boardSlug: string | null) => undefined);
 
   // ── app ──
-  ipcMain.handle(IpcChannel.Notify, (_e, raw: unknown) => {
+  handle(IpcChannel.Notify, (_e, raw: unknown) => {
     const o = obj(raw, 'notification');
     const title = str(o['title'], 'title').slice(0, 200);
     const body = str(o['body'], 'body').slice(0, 500);
@@ -261,7 +281,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
 
   // ── dialog ──
-  ipcMain.handle(IpcChannel.ShowFolderPicker, async () => {
+  handle(IpcChannel.ShowFolderPicker, async () => {
     const w = ctx.win();
     if (!w) return null;
     const result = await dialog.showOpenDialog(w, {
@@ -276,9 +296,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   mkdirSync(userData, { recursive: true });
   const projects = new ProjectStore(join(userData, 'projects.json'));
 
-  ipcMain.handle(IpcChannel.ProjectList, () => projects.snapshot());
+  handle(IpcChannel.ProjectList, () => projects.snapshot());
 
-  ipcMain.handle(
+  handle(
     IpcChannel.ProjectCreate,
     (_e, raw: unknown) => {
       const o = obj(raw, 'project');
@@ -296,7 +316,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     },
   );
 
-  ipcMain.handle(
+  handle(
     IpcChannel.ProjectUpdate,
     (_e, id: unknown, raw: unknown) => {
       const patch = obj(raw, 'project patch');
@@ -315,12 +335,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     },
   );
 
-  ipcMain.handle(IpcChannel.ProjectSetActive, (_e, id: unknown) => {
+  handle(IpcChannel.ProjectSetActive, (_e, id: unknown) => {
     projects.setActive(str(id, 'id'));
     return projects.snapshot();
   });
 
-  ipcMain.handle(IpcChannel.ProjectRemove, (_e, id: unknown) => {
+  handle(IpcChannel.ProjectRemove, (_e, id: unknown) => {
     projects.remove(str(id, 'id'));
     return projects.snapshot();
   });
@@ -332,12 +352,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return p.folderPath;
   };
 
-  ipcMain.handle(IpcChannel.ProjectContextFiles, (_e, id: unknown) => contextFiles(projectRoot(id)));
+  handle(IpcChannel.ProjectContextFiles, (_e, id: unknown) => contextFiles(projectRoot(id)));
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
-  ipcMain.handle(IpcChannel.TaskList, () => tasks.list());
-  ipcMain.handle(IpcChannel.TaskCreate, (_e, raw: unknown) => {
+  handle(IpcChannel.TaskList, () => tasks.list());
+  handle(IpcChannel.TaskCreate, (_e, raw: unknown) => {
     const o = obj(raw, 'task');
     const input = {
       goal: str(o['goal'], 'goal'),
@@ -352,7 +372,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
     return tasks.create(input);
   });
-  ipcMain.handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
+  handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'task patch');
     const patch: { status?: TaskStatus; approved?: boolean } = {};
     if (o['status'] !== undefined) {
@@ -362,12 +382,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (o['approved'] !== undefined) patch.approved = o['approved'] === true;
     return tasks.update(str(id, 'id'), patch);
   });
-  ipcMain.handle(IpcChannel.TaskRemove, (_e, id: unknown) => tasks.remove(str(id, 'id')));
+  handle(IpcChannel.TaskRemove, (_e, id: unknown) => tasks.remove(str(id, 'id')));
 
   // ── chat sessions ──
   const chats = new ChatSessionStore(join(userData, 'chats.json'));
-  ipcMain.handle(IpcChannel.ChatList, () => chats.list());
-  ipcMain.handle(
+  handle(IpcChannel.ChatList, () => chats.list());
+  handle(
     IpcChannel.ChatCreate,
     (_e, raw: unknown) => {
       const o = obj(raw, 'chat');
@@ -379,18 +399,18 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       });
     },
   );
-  ipcMain.handle(IpcChannel.ChatUpdate, (_e, id: unknown, raw: unknown) => {
+  handle(IpcChannel.ChatUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'chat patch');
     const patch: { title?: string | null; projectId?: string | null } = {};
     if (o['title'] !== undefined) patch.title = strOrNull(o['title'], 'title');
     if (o['projectId'] !== undefined) patch.projectId = strOrNull(o['projectId'], 'projectId');
     return chats.update(str(id, 'id'), patch);
   });
-  ipcMain.handle(IpcChannel.ChatRemove, (_e, id: unknown) => chats.remove(str(id, 'id')));
+  handle(IpcChannel.ChatRemove, (_e, id: unknown) => chats.remove(str(id, 'id')));
 
   // ── project filesystem (read-only, scoped to the project root) ──
-  ipcMain.handle(IpcChannel.FsList, (_e, id: unknown, rel?: unknown) => listDir(projectRoot(id), strOrNull(rel, 'path') ?? ''));
-  ipcMain.handle(IpcChannel.FsRead, (_e, id: unknown, rel: unknown) => readFilePreview(projectRoot(id), str(rel, 'path')));
+  handle(IpcChannel.FsList, (_e, id: unknown, rel?: unknown) => listDir(projectRoot(id), strOrNull(rel, 'path') ?? ''));
+  handle(IpcChannel.FsRead, (_e, id: unknown, rel: unknown) => readFilePreview(projectRoot(id), str(rel, 'path')));
 
   // Checkpoints are scoped to a task's working folder and held here, in main.
   // The renderer only ever sends a taskId + relative path — never the root and
@@ -424,11 +444,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       console.error('[checkpoint]', path, String(err));
     }
   }
-  ipcMain.handle(IpcChannel.FsCheckpoint, (_e, taskId: unknown, rel: unknown) =>
+  handle(IpcChannel.FsCheckpoint, (_e, taskId: unknown, rel: unknown) =>
     takeCheckpoint(str(taskId, 'taskId'), str(rel, 'path')),
   );
-  ipcMain.handle(IpcChannel.FsSnapshot, (_e, taskId: unknown, rel: unknown) => snapshotFile(taskRoot(taskId), str(rel, 'path')));
-  ipcMain.handle(IpcChannel.FsRevert, (_e, taskId: unknown, rel: unknown) => {
+  handle(IpcChannel.FsSnapshot, (_e, taskId: unknown, rel: unknown) => snapshotFile(taskRoot(taskId), str(rel, 'path')));
+  handle(IpcChannel.FsRevert, (_e, taskId: unknown, rel: unknown) => {
     const key = `${str(taskId, 'taskId')}\0${str(rel, 'path')}`;
     if (!checkpoints.has(key)) throw new Error('no checkpoint for this file');
     revertFile(taskRoot(taskId), rel as string, checkpoints.get(key) ?? null);

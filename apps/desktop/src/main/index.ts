@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session, shell } from 'electron';
 import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isAppUrl, type AppUrlConfig } from './security/app-url';
 import { findHermesBinary, verifyHermesVersion } from './orchestrator/hermes-runtime';
 import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
@@ -10,6 +10,10 @@ import { registerIpcHandlers } from './ipc/handlers';
 // KanbanWsPump is intentionally not started — see note below.
 
 let win: BrowserWindow | null = null;
+const appUrl: AppUrlConfig = {
+  devUrl: process.env['ELECTRON_RENDERER_URL'],
+  indexHtml: join(__dirname, '../renderer/index.html'),
+};
 // Set only when we spawned the dashboard ourselves — a reused external one is
 // left alone.
 let dashboardChild: ChildProcess | null = null;
@@ -43,15 +47,18 @@ function createWindow() {
     return { action: 'deny' };
   });
   // Block any real navigation away from the app itself (routing is pushState).
-  const appUrl = process.env['ELECTRON_RENDERER_URL'] ?? pathToFileURL(join(__dirname, '../renderer/index.html')).href;
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(appUrl)) e.preventDefault();
-  });
+  // Block every real navigation (and redirect) off the app's own document.
+  // Routing is hash-based, so in-app moves never trigger these at all.
+  const guard = (e: { preventDefault: () => void }, url: string) => {
+    if (!isAppUrl(url, appUrl)) e.preventDefault();
+  };
+  win.webContents.on('will-navigate', guard);
+  win.webContents.on('will-redirect', guard);
 
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL']);
+  if (appUrl.devUrl) {
+    win.loadURL(appUrl.devUrl);
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'));
+    win.loadFile(appUrl.indexHtml);
   }
 }
 
@@ -93,6 +100,7 @@ void app.whenReady().then(async () => {
       globalHermesHome: homes.global,
       envProfile: homes.envProfile,
       win: () => win,
+      appUrl,
     },
     supervisor,
   );
