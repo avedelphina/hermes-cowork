@@ -48,6 +48,38 @@ Traced through the actual code, not assumed:
 - **Profile names are validated against the local dashboard's live profile
   list** on `acp:start`/`acp:load`. A remote profile won't be in that list.
 
+## Explicit environments — the dimensions today's model conflates
+
+Today a Project is `{ name, profile, optional folder }` — three things,
+resolved on one implicit dimension: "local machine, right now." Real usage
+(the author already runs agents across several machines — a laptop, home and
+cloud servers, and a GPU host) needs five dimensions kept distinct instead of
+folded into "the folder":
+
+- **Project** — the user-facing grouping (name + purpose). Already modeled.
+- **Repository/source** — which checkout of which repo. Currently assumed to
+  be the project's folder; needs to stay separate once a task can run against
+  a repo that isn't checked out locally at all.
+- **Workspace** — the actual working directory for a given task run
+  (`cwd` passed to `spawn()`). Usually == repository root today; won't be
+  once checkpoints/file browser reach a remote filesystem (Phase 1 note
+  below already flags this).
+- **Host** — which machine runs the agent process. Implicit today (always
+  "this machine"); Phase 1's "optional remote origin" field on profile
+  metadata is what makes this explicit.
+- **Agent identity** — which profile/credentials/model config runs, currently
+  the only one of the five that's actually a named, first-class concept
+  (`profile`).
+
+Phase 1's "extend profile metadata with an optional remote origin" is the
+minimum viable version of this: it only makes **host** explicit. Repository
+and workspace stay conflated with the local folder until Phase 1's file-
+browser/checkpoint question is answered for real (not just "no, not in
+v1" — that answer is still the right one for v1, but it's deferring
+repository/workspace separation, not avoiding it). Don't design a five-field
+config UI now — Phase 0/1 only need the host field; the other four stay
+implicit until a concrete use case needs one split out.
+
 ## Phase 0 — Spike: prove the transport (do this first, nothing else)
 
 Goal: one remote profile, one task, round-trip works. No config UI, no
