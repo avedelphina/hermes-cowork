@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
-  CoworkTask, TaskStatus, ChatSession,
+  CoworkTask, TaskStatus, ChatSession, UpdateStatus,
 } from '../shared/types';
 
 const api = {
@@ -55,6 +55,17 @@ const api = {
   app: {
     notify: (opts: { title: string; body: string }): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.Notify, opts),
+  },
+  update: {
+    status: (): Promise<UpdateStatus> => ipcRenderer.invoke(IpcChannel.UpdateStatus),
+    check: (): Promise<void> => ipcRenderer.invoke(IpcChannel.UpdateCheck),
+    download: (): Promise<void> => ipcRenderer.invoke(IpcChannel.UpdateDownload),
+    install: (): Promise<void> => ipcRenderer.invoke(IpcChannel.UpdateInstall),
+    onEvent: (cb: (status: UpdateStatus) => void) => {
+      const listener = (_e: unknown, status: UpdateStatus) => cb(status);
+      ipcRenderer.on(IpcChannel.UpdateEvent, listener);
+      return () => ipcRenderer.removeListener(IpcChannel.UpdateEvent, listener);
+    },
   },
   projects: {
     list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),

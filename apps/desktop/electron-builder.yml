@@ -10,7 +10,7 @@ files:
   - "!node_modules/**/*"
 
 # GitHub Releases. electron-builder generates latest-mac.yml + .blockmap here
-# so a future electron-updater wiring has a feed to read.
+# — the feed electron-updater reads (see src/main/update/updater.ts).
 publish:
   provider: github
   owner: avedelphina
@@ -29,6 +29,10 @@ mac:
   notarize: false
   target:
     - target: dmg
+      arch: [arm64]
+    # zip is the artifact Squirrel.Mac (electron-updater) actually installs —
+    # the DMG is for first-time manual install only.
+    - target: zip
       arch: [arm64]
 
 dmg:

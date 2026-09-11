@@ -107,6 +107,15 @@ export type AcpServerMessage =
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
   | { kind: 'done'; sessionId: string };
 
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; version: string }
+  | { state: 'not-available' }
+  | { state: 'downloading'; percent: number }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
+
 declare global {
   interface Window {
     hermes: import('../preload').HermesApi;

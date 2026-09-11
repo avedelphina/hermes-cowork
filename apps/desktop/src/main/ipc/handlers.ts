@@ -15,6 +15,7 @@ import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
+import type { UpdaterController } from '../update/updater';
 import type { TaskStatus } from '../../shared/types';
 
 type Context = {
@@ -28,6 +29,7 @@ type Context = {
   win: () => BrowserWindow | null;
   /** What counts as the app's own renderer document (see security/app-url). */
   appUrl: AppUrlConfig;
+  updater: UpdaterController;
 };
 
 // ── IPC input guards ──
@@ -279,6 +281,12 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       n.show();
     }
   });
+
+  // ── auto-update ──
+  handle(IpcChannel.UpdateCheck, () => ctx.updater.check());
+  handle(IpcChannel.UpdateDownload, () => ctx.updater.download());
+  handle(IpcChannel.UpdateInstall, () => ctx.updater.install());
+  handle(IpcChannel.UpdateStatus, () => ctx.updater.getStatus());
 
   // ── dialog ──
   handle(IpcChannel.ShowFolderPicker, async () => {

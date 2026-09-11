@@ -7,6 +7,7 @@ import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
 import { AcpSupervisor } from './orchestrator/acp-supervisor';
 import { registerIpcHandlers } from './ipc/handlers';
+import { createUpdater } from './update/updater';
 // KanbanWsPump is intentionally not started — see note below.
 
 let win: BrowserWindow | null = null;
@@ -63,6 +64,11 @@ function createWindow() {
 }
 
 const supervisor = new AcpSupervisor();
+const updater = createUpdater(() => win);
+
+// Update checks re-hydrate on every launch, then stay quiet for hours — no
+// need to poll faster than that for a desktop app the user restarts often.
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 void app.whenReady().then(async () => {
   // The app needs no camera, mic, geolocation, notifications-via-web, etc.
@@ -101,6 +107,7 @@ void app.whenReady().then(async () => {
       envProfile: homes.envProfile,
       win: () => win,
       appUrl,
+      updater,
     },
     supervisor,
   );
@@ -110,6 +117,9 @@ void app.whenReady().then(async () => {
   // so it 403s and reconnect-loops. Re-enable once Cowork needs live kanban.
 
   createWindow();
+
+  void updater.check();
+  setInterval(() => void updater.check(), UPDATE_CHECK_INTERVAL_MS);
 });
 
 function stopOwnedChildren() {
