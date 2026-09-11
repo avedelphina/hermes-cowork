@@ -60,8 +60,8 @@ What's in:
 - [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
   ≥ 0.20.0 on `$PATH` (ACP verified against 0.20.6 — see
   [`docs/acp-notes.md`](docs/acp-notes.md))
-- A running `hermes dashboard` on `127.0.0.1:9119` (the app reuses one or starts
-  its own; it only kills a dashboard it started)
+- Nothing else to run — the app starts its own `hermes dashboard` on loopback
+  (port 9119, or a free port if that is taken) and stops it on quit
 
 ## Install
 
