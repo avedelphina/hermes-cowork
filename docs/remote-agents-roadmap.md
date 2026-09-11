@@ -104,6 +104,22 @@ product surface, throwaway code is fine.
    profile" a config/plumbing change, or does ACP's session model leak local-
    process assumptions badly enough to need real rework.
 
+**Side finding, same mechanism (checked 2026-09-11):** the argv
+generalization in step 1 also answers a separate question — whether
+non-Hermes backends (Claude Code, Codex) need bespoke per-provider
+integration or can reuse the ACP path. They can. Per
+[agentclientprotocol.com's agent registry](https://agentclientprotocol.com/get-started/agents.md):
+Claude Code is exposed as an ACP agent via Zed's SDK adapter ("Claude
+Agent"), and Codex CLI via an adapter maintained by the ACP project (not
+OpenAI). Neither is native ACP, but both are just another argv for the same `spawn()` — e.g. the
+adapter binary in place of `hermes acp` — not a new integration layer. This
+means "provider adapter" (Claude/Codex/local models as swappable backends)
+is a **local, same-machine instance of this same generalized-argv problem**,
+not a separate abstraction to design. Once step 1's argv generalization
+lands, trying a non-Hermes provider is "point spawn() at the adapter binary
+instead of `hermes acp`" — worth a throwaway local spike alongside or right
+after the SSH one, before any adapter abstraction gets designed.
+
 **Exit criteria**: a hardcoded remote profile can complete one full turn with
 an inline approval, end-to-end, from this app.
 
