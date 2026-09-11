@@ -145,9 +145,19 @@ reach the filesystem or the dashboard beyond what the UI needs).
 - **Dashboard REST proxy is allow-listed** — the renderer can only reach the
   exact GET/POST/PATCH/DELETE routes the UI uses; anything else throws. The
   proxy carries the dashboard bearer token, so this is the door. _Enforced._
+- **Only the app's own document holds privileges.** `security/app-url.isAppUrl`
+  defines it by *parsed* URL: the exact dev-server origin, or the exact
+  packaged `index.html` (routing is hash-based, so the document URL never
+  changes). `will-navigate` and `will-redirect` block anything else — a
+  lookalike such as `http://localhost:5173.attacker.example` included. Every
+  IPC handler is registered through one wrapper that serves a call only from
+  our window's top-level frame while it shows that document, so a foreign
+  page that ends up in the window with the preload bridge still gets nothing
+  (a unit test forbids registering `ipcMain` handlers any other way).
+  _Enforced; e2e-tested (`trust-boundary.spec.ts`)._
 - **External links** — `setWindowOpenHandler` opens only `http:` / `https:`
   URLs in the OS browser; `file:`, `mailto:`, and custom schemes are dropped.
-  `will-navigate` blocks any real navigation off the app origin. _Enforced._
+  _Enforced._
 
 ## What the app must never do silently
 
