@@ -47,6 +47,14 @@ _(not yet enforced)_ so the gap is visible rather than implied.
   outside the root is rejected — for a path that does not exist yet, its
   nearest existing ancestor is realpath-checked, so a symlinked parent cannot
   redirect a write. _Enforced (file browser + checkpoints)._
+- **No check-then-use gap.** Every file operation runs with the process cwd
+  pinned to a directory verified inside the root after entering it (Node has
+  no `openat`), on bare names only: reads open with `O_NOFOLLOW|O_NONBLOCK`,
+  revert writes an `O_EXCL` temp file and `rename()`s it over the target
+  (replacing, never following, a symlink), deletion is `unlink()`. A path
+  component swapped for a symlink after validation cannot redirect any of
+  them. _Enforced._ Known limit: a hardlink to an outside file placed inside
+  the root is indistinguishable from a regular file.
 - **The renderer never supplies a filesystem root.** `fs:list` / `fs:read`
   take a `projectId` (root from `ProjectStore`); `fs:checkpoint` /
   `fs:snapshot` / `fs:revert` take a `taskId` (root from `TaskStore`). A task's
@@ -120,6 +128,13 @@ reach the filesystem or the dashboard beyond what the UI needs).
   `ProjectStore` / `TaskStore` by id. `ChatSessionStore` holds no folder — a
   chat's `cwd` is derived from its project (or `$HOME`), never sent by the
   renderer.
+- **ACP session ownership** — Hermes broadcasts session-scoped frames
+  (`session/update`, `session/request_permission`) for every session on a
+  HERMES_HOME down every connected ACP client. The bridge forwards or stores
+  a frame only if its `sessionId` was opened (or is being loaded) by this app
+  on that very child, pooled or isolated; `respondToPermission` re-checks the
+  same ownership. A renderer holding a foreign session's ids cannot answer its
+  approvals. _Enforced._
 - **Profile names** — validated (`isValidProfileName`: one path segment, no
   `.`/`..`/separators) before they touch `HERMES_HOME`, and checked against the
   dashboard's live profile list on `acp:start` / `acp:load`. _Enforced._
