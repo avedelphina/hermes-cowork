@@ -91,6 +91,9 @@ export class AcpBridge extends EventEmitter {
   private conns = new Map<string, Conn>();
   /** Handles spawned for a single isolated session — safe to hard-kill. */
   private isolatedHandles = new Set<string>();
+  /** Sessions mid-`session/load` → handle. Their replay frames arrive before
+   * the load response binds them, so ownership must already hold. */
+  private loading = new Map<string, string>();
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -186,6 +189,7 @@ export class AcpBridge extends EventEmitter {
    */
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
     const handle = opts.isolate ? await this.spawnDedicated(opts) : await this.connFor(opts);
+    this.loading.set(opts.sessionId, handle);
     try {
       const res = (await this.sup.request(handle, 'session/load', {
         sessionId: opts.sessionId,
@@ -202,6 +206,8 @@ export class AcpBridge extends EventEmitter {
         this.sup.shutdown(handle);
       }
       throw err;
+    } finally {
+      if (this.loading.get(opts.sessionId) === handle) this.loading.delete(opts.sessionId);
     }
   }
 
@@ -264,6 +270,8 @@ export class AcpBridge extends EventEmitter {
     const pending = this.pendingPermissions.get(key);
     if (!pending) return;
     this.pendingPermissions.delete(key);
+    // Only ever answer for a session this app opened, on the child serving it.
+    if (!this.owns(pending.handle, sessionId)) return;
     this.sup.send(pending.handle, {
       jsonrpc: '2.0', id: pending.requestId, result: permissionOutcome(pending.options, allow),
     });
@@ -301,33 +309,30 @@ export class AcpBridge extends EventEmitter {
     this.acpToHandle.clear();
     this.modelsBySession.clear();
     this.pendingPermissions.clear();
+    this.loading.clear();
     this.conns.clear();
     this.isolatedHandles.clear();
     this.sup.shutdownAll();
   }
 
-  /** The single ACP session an isolated child owns, or undefined if unmapped. */
-  private ownedSessionFor(handle: string): string | undefined {
-    for (const [sessionId, h] of this.acpToHandle) {
-      if (h === handle) return sessionId;
-    }
-    return undefined;
+  /** True when `sessionId` was opened (or is being loaded) by this app on `handle`. */
+  private owns(handle: string, sessionId: string): boolean {
+    return this.acpToHandle.get(sessionId) === handle || this.loading.get(sessionId) === handle;
   }
 
   private onSupervisorEvent = (event: AcpEvent): void => {
-    // An isolated child serves exactly one ACP session. Hermes broadcasts
-    // session/update for every session sharing the HERMES_HOME — gateway
-    // conversations (Delta Chat, Telegram, …) included — down every connected
-    // ACP client, so a live turn from an unrelated session streams in here
-    // too. Only surface a session-scoped frame whose sessionId is an exact
-    // match for the one session this child owns; drop foreign and unlabelled.
-    if (event.kind === 'message' && this.isolatedHandles.has(event.sessionId)) {
+    // Hermes broadcasts session-scoped frames for every session sharing the
+    // HERMES_HOME — gateway conversations (Delta Chat, Telegram, …) and other
+    // ACP clients included — down every connected ACP client, pooled or
+    // isolated. Only a session this app opened (or is loading) on this very
+    // child may reach the renderer or have its permission request answered;
+    // foreign and unlabelled frames are dropped, never stored or forwarded.
+    if (event.kind === 'message') {
       const method = event.msg['method'];
       if (method === 'session/update' || method === 'session/request_permission') {
-        const owned = this.ownedSessionFor(event.sessionId);
         const params = event.msg['params'] as Record<string, unknown> | undefined;
-        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : undefined;
-        if (owned && frameSid !== owned) return;
+        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : '';
+        if (!frameSid || !this.owns(event.sessionId, frameSid)) return;
       }
     }
 
