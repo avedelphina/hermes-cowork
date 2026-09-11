@@ -11,7 +11,7 @@ import type { ChatSession } from '../../shared/types';
 export type { ChatSession };
 
 type Data = { chats: ChatSession[] };
-type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null };
+type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null };
 
 export class ChatSessionStore {
   private data: Data = { chats: [] };
@@ -26,6 +26,7 @@ export class ChatSessionStore {
       ...c,
       title: c.title ?? null,
       projectId: c.projectId ?? null,
+      profile: c.profile ?? null,
     }));
     return { chats };
   }
@@ -50,6 +51,7 @@ export class ChatSessionStore {
       acpSessionId: input.acpSessionId,
       title: input.title,
       projectId: input.projectId,
+      profile: input.profile,
       createdAt: now,
       updatedAt: now,
     };

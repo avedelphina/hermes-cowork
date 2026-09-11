@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MessageStream } from './MessageStream';
 import { Composer } from './Composer';
 import { useChatStore } from './chat.store';
@@ -12,12 +12,16 @@ export function useChatSurface() {
   const setChatId = useChatStore((s) => s.setChatId);
   const ingest = useChatStore((s) => s.ingest);
   const [profile, setProfile] = useState('default');
+  // Resolves once the active profile is known, so a message sent right after
+  // mount does not start the chat under 'default' by accident.
+  const profileReady = useRef<Promise<string>>(Promise.resolve('default'));
 
   useEffect(() => {
     const off = window.hermes.acp.onEvent((evt) => ingest(evt));
-    api.profiles()
-      .then((ps) => setProfile(activeProject()?.profile ?? ps.find((p) => p.active)?.name ?? 'default'))
-      .catch(() => { /* keep default */ });
+    profileReady.current = api.profiles()
+      .then((ps) => activeProject()?.profile ?? ps.find((p) => p.active)?.name ?? 'default')
+      .catch(() => 'default');
+    void profileReady.current.then(setProfile);
     void useChatsStore.getState().reload();
     return () => { off(); };
   }, [ingest]);
@@ -27,8 +31,9 @@ export function useChatSurface() {
     const current = useChatStore.getState().sessionId;
     if (current) return current;
     const proj = activeProject();
+    const chatProfile = proj?.profile ?? (await profileReady.current);
     const { sessionId: id } = await window.hermes.acp.start({
-      profile: proj?.profile ?? profile,
+      profile: chatProfile,
       ...(proj?.folderPath ? { cwd: proj.folderPath } : {}),
     });
     startSession(id);
@@ -37,6 +42,7 @@ export function useChatSurface() {
         acpSessionId: id,
         projectId: proj?.id ?? null,
         title: null,
+        profile: chatProfile,
       });
       setChatId(chat.id);
       void useChatsStore.getState().reload();
@@ -61,7 +67,9 @@ export function useChatSurface() {
     try {
       await window.hermes.acp.load({
         sessionId: chat.acpSessionId,
-        profile: proj?.profile ?? profile,
+        // The profile it was created under — a different one is a different
+        // HERMES_HOME with no such session.
+        profile: chat.profile ?? proj?.profile ?? (await profileReady.current),
         ...(proj?.folderPath ? { cwd: proj.folderPath } : {}),
       });
     } catch (err) {

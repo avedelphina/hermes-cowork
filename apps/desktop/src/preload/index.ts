@@ -78,7 +78,7 @@ const api = {
   },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
-    create: (input: { acpSessionId: string; projectId: string | null; title: string | null }): Promise<ChatSession> =>
+    create: (input: { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null }): Promise<ChatSession> =>
       ipcRenderer.invoke(IpcChannel.ChatCreate, input),
     update: (id: string, patch: { title?: string | null; projectId?: string | null }): Promise<ChatSession | null> =>
       ipcRenderer.invoke(IpcChannel.ChatUpdate, id, patch),

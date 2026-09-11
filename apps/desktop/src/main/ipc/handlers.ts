@@ -375,6 +375,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         acpSessionId: str(o['acpSessionId'], 'acpSessionId'),
         projectId: strOrNull(o['projectId'], 'projectId'),
         title: strOrNull(o['title'], 'title'),
+        profile: strOrNull(o['profile'], 'profile'),
       });
     },
   );
