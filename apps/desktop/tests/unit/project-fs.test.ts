@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -81,5 +81,25 @@ describe('snapshotFile / revertFile', () => {
   it('snapshot and revert reject a traversal path', () => {
     expect(() => snapshotFile(root, '../x')).toThrow(/escapes/);
     expect(() => revertFile(root, '../../etc/x', 'no')).toThrow(/escapes/);
+  });
+
+  it('revert refuses a new file under a symlinked parent that points outside', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'pfs-out-'));
+    symlinkSync(outside, join(root, 'link'));
+    expect(() => revertFile(root, 'link/planted.txt', 'x')).toThrow(/escapes/);
+    expect(existsSync(join(outside, 'planted.txt'))).toBe(false);
+  });
+
+  it('snapshot refuses a binary file rather than checkpoint it lossily', () => {
+    writeFileSync(join(root, 'img.dat'), Buffer.from([0xff, 0xfe, 0x00, 0x80]));
+    expect(() => snapshotFile(root, 'img.dat')).toThrow(/binary/);
+  });
+});
+
+describe('readFilePreview truncation', () => {
+  it('reads only the head of a large text file', () => {
+    writeFileSync(join(root, 'big.txt'), 'a'.repeat(3 * 1024 * 1024));
+    const p = readFilePreview(root, 'big.txt');
+    expect(p.kind === 'text' && p.truncated && p.text.length === 2 * 1024 * 1024).toBe(true);
   });
 });

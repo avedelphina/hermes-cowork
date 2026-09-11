@@ -31,6 +31,7 @@ function Dialog() {
   const [profile, setProfile] = useState(() => proj?.profile ?? 'default');
   const [profiles, setProfiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const startTask = useCoworkStore((s) => s.startTask);
 
@@ -55,11 +56,14 @@ function Dialog() {
   const submit = async () => {
     if (!goal.trim() || !cwd.trim()) return;
     setBusy(true);
+    setError(null);
+    let sessionId: string | null = null;
     try {
       // Cowork tasks get their own ACP child so Stop can hard-cancel them.
-      const { sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true });
-      const mode = useCoworkStore.getState().approvalMode;
-      await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[mode] }).catch(() => { /* non-fatal */ });
+      ({ sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true }));
+      // Always plan in `default` — "auto" only takes effect once the plan is
+      // approved (see agentModeFor). Failing to set it must not start the task.
+      await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR.ask });
       const task = await window.hermes.tasks.create({
         goal, cwd, profile, acpSessionId: sessionId,
         projectId: activeProject()?.id ?? null,
@@ -71,6 +75,9 @@ function Dialog() {
         kickoff: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');
+    } catch (e) {
+      if (sessionId) void window.hermes.acp.stop(sessionId); // no orphaned child
+      setError(String(e));
     } finally {
       setBusy(false);
     }
@@ -120,6 +127,8 @@ function Dialog() {
           className="mb-6 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
         />
       )}
+
+      {error && <p className="mb-4 text-xs text-danger">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <button onClick={() => navigate('/cowork')} className="rounded px-3 py-2 text-sm text-muted hover:text-fg">

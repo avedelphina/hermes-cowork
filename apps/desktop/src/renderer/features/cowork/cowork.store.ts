@@ -8,6 +8,23 @@ type Approval = { toolCallId: string; description: string };
 /** Cowork approval mode → ACP session mode id. */
 export const MODE_FOR = { ask: 'default', auto: 'accept_edits' } as const;
 
+/**
+ * The ACP mode the agent must actually be in. Edits are only auto-accepted
+ * once the plan is approved — before that the agent runs in `default`
+ * whatever the toggle says, so the plan gate does not rest on the model
+ * obeying "STOP" in the prompt.
+ */
+export function agentModeFor(approved: boolean, mode: 'ask' | 'auto'): string {
+  return approved ? MODE_FOR[mode] : MODE_FOR.ask;
+}
+
+/** Push the effective mode to the live session (after approve, re-plan, toggle, reconnect). */
+export function syncAgentMode(s: { sessionId: string | null; approved: boolean; approvalMode: 'ask' | 'auto' }): void {
+  if (!s.sessionId) return;
+  void window.hermes?.acp?.setMode({ sessionId: s.sessionId, modeId: agentModeFor(s.approved, s.approvalMode) })
+    ?.catch(() => { /* session gone — nothing to gate */ });
+}
+
 /** Fire-and-forget persistence of a task's lifecycle state. */
 function persistTask(id: string | null, patch: { status?: TaskStatus; approved?: boolean }): void {
   if (id) void window.hermes?.tasks?.update(id, patch);
@@ -113,10 +130,15 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       return { filesTarget: absPath.slice(root.length + 1) };
     }),
   clearFilesTarget: () => set({ filesTarget: null }),
-  setApprovalMode: (approvalMode) => set({ approvalMode }),
+  setApprovalMode: (approvalMode) =>
+    set((s) => {
+      syncAgentMode({ ...s, approvalMode });
+      return { approvalMode };
+    }),
   approvePlan: () =>
     set((s) => {
       persistTask(s.taskId, { approved: true, status: 'executing' });
+      syncAgentMode({ ...s, approved: true });
       return { approved: true, status: 'running' };
     }),
   setParent: (parentTaskId) => set({ parentTaskId }),
@@ -175,8 +197,10 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
               const taskId = s.taskId;
               if (taskId && root && path.startsWith(root + '/')) {
                 const rel = path.slice(root.length + 1);
+                // Main already took the checkpoint when the frame arrived;
+                // this fetches it (or takes it, if main could not map the path).
                 void window.hermes?.fs
-                  ?.snapshot(taskId, rel)
+                  ?.checkpoint(taskId, rel)
                   .then((before) => useCoworkStore.getState().addCheckpoint(rel, before))
                   .catch(() => { /* ignore */ });
               }
@@ -193,6 +217,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           // was approved, that new plan needs its own approval gate.
           if (s.approved && s.planEntries.length > 0 && next !== prev) {
             persistTask(s.taskId, { approved: false, status: 'awaiting_approval' });
+            syncAgentMode({ ...s, approved: false });
             if (s.goal) notify('New plan ready for approval', s.goal);
             return {
               planEntries: msg.entries,

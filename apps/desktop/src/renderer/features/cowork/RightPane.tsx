@@ -4,7 +4,7 @@ import { ArtifactsTab } from './ArtifactsTab';
 import { ChangesTab } from './ChangesTab';
 import { SubtasksTab } from './SubtasksTab';
 import { FileBrowser } from '../files/FileBrowser';
-import { useCoworkStore, MODE_FOR } from './cowork.store';
+import { useCoworkStore } from './cowork.store';
 
 const TABS = [
   { id: 'plan', label: 'Plan' },
@@ -20,13 +20,10 @@ export function RightPane() {
   const [tab, setTab] = useState<TabId>('plan');
   const approvalMode = useCoworkStore((s) => s.approvalMode);
   const setApprovalMode = useCoworkStore((s) => s.setApprovalMode);
-  const sessionId = useCoworkStore((s) => s.sessionId);
 
-  const toggleMode = () => {
-    const next = approvalMode === 'ask' ? 'auto' : 'ask';
-    setApprovalMode(next);
-    if (sessionId) void window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR[next] });
-  };
+  // setApprovalMode pushes the effective ACP mode (still `default` until the
+  // plan is approved).
+  const toggleMode = () => setApprovalMode(approvalMode === 'ask' ? 'auto' : 'ask');
 
   return (
     <aside className="flex w-[340px] flex-col border-l border-border bg-surface">

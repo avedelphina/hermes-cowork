@@ -4,8 +4,8 @@
 // resolved through resolveWithinRoot AND realpath-checked, so neither `..` nor
 // a symlink can escape the root.
 
-import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
-import { basename, extname, join, relative, sep } from 'node:path';
+import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync, rmSync, openSync, readSync, closeSync } from 'node:fs';
+import { basename, dirname, extname, join, relative, sep } from 'node:path';
 import { resolveWithinRoot } from '../security/paths';
 import type { DirEntry, DirListing, FilePreview } from '../../shared/types';
 
@@ -24,22 +24,40 @@ const IMG_MIME: Record<string, string> = {
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.bmp': 'image/bmp',
 };
 
+/** Realpath of `p`, or — if it does not exist yet — of its nearest existing
+ * ancestor with the missing tail re-appended. A write to a not-yet-existing
+ * file still lands wherever its (possibly symlinked) parent points. */
+function realpathOrAncestor(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    const parent = dirname(p);
+    if (parent === p) return p;
+    return join(realpathOrAncestor(parent), basename(p));
+  }
+}
+
 /** Confirm `rel` stays inside `root` even after resolving symlinks. */
 function safeAbs(root: string, rel: string): string {
   const lexical = resolveWithinRoot(root, rel);
   if (!lexical) throw new Error('path escapes the project root');
-  let real: string;
-  try {
-    real = realpathSync(lexical);
-  } catch {
-    return lexical; // does not exist yet — lexical check already passed
-  }
-  const realRoot = realpathSync(root);
-  const r = relative(realRoot, real);
-  if (r !== '' && (r === '..' || r.startsWith('..' + sep))) {
+  const real = realpathOrAncestor(lexical);
+  const r = relative(realpathSync(root), real);
+  if (r === '..' || r.startsWith('..' + sep)) {
     throw new Error('path escapes the project root (symlink)');
   }
   return real;
+}
+
+/** First `max` bytes of a file — never loads a huge file whole. */
+function readHead(abs: string, max: number): Buffer {
+  const fd = openSync(abs, 'r');
+  try {
+    const buf = Buffer.alloc(max);
+    return buf.subarray(0, readSync(fd, buf, 0, max, 0));
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export function contextFiles(root: string): string[] {
@@ -82,22 +100,33 @@ export function readFilePreview(root: string, rel: string): FilePreview {
     return { kind: 'pdf', name, dataUri: `data:application/pdf;base64,${readFileSync(abs).toString('base64')}` };
   }
   if (TEXT_EXT.has(ext) || ext === '') {
-    const buf = readFileSync(abs, { encoding: 'utf8' });
-    const truncated = Buffer.byteLength(buf) > MAX_PREVIEW_BYTES;
-    return { kind: 'text', name, text: truncated ? buf.slice(0, MAX_PREVIEW_BYTES) : buf, truncated };
+    const truncated = st.size > MAX_PREVIEW_BYTES;
+    return { kind: 'text', name, text: readHead(abs, MAX_PREVIEW_BYTES).toString('utf8'), truncated };
   }
   return { kind: 'unsupported', name, size: st.size };
 }
 
-/** Current text of a file for checkpointing; null if it does not exist yet. */
+const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Current text of a file for checkpointing; null if it does not exist yet.
+ * Throws for a file that cannot round-trip as text (binary or huge) — writing
+ * it back as UTF-8 would corrupt it, so no checkpoint is better than a bad one.
+ */
 export function snapshotFile(root: string, rel: string): string | null {
   const abs = safeAbs(root, rel);
+  let st;
   try {
-    if (!statSync(abs).isFile()) return null;
-    return readFileSync(abs, 'utf8');
+    st = statSync(abs);
   } catch {
     return null;
   }
+  if (!st.isFile()) throw new Error('not a file');
+  if (st.size > MAX_SNAPSHOT_BYTES) throw new Error('file too large to checkpoint');
+  const buf = readFileSync(abs);
+  const text = buf.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(buf)) throw new Error('binary file — cannot checkpoint as text');
+  return text;
 }
 
 /**

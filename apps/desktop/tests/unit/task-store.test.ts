@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TaskStore } from '@main/store/task-store';
@@ -56,5 +57,20 @@ describe('TaskStore', () => {
   it('survives a corrupt file', () => {
     writeFileSync(file, 'not json');
     expect(new TaskStore(file).list()).toEqual([]);
+  });
+
+  it('moves a corrupt file aside instead of letting the next write destroy it', () => {
+    writeFileSync(file, '{ not json');
+    new TaskStore(file).create(input);
+    expect(readdirSync(dirname(file)).some((f) => f.startsWith('tasks.json.corrupt-'))).toBe(true);
+  });
+
+  it('ignores fields outside the whitelist on create and update (no mass assignment)', () => {
+    const store = new TaskStore(file);
+    const t = store.create({ ...input, id: 'forged', approved: true } as typeof input);
+    expect(t.id).not.toBe('forged');
+    expect(t.approved).toBe(false);
+    store.update(t.id, { status: 'done', cwd: '/' } as never);
+    expect(store.get(t.id)).toMatchObject({ status: 'done', cwd: '/w' });
   });
 });

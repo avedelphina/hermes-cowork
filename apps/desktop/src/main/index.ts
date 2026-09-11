@@ -1,6 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { findHermesBinary, verifyHermesVersion } from './orchestrator/hermes-runtime';
 import { resolveHermesHomes } from './orchestrator/hermes-home';
 import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
@@ -24,7 +25,7 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       nodeIntegration: false,
     },
   });
@@ -42,8 +43,8 @@ function createWindow() {
     return { action: 'deny' };
   });
   // Block any real navigation away from the app itself (routing is pushState).
+  const appUrl = process.env['ELECTRON_RENDERER_URL'] ?? pathToFileURL(join(__dirname, '../renderer/index.html')).href;
   win.webContents.on('will-navigate', (e, url) => {
-    const appUrl = process.env['ELECTRON_RENDERER_URL'] ?? 'file://';
     if (!url.startsWith(appUrl)) e.preventDefault();
   });
 
@@ -57,6 +58,9 @@ function createWindow() {
 const supervisor = new AcpSupervisor();
 
 void app.whenReady().then(async () => {
+  // The app needs no camera, mic, geolocation, notifications-via-web, etc.
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+
   const found = findHermesBinary();
   const homes = resolveHermesHomes();
   let hermesBinary = '';

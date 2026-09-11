@@ -5,7 +5,7 @@
 // resume via session/load. Unlike a task, a chat has no working folder, so
 // there is nothing here to path-validate. Stored as plain JSON under userData.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
 import type { ChatSession } from '../../shared/types';
 export type { ChatSession };
@@ -21,24 +21,17 @@ export class ChatSessionStore {
   }
 
   private read(): Data {
-    try {
-      if (existsSync(this.filePath)) {
-        const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<Data>;
-        const chats = (Array.isArray(parsed.chats) ? parsed.chats : []).map((c) => ({
-          ...c,
-          title: c.title ?? null,
-          projectId: c.projectId ?? null,
-        }));
-        return { chats };
-      }
-    } catch {
-      // corrupt — start clean
-    }
-    return { chats: [] };
+    const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
+    const chats = (Array.isArray(parsed.chats) ? parsed.chats : []).map((c) => ({
+      ...c,
+      title: c.title ?? null,
+      projectId: c.projectId ?? null,
+    }));
+    return { chats };
   }
 
   private write(): void {
-    writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+    writeJsonAtomic(this.filePath, this.data);
   }
 
   /** Most-recent first. */
@@ -68,7 +61,7 @@ export class ChatSessionStore {
   update(id: string, patch: Partial<Pick<ChatSession, 'title' | 'projectId'>>): ChatSession | null {
     const chat = this.get(id);
     if (!chat) return null;
-    Object.assign(chat, patch, { updatedAt: new Date().toISOString() });
+    Object.assign(chat, pick(patch, ['title', 'projectId'] as const), { updatedAt: new Date().toISOString() });
     this.write();
     return chat;
   }

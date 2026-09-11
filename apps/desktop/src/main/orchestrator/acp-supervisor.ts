@@ -79,14 +79,23 @@ export class AcpSupervisor extends EventEmitter {
    * Send a tracked JSON-RPC request and resolve when the matching response
    * arrives. Rejects if the child exits or errors before a response arrives.
    */
-  request(sessionId: string, method: string, params?: unknown): Promise<unknown> {
+  request(sessionId: string, method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
     const child = this.children.get(sessionId);
     if (!child || !child.proc.stdin) {
       return Promise.reject(new Error(`no ACP child for session ${sessionId}`));
     }
     const id = randomUUID();
     return new Promise<unknown>((resolve, reject) => {
-      child.pending.set(id, { resolve, reject });
+      const timer = timeoutMs
+        ? setTimeout(() => {
+            child.pending.delete(id);
+            reject(new Error(`ACP ${method} timed out after ${timeoutMs / 1000}s`));
+          }, timeoutMs)
+        : undefined;
+      child.pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
       child.proc.stdin!.write(encodeFrame({ jsonrpc: '2.0', id, method, params: params as JsonRpcMessage }));
     });
   }

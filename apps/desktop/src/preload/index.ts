@@ -69,10 +69,12 @@ const api = {
   fs: {
     list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
     read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
+    checkpoint: (taskId: string, rel: string): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.FsCheckpoint, taskId, rel),
     snapshot: (taskId: string, rel: string): Promise<string | null> =>
       ipcRenderer.invoke(IpcChannel.FsSnapshot, taskId, rel),
-    revert: (taskId: string, rel: string, content: string | null): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel, content),
+    revert: (taskId: string, rel: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel),
   },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),

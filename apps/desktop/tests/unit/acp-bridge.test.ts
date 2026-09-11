@@ -10,7 +10,7 @@ vi.mock('node:child_process', async () => {
 });
 
 import { AcpSupervisor } from '@main/orchestrator/acp-supervisor';
-import { AcpBridge } from '@main/orchestrator/acp-bridge';
+import { AcpBridge, permissionOutcome } from '@main/orchestrator/acp-bridge';
 import { encodeFrame } from '@main/orchestrator/jsonrpc';
 import type { AcpServerMessage } from '@shared/types';
 
@@ -235,7 +235,7 @@ describe('AcpBridge.respondToPermission', () => {
 
     // User clicks "allow" — bridge picks allow_once and responds with that optionId.
     proc.written.length = 0; // clear pre-existing handshake messages from inspection
-    bridge.respondToPermission('tc-abc', true);
+    bridge.respondToPermission('sess-1', 'tc-abc', true);
     expect(proc.written).toHaveLength(1);
     expect(proc.written[0]).toEqual({
       jsonrpc: '2.0',
@@ -244,31 +244,55 @@ describe('AcpBridge.respondToPermission', () => {
     });
   });
 
-  it('sends cancelled outcome on deny (no optionId required)', async () => {
+  it('deny selects reject_once when offered, else cancelled', () => {
+    expect(permissionOutcome([
+      { optionId: 'a', name: 'allow', kind: 'allow_once' },
+      { optionId: 'r', name: 'deny', kind: 'reject_once' },
+    ], false)).toEqual({ outcome: { outcome: 'selected', optionId: 'r' } });
+    expect(permissionOutcome([{ optionId: 'a', name: 'allow', kind: 'allow_once' }], false))
+      .toEqual({ outcome: { outcome: 'cancelled' } });
+  });
+
+  it('never grants allow_always — denies when allow_once is not offered', () => {
+    expect(permissionOutcome([
+      { optionId: 'aa', name: 'always', kind: 'allow_always' },
+      { optionId: 'r', name: 'deny', kind: 'reject_once' },
+    ], true)).toEqual({ outcome: { outcome: 'selected', optionId: 'r' } });
+    expect(permissionOutcome([{ optionId: 'aa', name: 'always', kind: 'allow_always' }], true))
+      .toEqual({ outcome: { outcome: 'cancelled' } });
+  });
+
+  it('keys pending approvals by session — same toolCallId in another session is untouched', async () => {
     const { bridge, proc } = makeBridge();
-    bridge['pendingPermissions'].set('tc-x', {
-      handle: 'h-1', requestId: 99,
-      options: [{ optionId: 'o', name: 'allow', kind: 'allow_once' }],
-    });
-    bridge['acpToHandle'].set('sess-1', 'h-1');
-    // Need a child for sup.send to find.
-    bridge['sup'].spawn({
-      id: 'h-1', profile: 'default', cwd: '/tmp',
+    const startPromise = bridge.startSession({
+      profile: 'default', cwd: '/tmp',
       binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
     });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'sess-1' } }));
+    await startPromise;
+    const opts = [{ optionId: 'o', name: 'allow', kind: 'allow_once' }];
+    for (const [id, sid] of [['p1', 'sess-1'], ['p2', 'sess-2']] as const) {
+      proc.stdout!.push(encodeFrame({
+        jsonrpc: '2.0', id, method: 'session/request_permission',
+        params: { sessionId: sid, toolCall: { toolCallId: 'tc-1' }, options: opts },
+      }));
+    }
+    await flush();
+    proc.written.length = 0;
 
-    bridge.respondToPermission('tc-x', false);
-
-    expect(proc.written.at(-1)).toEqual({
-      jsonrpc: '2.0',
-      id: 99,
-      result: { outcome: { outcome: 'cancelled' } },
-    });
+    // Stopping sess-1 answers only its own approval.
+    bridge.stopSession('sess-1');
+    expect(proc.written).toEqual([{ jsonrpc: '2.0', id: 'p1', result: { outcome: { outcome: 'cancelled' } } }]);
+    bridge.respondToPermission('sess-2', 'tc-1', true);
+    expect(proc.written.at(-1)).toEqual({ jsonrpc: '2.0', id: 'p2', result: { outcome: { outcome: 'selected', optionId: 'o' } } });
   });
 
   it('silently no-ops when responding to a toolCallId that is not pending', () => {
     const { bridge, proc } = makeBridge();
-    bridge.respondToPermission('does-not-exist', true);
+    bridge.respondToPermission('sess-1', 'does-not-exist', true);
     expect(proc.written).toEqual([]);
   });
 });
