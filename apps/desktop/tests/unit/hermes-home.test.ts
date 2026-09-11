@@ -4,7 +4,10 @@ import { resolveHermesHomes, profileHome, isValidProfileName } from '@main/orche
 
 describe('resolveHermesHomes', () => {
   it('defaults to ~/.hermes when HERMES_HOME is unset', () => {
-    const r = resolveHermesHomes(undefined);
+    // '' not undefined: an explicit undefined falls back to the default
+    // parameter (the real process.env.HERMES_HOME), which made this test
+    // depend on the machine running it.
+    const r = resolveHermesHomes('');
     expect(r.global.endsWith('/.hermes')).toBe(true);
     expect(r.envProfile).toBeNull();
   });
