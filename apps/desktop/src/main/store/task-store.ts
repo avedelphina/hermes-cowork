@@ -5,7 +5,7 @@
 // session/load, so we persist only what Hermes does not know: the goal, the
 // project/profile/folder it ran in, and the plan-approval state.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
 import type { CoworkTask, TaskStatus } from '../../shared/types';
 export type { CoworkTask, TaskStatus };
@@ -32,23 +32,16 @@ export class TaskStore {
   }
 
   private read(): Data {
-    try {
-      if (existsSync(this.filePath)) {
-        const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<Data>;
-        const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) => {
-          const migrated = { ...t, parentTaskId: t.parentTaskId ?? null };
-          return LIVE.includes(migrated.status) ? { ...migrated, status: 'interrupted' as const } : migrated;
-        });
-        return { tasks };
-      }
-    } catch {
-      // corrupt — start clean
-    }
-    return { tasks: [] };
+    const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
+    const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) => {
+      const migrated = { ...t, parentTaskId: t.parentTaskId ?? null };
+      return LIVE.includes(migrated.status) ? { ...migrated, status: 'interrupted' as const } : migrated;
+    });
+    return { tasks };
   }
 
   private write(): void {
-    writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+    writeJsonAtomic(this.filePath, this.data);
   }
 
   /** Most-recent first. */
@@ -63,13 +56,17 @@ export class TaskStore {
   create(input: CreateInput): CoworkTask {
     const now = new Date().toISOString();
     const task: CoworkTask = {
+      goal: input.goal,
+      cwd: input.cwd,
+      profile: input.profile,
+      acpSessionId: input.acpSessionId,
+      projectId: input.projectId,
+      parentTaskId: input.parentTaskId ?? null,
       id: randomUUID(),
       status: 'planning',
       approved: false,
       createdAt: now,
       updatedAt: now,
-      ...input,
-      parentTaskId: input.parentTaskId ?? null,
     };
     this.data.tasks.push(task);
     this.write();
@@ -79,7 +76,7 @@ export class TaskStore {
   update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved'>>): CoworkTask | null {
     const task = this.get(id);
     if (!task) return null;
-    Object.assign(task, patch, { updatedAt: new Date().toISOString() });
+    Object.assign(task, pick(patch, ['status', 'approved'] as const), { updatedAt: new Date().toISOString() });
     this.write();
     return task;
   }

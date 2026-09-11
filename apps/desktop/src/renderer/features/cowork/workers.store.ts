@@ -59,10 +59,17 @@ export const useWorkersStore = create<WorkersStore>((set, get) => {
     const w = get().workers.find((x) => x.id === id);
     if (!w || w.status !== 'queued') return;
     const { cwd, taskId } = useCoworkStore.getState();
-    if (!cwd) return;
+    if (!cwd) {
+      set((s) => ({
+        workers: s.workers.map((x) => (x.id === id ? { ...x, status: 'failed' as const, output: '⚠️ No active task folder.' } : x)),
+      }));
+      pump();
+      return;
+    }
 
+    let sessionId: string | null = null;
     try {
-      const { sessionId } = await window.hermes.acp.start({ profile: w.profile, cwd, isolate: true });
+      ({ sessionId } = await window.hermes.acp.start({ profile: w.profile, cwd, isolate: true }));
       const task = await window.hermes.tasks.create({
         goal: w.goal, cwd, profile: w.profile, acpSessionId: sessionId,
         projectId: null, parentTaskId: taskId,
@@ -92,6 +99,7 @@ export const useWorkersStore = create<WorkersStore>((set, get) => {
       const ms = get().policy.timeoutSec * 1000;
       timers.set(task.id, setTimeout(() => get().stop(task.id), ms));
     } catch (err) {
+      if (sessionId) void window.hermes.acp.stop(sessionId); // no orphaned child
       set((s) => ({
         workers: s.workers.map((x) =>
           x.id === id ? { ...x, status: 'failed' as const, output: `⚠️ ${String(err)}` } : x,

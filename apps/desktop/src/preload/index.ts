@@ -69,14 +69,16 @@ const api = {
   fs: {
     list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
     read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
+    checkpoint: (taskId: string, rel: string): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.FsCheckpoint, taskId, rel),
     snapshot: (taskId: string, rel: string): Promise<string | null> =>
       ipcRenderer.invoke(IpcChannel.FsSnapshot, taskId, rel),
-    revert: (taskId: string, rel: string, content: string | null): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel, content),
+    revert: (taskId: string, rel: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel),
   },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
-    create: (input: { acpSessionId: string; projectId: string | null; title: string | null }): Promise<ChatSession> =>
+    create: (input: { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null }): Promise<ChatSession> =>
       ipcRenderer.invoke(IpcChannel.ChatCreate, input),
     update: (id: string, patch: { title?: string | null; projectId?: string | null }): Promise<ChatSession | null> =>
       ipcRenderer.invoke(IpcChannel.ChatUpdate, id, patch),

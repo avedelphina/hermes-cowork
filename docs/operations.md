@@ -5,9 +5,10 @@
 - macOS 13+ (Apple Silicon).
 - Hermes Agent ≥ 0.20.0 on `$PATH` (`hermes --version`). ACP is verified
   against 0.20.6 — see `docs/acp-notes.md`.
-- The app talks to a `hermes dashboard` on `127.0.0.1:9119`. It reuses one that
-  is already running; otherwise it starts its own and kills only that one on
-  quit.
+- The app always starts its own `hermes dashboard` on `127.0.0.1` (port 9119,
+  or an OS-assigned free port if 9119 is taken) against the global
+  `HERMES_HOME`, and kills only that one on quit. A dashboard you started
+  yourself is left alone.
 
 ## First run
 

@@ -73,6 +73,7 @@ test('cowork: propose plan → approve → execute', async () => {
   // The edit is checkpointed — the Changes tab lists it and can revert it.
   await win.getByRole('button', { name: 'Changes', exact: true }).click();
   await expect(win.getByText('new file')).toBeVisible();
+  win.once('dialog', (d) => void d.accept()); // revert asks for confirmation
   await win.getByRole('button', { name: 'Revert', exact: true }).click();
   await expect
     .poll(() => existsSync(path.join(work, 'hello.txt')), { timeout: 15_000 })

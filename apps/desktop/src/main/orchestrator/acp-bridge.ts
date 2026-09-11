@@ -22,6 +22,14 @@ import type { AcpServerMessage, AcpModels, AcpModelInfo } from '../../shared/typ
 import { translateAcpEvent } from './acp-translator';
 
 const ACP_PROTOCOL_VERSION = 1;
+const INITIALIZE_PARAMS = {
+  protocolVersion: ACP_PROTOCOL_VERSION,
+  clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+  clientInfo: { name: 'hermes-cowork-desktop', version: '0.2.0' },
+};
+/** Ceiling for control requests (handshake, session/new|load, set_mode|model).
+ * session/prompt is unbounded — a turn legitimately runs for minutes. */
+const CONTROL_TIMEOUT_MS = 120_000;
 
 type StartSessionOpts = {
   profile: string;
@@ -42,6 +50,7 @@ type PermissionOption = {
 };
 
 type PendingPermission = {
+  sessionId: string;
   handle: string;
   requestId: string | number;
   options: PermissionOption[];
@@ -82,6 +91,9 @@ export class AcpBridge extends EventEmitter {
   private conns = new Map<string, Conn>();
   /** Handles spawned for a single isolated session — safe to hard-kill. */
   private isolatedHandles = new Set<string>();
+  /** Sessions mid-`session/load` → handle. Their replay frames arrive before
+   * the load response binds them, so ownership must already hold. */
+  private loading = new Map<string, string>();
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -114,7 +126,7 @@ export class AcpBridge extends EventEmitter {
       const res = (await this.sup.request(handle, 'session/new', {
         cwd: opts.cwd,
         mcpServers: [],
-      })) as { sessionId?: string; models?: unknown };
+      }, CONTROL_TIMEOUT_MS)) as { sessionId?: string; models?: unknown };
       if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
       this.bindSession(res.sessionId, handle);
       const models = normalizeModels(res.models);
@@ -133,7 +145,7 @@ export class AcpBridge extends EventEmitter {
   async setMode(sessionId: string, modeId: string): Promise<void> {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
-    await this.sup.request(handle, 'session/set_mode', { sessionId, modeId });
+    await this.sup.request(handle, 'session/set_mode', { sessionId, modeId }, CONTROL_TIMEOUT_MS);
   }
 
   /** Cached model state for a session, or null if we never saw session/new for it. */
@@ -145,7 +157,7 @@ export class AcpBridge extends EventEmitter {
   async setModel(sessionId: string, modelId: string): Promise<void> {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
-    await this.sup.request(handle, 'session/set_model', { sessionId, modelId });
+    await this.sup.request(handle, 'session/set_model', { sessionId, modelId }, CONTROL_TIMEOUT_MS);
     const cur = this.modelsBySession.get(sessionId);
     if (cur) this.modelsBySession.set(sessionId, { ...cur, currentModelId: modelId });
   }
@@ -160,11 +172,13 @@ export class AcpBridge extends EventEmitter {
       binaryPath: opts.binaryPath,
       hermesHome: opts.hermesHome,
     });
-    await this.sup.request(handle, 'initialize', {
-      protocolVersion: ACP_PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.1' },
-    });
+    try {
+      await this.sup.request(handle, 'initialize', INITIALIZE_PARAMS, CONTROL_TIMEOUT_MS);
+    } catch (err) {
+      this.isolatedHandles.delete(handle);
+      this.sup.shutdown(handle);
+      throw err;
+    }
     return handle;
   }
 
@@ -175,12 +189,13 @@ export class AcpBridge extends EventEmitter {
    */
   async loadSession(opts: StartSessionOpts & { sessionId: string }): Promise<{ sessionId: string }> {
     const handle = opts.isolate ? await this.spawnDedicated(opts) : await this.connFor(opts);
+    this.loading.set(opts.sessionId, handle);
     try {
       const res = (await this.sup.request(handle, 'session/load', {
         sessionId: opts.sessionId,
         cwd: opts.cwd,
         mcpServers: [],
-      })) as { models?: unknown } | null;
+      }, CONTROL_TIMEOUT_MS)) as { models?: unknown } | null;
       this.bindSession(opts.sessionId, handle);
       const models = normalizeModels(res?.models);
       if (models) this.modelsBySession.set(opts.sessionId, models);
@@ -191,6 +206,8 @@ export class AcpBridge extends EventEmitter {
         this.sup.shutdown(handle);
       }
       throw err;
+    } finally {
+      if (this.loading.get(opts.sessionId) === handle) this.loading.delete(opts.sessionId);
     }
   }
 
@@ -208,14 +225,7 @@ export class AcpBridge extends EventEmitter {
         hermesHome: opts.hermesHome,
       });
       const ready = this.sup
-        .request(handle, 'initialize', {
-          protocolVersion: ACP_PROTOCOL_VERSION,
-          clientCapabilities: {
-            fs: { readTextFile: false, writeTextFile: false },
-            terminal: false,
-          },
-          clientInfo: { name: 'hermes-cowork-desktop', version: '0.1.1' },
-        })
+        .request(handle, 'initialize', INITIALIZE_PARAMS, CONTROL_TIMEOUT_MS)
         .then(() => undefined)
         .catch((err) => {
           // Bad handshake — drop the dead conn so the next call respawns.
@@ -251,20 +261,20 @@ export class AcpBridge extends EventEmitter {
   }
 
   /**
-   * Reply to the most-recent pending session/request_permission for this
-   * tool call. Quietly no-ops if there's no pending request (e.g. the user
-   * clicks the button twice or after the agent moved on).
+   * Reply to the pending session/request_permission for this session's tool
+   * call. Quietly no-ops if there's no pending request (e.g. the user clicks
+   * the button twice or after the agent moved on).
    */
-  respondToPermission(toolCallId: string, allow: boolean): void {
-    const pending = this.pendingPermissions.get(toolCallId);
+  respondToPermission(sessionId: string, toolCallId: string, allow: boolean): void {
+    const key = permKey(sessionId, toolCallId);
+    const pending = this.pendingPermissions.get(key);
     if (!pending) return;
-    this.pendingPermissions.delete(toolCallId);
-
-    const result = allow
-      ? { outcome: { outcome: 'selected', optionId: pickAllowOptionId(pending.options) } }
-      : { outcome: { outcome: 'cancelled' } };
-
-    this.sup.send(pending.handle, { jsonrpc: '2.0', id: pending.requestId, result });
+    this.pendingPermissions.delete(key);
+    // Only ever answer for a session this app opened, on the child serving it.
+    if (!this.owns(pending.handle, sessionId)) return;
+    this.sup.send(pending.handle, {
+      jsonrpc: '2.0', id: pending.requestId, result: permissionOutcome(pending.options, allow),
+    });
   }
 
   /**
@@ -277,8 +287,16 @@ export class AcpBridge extends EventEmitter {
     if (!handle) return;
     this.acpToHandle.delete(sessionId);
     this.modelsBySession.delete(sessionId);
-    for (const [tcId, p] of this.pendingPermissions) {
-      if (p.handle === handle) this.pendingPermissions.delete(tcId);
+    // Answer this session's open approvals so a pooled child is not left
+    // waiting on them forever. Other sessions on the same child are untouched.
+    for (const [key, p] of this.pendingPermissions) {
+      if (p.sessionId !== sessionId) continue;
+      this.pendingPermissions.delete(key);
+      try {
+        this.sup.send(p.handle, { jsonrpc: '2.0', id: p.requestId, result: { outcome: { outcome: 'cancelled' } } });
+      } catch {
+        // child already gone
+      }
     }
     if (this.isolatedHandles.has(handle)) {
       this.isolatedHandles.delete(handle);
@@ -291,33 +309,30 @@ export class AcpBridge extends EventEmitter {
     this.acpToHandle.clear();
     this.modelsBySession.clear();
     this.pendingPermissions.clear();
+    this.loading.clear();
     this.conns.clear();
     this.isolatedHandles.clear();
     this.sup.shutdownAll();
   }
 
-  /** The single ACP session an isolated child owns, or undefined if unmapped. */
-  private ownedSessionFor(handle: string): string | undefined {
-    for (const [sessionId, h] of this.acpToHandle) {
-      if (h === handle) return sessionId;
-    }
-    return undefined;
+  /** True when `sessionId` was opened (or is being loaded) by this app on `handle`. */
+  private owns(handle: string, sessionId: string): boolean {
+    return this.acpToHandle.get(sessionId) === handle || this.loading.get(sessionId) === handle;
   }
 
   private onSupervisorEvent = (event: AcpEvent): void => {
-    // An isolated child serves exactly one ACP session. Hermes broadcasts
-    // session/update for every session sharing the HERMES_HOME — gateway
-    // conversations (Delta Chat, Telegram, …) included — down every connected
-    // ACP client, so a live turn from an unrelated session streams in here
-    // too. Only surface a session-scoped frame whose sessionId is an exact
-    // match for the one session this child owns; drop foreign and unlabelled.
-    if (event.kind === 'message' && this.isolatedHandles.has(event.sessionId)) {
+    // Hermes broadcasts session-scoped frames for every session sharing the
+    // HERMES_HOME — gateway conversations (Delta Chat, Telegram, …) and other
+    // ACP clients included — down every connected ACP client, pooled or
+    // isolated. Only a session this app opened (or is loading) on this very
+    // child may reach the renderer or have its permission request answered;
+    // foreign and unlabelled frames are dropped, never stored or forwarded.
+    if (event.kind === 'message') {
       const method = event.msg['method'];
       if (method === 'session/update' || method === 'session/request_permission') {
-        const owned = this.ownedSessionFor(event.sessionId);
         const params = event.msg['params'] as Record<string, unknown> | undefined;
-        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : undefined;
-        if (owned && frameSid !== owned) return;
+        const frameSid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : '';
+        if (!frameSid || !this.owns(event.sessionId, frameSid)) return;
       }
     }
 
@@ -332,8 +347,10 @@ export class AcpBridge extends EventEmitter {
         const options = Array.isArray(params?.['options'])
           ? (params!['options'] as PermissionOption[])
           : [];
+        const sid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : '';
         if (toolCallId && (typeof id === 'string' || typeof id === 'number')) {
-          this.pendingPermissions.set(toolCallId, {
+          this.pendingPermissions.set(permKey(sid, toolCallId), {
+            sessionId: sid,
             handle: event.sessionId,
             requestId: id,
             options,
@@ -371,13 +388,20 @@ export class AcpBridge extends EventEmitter {
   };
 }
 
+const permKey = (sessionId: string, toolCallId: string) => `${sessionId}\0${toolCallId}`;
+
 /**
- * Map our binary `allow: boolean` to a real ACP optionId. The agent decides
- * the menu of options; we prefer "allow_once" so we never accidentally grant
- * persistent permission on the user's behalf.
+ * Map our binary `allow: boolean` to an ACP outcome. Allow only ever selects
+ * "allow_once" — if the agent offers no such option we deny rather than grant
+ * persistent permission on the user's behalf. Deny selects "reject_once" (the
+ * tool call is refused, the turn continues); `cancelled` is the fallback when
+ * the agent offers no reject option.
  */
-function pickAllowOptionId(options: PermissionOption[]): string {
+export function permissionOutcome(options: PermissionOption[], allow: boolean): { outcome: Record<string, string> } {
   const byKind = (k: PermissionOptionKind) => options.find((o) => o?.kind === k);
-  const choice = byKind('allow_once') ?? byKind('allow_always') ?? options[0];
-  return choice?.optionId ?? '';
+  const choice = allow ? byKind('allow_once') : undefined;
+  const pick = choice ?? byKind('reject_once');
+  return pick
+    ? { outcome: { outcome: 'selected', optionId: pick.optionId } }
+    : { outcome: { outcome: 'cancelled' } };
 }

@@ -60,10 +60,18 @@ export function ProfileDropdown() {
             <button
               key={p.name}
               onClick={() => {
+                if (p.active) { setOpen(false); return; }
+                // Switching restarts every Hermes connection — running Cowork
+                // tasks and workers are stopped (they can be resumed later).
+                if (!window.confirm(`Switch to profile "${p.name}"? Running tasks and chats will be stopped.`)) return;
                 void (async () => {
-                  await window.hermes.profile.switch(p.name);
-                  setOpen(false);
-                  location.reload();
+                  try {
+                    await window.hermes.profile.switch(p.name);
+                    setOpen(false);
+                    location.reload();
+                  } catch (e) {
+                    window.alert(`Could not switch profile: ${String(e)}`);
+                  }
                 })();
               }}
               className={

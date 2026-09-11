@@ -60,8 +60,8 @@ What's in:
 - [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
   ≥ 0.20.0 on `$PATH` (ACP verified against 0.20.6 — see
   [`docs/acp-notes.md`](docs/acp-notes.md))
-- A running `hermes dashboard` on `127.0.0.1:9119` (the app reuses one or starts
-  its own; it only kills a dashboard it started)
+- Nothing else to run — the app starts its own `hermes dashboard` on loopback
+  (port 9119, or a free port if that is taken) and stops it on quit
 
 ## Install
 
@@ -73,12 +73,13 @@ workaround needed.
 
 ## Develop
 
-Requires **Node 20** (see `.nvmrc`) and **pnpm 10** (pinned via `packageManager`;
-run `corepack enable` once so the right version is selected automatically).
+Requires **Node 22.12+** (see `.nvmrc`; Electron 44 needs it) and **pnpm 10**
+(pinned via `packageManager`; run `corepack enable` once so the right version
+is selected automatically).
 
 ```bash
 corepack enable        # first time only — activates the pinned pnpm
-nvm use                # or otherwise select Node 20
+nvm use                # or otherwise select Node 22
 pnpm install           # electron/esbuild binaries download via approved postinstall
 pnpm dev
 ```

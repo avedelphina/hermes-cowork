@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync, lstatSync, statSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -81,5 +82,71 @@ describe('snapshotFile / revertFile', () => {
   it('snapshot and revert reject a traversal path', () => {
     expect(() => snapshotFile(root, '../x')).toThrow(/escapes/);
     expect(() => revertFile(root, '../../etc/x', 'no')).toThrow(/escapes/);
+  });
+
+  it('revert refuses a new file under a symlinked parent that points outside', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'pfs-out-'));
+    symlinkSync(outside, join(root, 'link'));
+    expect(() => revertFile(root, 'link/planted.txt', 'x')).toThrow(/escapes/);
+    expect(existsSync(join(outside, 'planted.txt'))).toBe(false);
+  });
+
+  it('snapshot refuses a binary file rather than checkpoint it lossily', () => {
+    writeFileSync(join(root, 'img.dat'), Buffer.from([0xff, 0xfe, 0x00, 0x80]));
+    expect(() => snapshotFile(root, 'img.dat')).toThrow(/binary/);
+  });
+});
+
+describe('readFilePreview truncation', () => {
+  it('reads only the head of a large text file', () => {
+    writeFileSync(join(root, 'big.txt'), 'a'.repeat(3 * 1024 * 1024));
+    const p = readFilePreview(root, 'big.txt');
+    expect(p.kind === 'text' && p.truncated && p.text.length === 2 * 1024 * 1024).toBe(true);
+  });
+});
+
+// A swapped-in symlink at use time is the TOCTOU the pinned-directory,
+// no-follow operations close: whatever sits at the path when revert runs,
+// nothing outside the root is written, deleted or read.
+describe('symlink swap at use time', () => {
+  let outside: string;
+  beforeEach(() => {
+    outside = mkdtempSync(join(tmpdir(), 'pfs-victim-'));
+    writeFileSync(join(outside, 'victim.txt'), 'precious\n');
+  });
+
+  it('revert write replaces a symlinked target instead of writing through it', () => {
+    symlinkSync(join(outside, 'victim.txt'), join(root, 'a.txt'));
+    revertFile(root, 'a.txt', 'restored\n');
+    expect(readFileSync(join(outside, 'victim.txt'), 'utf8')).toBe('precious\n');
+    expect(lstatSync(join(root, 'a.txt')).isSymbolicLink()).toBe(false);
+    expect(readFileSync(join(root, 'a.txt'), 'utf8')).toBe('restored\n');
+  });
+
+  it('revert delete removes only the link, never its target', () => {
+    symlinkSync(join(outside, 'victim.txt'), join(root, 'new.txt'));
+    revertFile(root, 'new.txt', null);
+    expect(existsSync(join(root, 'new.txt'))).toBe(false);
+    expect(readFileSync(join(outside, 'victim.txt'), 'utf8')).toBe('precious\n');
+  });
+
+  it('reads refuse a link that leaves the root but follow one that stays inside', () => {
+    symlinkSync(join(outside, 'victim.txt'), join(root, 'out.txt'));
+    expect(() => snapshotFile(root, 'out.txt')).toThrow(/escapes/);
+    expect(() => readFilePreview(root, 'out.txt')).toThrow(/escapes/);
+    symlinkSync(join(root, 'src', 'a.ts'), join(root, 'in.ts'));
+    expect(snapshotFile(root, 'in.ts')).toContain('export const a');
+  });
+
+  it('a FIFO planted at the path fails fast instead of hanging main', () => {
+    execFileSync('mkfifo', [join(root, 'pipe.txt')]);
+    expect(() => readFilePreview(root, 'pipe.txt')).toThrow(/not a file/);
+  });
+
+  it('revert keeps the file mode (an executable stays executable)', () => {
+    writeFileSync(join(root, 'run.sh'), 'old\n');
+    chmodSync(join(root, 'run.sh'), 0o755);
+    revertFile(root, 'run.sh', 'new\n');
+    expect(statSync(join(root, 'run.sh')).mode & 0o777).toBe(0o755);
   });
 });

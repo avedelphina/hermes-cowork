@@ -55,8 +55,9 @@ export const IpcChannel = {
   // project filesystem (scoped to a project root)
   FsList: 'fs:list',
   FsRead: 'fs:read',
-  FsSnapshot: 'fs:snapshot', // capture current text for a checkpoint
-  FsRevert: 'fs:revert',     // restore checkpointed text (guarded write)
+  FsCheckpoint: 'fs:checkpoint', // pre-edit text held in main (taken once per task+file)
+  FsSnapshot: 'fs:snapshot',     // current text of a task file (for the diff)
+  FsRevert: 'fs:revert',         // restore the main-held checkpoint (guarded write)
 } as const;
 
 export type IpcChannelKey = (typeof IpcChannel)[keyof typeof IpcChannel];

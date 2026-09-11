@@ -3,7 +3,7 @@ import { GoalHeader } from './GoalHeader';
 import { Transcript } from './Transcript';
 import { Composer } from '../chat/Composer';
 import { RightPane } from './RightPane';
-import { useCoworkStore } from './cowork.store';
+import { useCoworkStore, syncAgentMode } from './cowork.store';
 import { useWorkersStore } from './workers.store';
 
 export function CoworkPage() {
@@ -28,9 +28,10 @@ export function CoworkPage() {
       s.clearKickoff();
       void window.hermes.acp.send({ kind: 'prompt', sessionId: s.sessionId, text: s.pendingKickoff });
     } else if (s.taskId && s.sessionId && s.transcript.length === 0) {
-      void window.hermes.acp.load({
-        sessionId: s.sessionId, profile: s.profile, cwd: s.cwd, isolate: true,
-      });
+      const sessionId = s.sessionId;
+      void window.hermes.acp.load({ sessionId, profile: s.profile, cwd: s.cwd, isolate: true })
+        .then(() => syncAgentMode(useCoworkStore.getState()))
+        .catch((e) => ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }));
     }
     return () => { off(); };
   }, [ingestAcp]);

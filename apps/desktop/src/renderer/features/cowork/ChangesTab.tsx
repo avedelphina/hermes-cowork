@@ -8,6 +8,7 @@ export function ChangesTab() {
   const dropCheckpoint = useCoworkStore((s) => s.dropCheckpoint);
   const [current, setCurrent] = useState<Record<string, string | null>>({});
   const [openRel, setOpenRel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -24,13 +25,21 @@ export function ChangesTab() {
 
   const revert = async (rel: string, before: string | null) => {
     if (!taskId) return;
-    await window.hermes.fs.revert(taskId, rel, before);
-    dropCheckpoint(rel);
-    setCurrent((m) => ({ ...m, [rel]: before }));
+    const what = before === null ? `Delete ${rel}? It did not exist before the agent's edit.` : `Restore ${rel} to its pre-edit content? Later changes to it are lost.`;
+    if (!window.confirm(what)) return;
+    try {
+      await window.hermes.fs.revert(taskId, rel);
+      dropCheckpoint(rel);
+      setCurrent((m) => ({ ...m, [rel]: before }));
+      setError(null);
+    } catch (e) {
+      setError(`Revert failed: ${String(e)}`);
+    }
   };
 
   return (
     <div className="flex flex-col gap-1 px-3 py-3 text-xs">
+      {error && <p className="text-danger">{error}</p>}
       {checkpoints.map((c) => {
         const cur = current[c.rel];
         const d = lineDiff(c.before ?? '', cur ?? '');

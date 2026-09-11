@@ -78,7 +78,9 @@ export async function ensureDashboard(opts: DashboardOptions): Promise<Dashboard
     ['dashboard', '--no-open', '--port', String(port), '--host', '127.0.0.1'],
     {
       env: { ...process.env, HERMES_HOME: opts.hermesHome },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // Never leave a pipe undrained: once its ~64 KB buffer fills, the
+      // dashboard blocks on its next log write and hangs.
+      stdio: ['ignore', 'ignore', 'inherit'],
     },
   );
 

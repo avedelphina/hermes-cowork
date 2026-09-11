@@ -44,7 +44,10 @@ test('chat: send → reply → persists → resumes', async () => {
   await composer.press('Meta+Enter');
 
   const transcript = win.locator('.flex-1.overflow-y-auto').last();
-  await expect(transcript).toContainText(/pong/i, { timeout: 120_000 });
+  // Two "pong"s: the echoed prompt contains the word too, so one match alone
+  // does not prove the agent replied.
+  const replied = /pong[\s\S]*pong/i;
+  await expect(transcript).toContainText(replied, { timeout: 120_000 });
 
   // The chat now shows in the SessionList, titled from the first message.
   const chatRow = win.locator('button', { hasText: /Reply with exactly the word/i });
@@ -54,7 +57,7 @@ test('chat: send → reply → persists → resumes', async () => {
   await win.getByRole('button', { name: /New chat/i }).click();
   await expect(transcript).toContainText(/Send a message to begin/i);
   await chatRow.click();
-  await expect(transcript).toContainText(/pong/i, { timeout: 60_000 });
+  await expect(transcript).toContainText(replied, { timeout: 60_000 });
 
   await app.close();
 
@@ -64,7 +67,7 @@ test('chat: send → reply → persists → resumes', async () => {
   const rowAgain = win.locator('button', { hasText: /Reply with exactly the word/i });
   await expect(rowAgain).toBeVisible({ timeout: 10_000 });
   await rowAgain.click();
-  await expect(win.locator('.flex-1.overflow-y-auto').last()).toContainText(/pong/i, { timeout: 60_000 });
+  await expect(win.locator('.flex-1.overflow-y-auto').last()).toContainText(replied, { timeout: 60_000 });
 
   await app.close();
 });

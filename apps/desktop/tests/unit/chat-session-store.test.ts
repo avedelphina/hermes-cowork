@@ -10,7 +10,7 @@ beforeEach(() => {
   file = join(mkdtempSync(join(tmpdir(), 'chat-')), 'chats.json');
 });
 
-const input = { acpSessionId: 's1', projectId: null, title: null };
+const input = { acpSessionId: 's1', projectId: null, title: null, profile: 'work' };
 
 describe('ChatSessionStore', () => {
   it('create persists a chat another instance can read', () => {
@@ -41,6 +41,16 @@ describe('ChatSessionStore', () => {
     const c = store.create(input);
     store.remove(c.id);
     expect(new ChatSessionStore(file).get(c.id)).toBeNull();
+  });
+
+  it('keeps the profile a chat was created under (resume must use its HERMES_HOME)', () => {
+    const c = new ChatSessionStore(file).create(input);
+    expect(new ChatSessionStore(file).get(c.id)?.profile).toBe('work');
+  });
+
+  it('migrates a legacy row without a profile to null', () => {
+    writeFileSync(file, JSON.stringify({ chats: [{ id: 'c1', acpSessionId: 's', title: null, projectId: null, createdAt: 'a', updatedAt: 'a' }] }));
+    expect(new ChatSessionStore(file).get('c1')?.profile).toBeNull();
   });
 
   it('survives a corrupt file', () => {

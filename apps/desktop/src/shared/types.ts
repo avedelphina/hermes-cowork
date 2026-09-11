@@ -24,6 +24,9 @@ export type ChatSession = {
   acpSessionId: string;
   title: string | null;
   projectId: string | null;
+  /** Hermes profile the chat was created under — a session only exists in
+   * that profile's HERMES_HOME, so resume must use it. Null on legacy rows. */
+  profile: string | null;
   createdAt: string;
   updatedAt: string;
 };

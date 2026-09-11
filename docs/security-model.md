@@ -44,12 +44,33 @@ _(not yet enforced)_ so the gap is visible rather than implied.
 - **File access under a root**: `resolveWithinRoot(root, candidate)` returns the
   resolved path or `null` if it escapes via `..`, an absolute path, or lands on
   the root's parent; `project-fs.ts` also `realpath`-checks so a symlink target
-  outside the root is rejected. _Enforced (file browser + checkpoints)._
+  outside the root is rejected — for a path that does not exist yet, its
+  nearest existing ancestor is realpath-checked, so a symlinked parent cannot
+  redirect a write. _Enforced (file browser + checkpoints)._
+- **No check-then-use gap.** Every file operation runs with the process cwd
+  pinned to a directory verified inside the root after entering it (Node has
+  no `openat`), on bare names only: reads open with `O_NOFOLLOW|O_NONBLOCK`,
+  revert writes an `O_EXCL` temp file and `rename()`s it over the target
+  (replacing, never following, a symlink), deletion is `unlink()`. A path
+  component swapped for a symlink after validation cannot redirect any of
+  them. _Enforced._ Known limit: a hardlink to an outside file placed inside
+  the root is indistinguishable from a regular file.
 - **The renderer never supplies a filesystem root.** `fs:list` / `fs:read`
-  take a `projectId` (root from `ProjectStore`); `fs:snapshot` / `fs:revert`
-  take a `taskId` (root from `TaskStore`). A task's `cwd` is validated as an
-  existing directory when the task is recorded (`task:create`) — the same bar
-  as `acp:start`. _Enforced._
+  take a `projectId` (root from `ProjectStore`); `fs:checkpoint` /
+  `fs:snapshot` / `fs:revert` take a `taskId` (root from `TaskStore`). A task's
+  `cwd` is validated as an existing directory when the task is recorded
+  (`task:create`) — the same bar as `acp:start` — and cannot be changed
+  afterwards (store patches are field-whitelisted). _Enforced._
+- **Checkpoint content never comes from the renderer.** Main snapshots a file
+  when the agent's edit/delete/move tool-call frame arrives and holds it;
+  `fs:revert` restores that held copy. Binary or >10 MB files are not
+  checkpointed (a UTF-8 round-trip would corrupt them). Limits: in memory only
+  (lost on restart), and in `accept_edits` mode the agent may already have
+  written by the time the frame arrives — making this exact needs the ACP
+  client `fs.writeTextFile` capability. _Enforced, best-effort timing._
+- **Every IPC argument is type-checked in main** (`handlers.ts` guards).
+  Known gap: the renderer still *chooses* a task/project folder (any existing
+  directory), because the New task dialog accepts a typed path.
 - **Workers** (Phase 5): each worker runs as an isolated ACP child in the
   coordinator task's `cwd`; its checkpoints resolve through the worker's own
   persisted task record. Cross-profile memory isolation is Hermes' own.
@@ -81,13 +102,19 @@ Rules:
 
 - **Destructive operations always prompt**, regardless of approval mode
   (`ask` / `auto`). "Auto" only auto-allows non-destructive tool calls.
-  _The mode is currently renderer-only; agent-side enforcement via ACP session
-  modes is Task 3.3._
+  The mode is enforced agent-side via ACP session modes. _Enforced._
+- **The plan gate is enforced by mode, not just the prompt.** A task always
+  runs in `default` until its plan is approved; only then does "auto" switch
+  it to `accept_edits`. A re-plan drops it back to `default`
+  (`cowork.store.agentModeFor`). _Enforced._ Workers run in `accept_edits`
+  (dispatching one is the approval) — _known gap_.
 - The app maps an "allow" to ACP `allow_once` — never `allow_always` on the
-  user's behalf (`acp-bridge.pickAllowOptionId`). _Enforced._
+  user's behalf; if the agent offers no `allow_once`, the request is denied.
+  A deny selects `reject_once` (turn continues), falling back to `cancelled`
+  (`acp-bridge.permissionOutcome`). _Enforced._
 - **Cancellation**: the Stop button calls `acp.stop(sessionId)`, kills the ACP
   child, and records the stop. Any pending approval for that session is
-  dropped. _Enforced._
+  answered `cancelled` (so a pooled child is not left waiting). _Enforced._
 - **Expiry**: a pending approval left unanswered past a timeout is treated as
   denied. _Not yet enforced_ — no timer is armed today; approvals persist until
   answered or the session ends.
@@ -101,6 +128,13 @@ reach the filesystem or the dashboard beyond what the UI needs).
   `ProjectStore` / `TaskStore` by id. `ChatSessionStore` holds no folder — a
   chat's `cwd` is derived from its project (or `$HOME`), never sent by the
   renderer.
+- **ACP session ownership** — Hermes broadcasts session-scoped frames
+  (`session/update`, `session/request_permission`) for every session on a
+  HERMES_HOME down every connected ACP client. The bridge forwards or stores
+  a frame only if its `sessionId` was opened (or is being loaded) by this app
+  on that very child, pooled or isolated; `respondToPermission` re-checks the
+  same ownership. A renderer holding a foreign session's ids cannot answer its
+  approvals. _Enforced._
 - **Profile names** — validated (`isValidProfileName`: one path segment, no
   `.`/`..`/separators) before they touch `HERMES_HOME`, and checked against the
   dashboard's live profile list on `acp:start` / `acp:load`. _Enforced._
@@ -111,9 +145,19 @@ reach the filesystem or the dashboard beyond what the UI needs).
 - **Dashboard REST proxy is allow-listed** — the renderer can only reach the
   exact GET/POST/PATCH/DELETE routes the UI uses; anything else throws. The
   proxy carries the dashboard bearer token, so this is the door. _Enforced._
+- **Only the app's own document holds privileges.** `security/app-url.isAppUrl`
+  defines it by *parsed* URL: the exact dev-server origin, or the exact
+  packaged `index.html` (routing is hash-based, so the document URL never
+  changes). `will-navigate` and `will-redirect` block anything else — a
+  lookalike such as `http://localhost:5173.attacker.example` included. Every
+  IPC handler is registered through one wrapper that serves a call only from
+  our window's top-level frame while it shows that document, so a foreign
+  page that ends up in the window with the preload bridge still gets nothing
+  (a unit test forbids registering `ipcMain` handlers any other way).
+  _Enforced; e2e-tested (`trust-boundary.spec.ts`)._
 - **External links** — `setWindowOpenHandler` opens only `http:` / `https:`
   URLs in the OS browser; `file:`, `mailto:`, and custom schemes are dropped.
-  `will-navigate` blocks any real navigation off the app origin. _Enforced._
+  _Enforced._
 
 ## What the app must never do silently
 

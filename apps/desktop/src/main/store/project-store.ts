@@ -6,7 +6,7 @@
 // electron-store: it is ESM-only and the main bundle is CJS). Removing a
 // project never touches its folder.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
 
 import type { Project } from '../../shared/types';
@@ -25,26 +25,19 @@ export class ProjectStore {
   }
 
   private read(): Data {
-    try {
-      if (existsSync(this.filePath)) {
-        const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<Data>;
-        const projects = (Array.isArray(parsed.projects) ? parsed.projects : []).map((p) => ({
-          ...p,
-          archived: p.archived ?? false, // migrate pre-archive records
-        }));
-        return {
-          projects,
-          activeId: typeof parsed.activeId === 'string' ? parsed.activeId : null,
-        };
-      }
-    } catch {
-      // corrupt file — start clean rather than crash
-    }
-    return { projects: [], activeId: null };
+    const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
+    const projects = (Array.isArray(parsed.projects) ? parsed.projects : []).map((p) => ({
+      ...p,
+      archived: p.archived ?? false, // migrate pre-archive records
+    }));
+    return {
+      projects,
+      activeId: typeof parsed.activeId === 'string' ? parsed.activeId : null,
+    };
   }
 
   private write(): void {
-    writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+    writeJsonAtomic(this.filePath, this.data);
   }
 
   snapshot(): Data {
@@ -62,7 +55,8 @@ export class ProjectStore {
   create(input: CreateInput): Project {
     const now = new Date().toISOString();
     const project: Project = {
-      id: randomUUID(), createdAt: now, lastOpenedAt: now, archived: false, ...input,
+      name: input.name, folderPath: input.folderPath, profile: input.profile,
+      id: randomUUID(), createdAt: now, lastOpenedAt: now, archived: false,
     };
     this.data.projects.push(project);
     this.data.activeId = project.id;
@@ -73,7 +67,7 @@ export class ProjectStore {
   update(id: string, patch: UpdatePatch): Project | null {
     const project = this.get(id);
     if (!project) return null;
-    Object.assign(project, patch);
+    Object.assign(project, pick(patch, ['name', 'profile', 'folderPath', 'archived'] as const));
     // Archiving the active project drops the active pointer to the next live one.
     if (project.archived && this.data.activeId === id) {
       this.data.activeId = this.data.projects.find((p) => !p.archived)?.id ?? null;

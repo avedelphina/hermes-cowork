@@ -32,7 +32,6 @@ export function resolveHermesHomes(
   return { global: trimmed, envProfile: null };
 }
 
-/**
 /** Hermes profile names are a single path segment: letters, digits, `.`, `_`, `-`. */
 export function isValidProfileName(name: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && name !== '.' && name !== '..';

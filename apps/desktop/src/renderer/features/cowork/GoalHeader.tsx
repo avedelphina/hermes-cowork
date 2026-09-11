@@ -1,4 +1,4 @@
-import { useCoworkStore } from './cowork.store';
+import { useCoworkStore, syncAgentMode } from './cowork.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
@@ -16,7 +16,10 @@ export function GoalHeader() {
   const reconnect = () => {
     if (!sessionId) return;
     beginReconnect();
-    void window.hermes.acp.load({ sessionId, profile, cwd, isolate: true });
+    // A reload spawns a fresh ACP child — re-apply the effective mode to it.
+    void window.hermes.acp.load({ sessionId, profile, cwd, isolate: true })
+      .then(() => syncAgentMode(useCoworkStore.getState()))
+      .catch((e) => useCoworkStore.getState().ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }));
   };
 
   return (
