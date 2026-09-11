@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 import { ProfileDropdown } from './ProfileDropdown';
 import { ThemeToggle } from './ThemeToggle';
+import { UpdateBadge } from './UpdateBadge';
 import { activeProject, useProjectStore } from '../features/projects/project.store';
 
 export function TitleBar() {
@@ -21,7 +22,9 @@ export function TitleBar() {
           📁 {project?.name ?? 'No project'}
         </Link>
       </div>
-      <div className="ml-auto" />
+      <div className="ml-auto" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <UpdateBadge />
+      </div>
       <ThemeToggle />
     </div>
   );

@@ -32,6 +32,13 @@ export const IpcChannel = {
   // app
   Notify: 'app:notify', // desktop notification when the window is unfocused
 
+  // auto-update
+  UpdateCheck: 'update:check',
+  UpdateDownload: 'update:download',
+  UpdateInstall: 'update:install',   // quits and installs the downloaded update
+  UpdateStatus: 'update:status',     // last known UpdateStatus, for late mounts
+  UpdateEvent: 'update:event',       // main → renderer push (UpdateStatus)
+
   // projects
   ProjectList: 'project:list',
   ProjectCreate: 'project:create',
