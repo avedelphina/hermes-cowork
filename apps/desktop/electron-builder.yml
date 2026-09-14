@@ -7,7 +7,6 @@ directories:
 
 files:
   - out/**/*
-  - "!node_modules/**/*"
 
 # GitHub Releases. electron-builder generates latest-mac.yml + .blockmap here
 # — the feed electron-updater reads (see src/main/update/updater.ts).
