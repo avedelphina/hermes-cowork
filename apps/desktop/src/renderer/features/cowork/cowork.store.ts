@@ -54,6 +54,8 @@ type CoworkStore = {
   parentTaskId: string | null;
   /** The agent's current step list, from ACP `plan` updates. */
   planEntries: Array<{ content: string; status: string }>;
+  /** Earlier plans this task had, replaced by a later re-plan — kept so nothing vanishes silently. */
+  planHistory: Array<Array<{ content: string; status: string }>>;
   planTasks: KanbanTask[];
   artifacts: Array<{ path: string; bytes?: number; addedAt: string }>;
   /** File snapshots taken just before an approved edit — for diff + revert. */
@@ -99,19 +101,20 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   approvals: [],
   parentTaskId: null,
   planEntries: [],
+  planHistory: [],
   planTasks: [],
   artifacts: [],
   checkpoints: [],
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [] }),
+    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, transcript: [], approvals: [], parentTaskId: null, planEntries: [], planHistory: [], planTasks: [], artifacts: [], checkpoints: [] }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null,
-      transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [],
+      transcript: [], approvals: [], parentTaskId: null, planEntries: [], planHistory: [], planTasks: [], artifacts: [], checkpoints: [],
     }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
@@ -155,7 +158,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       return { status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] };
     }),
 
-  beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], status: 'running' }),
+  beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], planHistory: [], status: 'running' }),
 
   upsertPlanTask: (task) =>
     set((s) => {
@@ -169,7 +172,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
     pendingKickoff: null, filesTarget: null,
-    transcript: [], approvals: [], parentTaskId: null, planEntries: [], planTasks: [], artifacts: [], checkpoints: [],
+    transcript: [], approvals: [], parentTaskId: null, planEntries: [], planHistory: [], planTasks: [], artifacts: [], checkpoints: [],
   }),
 
   ingestAcp: (msg) =>
@@ -221,6 +224,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
             if (s.goal) notify('New plan ready for approval', s.goal);
             return {
               planEntries: msg.entries,
+              planHistory: [...s.planHistory, s.planEntries],
               approved: false,
               transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
             };

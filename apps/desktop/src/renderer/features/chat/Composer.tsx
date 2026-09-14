@@ -76,6 +76,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
         {sessionId && <ModelPicker key={sessionId} sessionId={sessionId} />}
       </div>
       <textarea
+        id="composer-input"
         value={text}
         aria-label="Message input"
         onChange={(e) => setText(e.target.value)}

@@ -1,9 +1,21 @@
 import { useCoworkStore } from './cowork.store';
+import { useWorkersStore } from './workers.store';
 import { ApprovalCard } from './ApprovalCard';
 import { Markdown } from '../../components/Markdown';
 
+function Dots() {
+  return (
+    <span className="inline-flex gap-0.5">
+      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-current" />
+    </span>
+  );
+}
+
 export function Transcript() {
-  const { transcript, approvals } = useCoworkStore();
+  const { transcript, approvals, status } = useCoworkStore();
+  const activeWorkers = useWorkersStore((s) => s.workers.filter((w) => w.status === 'running' || w.status === 'queued').length);
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4 text-sm">
@@ -34,6 +46,17 @@ export function Transcript() {
       {approvals.map((a) => (
         <ApprovalCard key={a.toolCallId} approval={a} />
       ))}
+      {status === 'running' && approvals.length === 0 && (
+        <div className="flex items-center gap-2 text-[11px] text-muted">
+          <Dots />
+          {activeWorkers > 0 ? `Working — ${activeWorkers} subagent${activeWorkers > 1 ? 's' : ''} running…` : 'Working…'}
+        </div>
+      )}
+      {status === 'idle' && approvals.length === 0 && transcript[transcript.length - 1]?.role === 'agent' && (
+        <div className="rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-[11px] text-accent">
+          ⏸ Hermes stopped and is waiting on you — reply below to continue.
+        </div>
+      )}
     </div>
   );
 }
