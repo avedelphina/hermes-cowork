@@ -71,7 +71,12 @@ export function Transcript() {
       )}
       {status === 'idle' && approvals.length === 0 && transcript[transcript.length - 1]?.role === 'agent' && (
         <div className="rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-[11px] text-accent">
-          ⏸ Hermes stopped and is waiting on you — reply below to continue.
+          <div>⏸ Hermes stopped and is waiting on you — reply below to continue.</div>
+          <div className="mt-1 text-dim">
+            {activeWorkers > 0
+              ? `${activeWorkers} background subagent${activeWorkers > 1 ? 's' : ''} still running.`
+              : 'No background processes are running — if the message above claims otherwise, treat that as unverified.'}
+          </div>
         </div>
       )}
     </div>
