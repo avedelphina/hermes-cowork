@@ -1,7 +1,10 @@
+import { useEffect, useRef } from 'react';
 import { useCoworkStore } from './cowork.store';
 import { useWorkersStore } from './workers.store';
 import { ApprovalCard } from './ApprovalCard';
 import { Markdown } from '../../components/Markdown';
+
+const NEAR_BOTTOM_PX = 80;
 
 function Dots() {
   return (
@@ -17,8 +20,22 @@ export function Transcript() {
   const { transcript, approvals, status } = useCoworkStore();
   const activeWorkers = useWorkersStore((s) => s.workers.filter((w) => w.status === 'running' || w.status === 'queued').length);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [transcript, approvals, status]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4 text-sm">
+    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-6 py-4 text-sm">
       {transcript.length === 0 && (
         <div className="mt-12 text-center text-muted">Hermes will propose a plan shortly…</div>
       )}
