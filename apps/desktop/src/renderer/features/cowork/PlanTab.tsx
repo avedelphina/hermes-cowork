@@ -102,7 +102,7 @@ export function PlanTab() {
             </button>
           </div>
           <p className="text-[10px] text-dim">
-            This plan isn't final — keep chatting below to reshape it. Nothing runs until you hit Approve.
+            This plan isn&apos;t final — keep chatting below to reshape it. Nothing runs until you hit Approve.
           </p>
         </div>
       ) : (
