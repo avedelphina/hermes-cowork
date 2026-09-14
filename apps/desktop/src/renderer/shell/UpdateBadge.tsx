@@ -13,7 +13,14 @@ export function UpdateBadge() {
   if (status.state === 'idle' || status.state === 'checking' || status.state === 'not-available') return null;
 
   if (status.state === 'error') {
-    return <span className="text-[11px] text-dim" title={status.message}>update check failed</span>;
+    return (
+      <span className="text-[11px] text-dim" title={status.message}>
+        update check failed ·{' '}
+        <button onClick={() => void window.hermes.update.check()} className="underline hover:text-fg">
+          recheck
+        </button>
+      </span>
+    );
   }
 
   if (status.state === 'available') {
