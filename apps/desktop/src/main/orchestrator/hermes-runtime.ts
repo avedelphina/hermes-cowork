@@ -33,8 +33,9 @@ export function findHermesBinary(opts: FindOptions = {
 }): FindResult {
   const candidates = [
     join(opts.home, '.local', 'bin', 'hermes'),
-    '/opt/homebrew/bin/hermes',
-    '/usr/local/bin/hermes',
+    '/opt/homebrew/bin/hermes', // macOS Homebrew (Apple Silicon)
+    '/usr/local/bin/hermes', // macOS Homebrew (Intel) and common Linux installs
+    '/usr/bin/hermes', // Linux distro packages
     ...opts.pathDirs.map((d) => join(d, 'hermes')),
   ];
 

@@ -44,3 +44,12 @@ dmg:
       y: 220
       type: link
       path: /Applications
+
+linux:
+  category: Development
+  icon: build/icon.png
+  # AppImage is the only linux target electron-updater can auto-update
+  # without extra host tooling, so it's the sole target for now.
+  target:
+    - target: AppImage
+      arch: [x64]
