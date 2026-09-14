@@ -242,10 +242,13 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           };
         case 'done':
           persistTask(s.taskId, { status: s.approved ? 'done' : 'awaiting_approval' });
-          // Only notify when the plan first lands — every executing turn also
-          // ends with 'done' and there is no distinct task-complete signal.
-          if (!s.approved && s.goal && s.transcript.some((m) => m.role === 'agent')) {
-            notify('Plan ready for approval', s.goal);
+          // There's no distinct "task fully complete" signal from ACP — every
+          // turn (including a mid-task pause for more input) ends with 'done'.
+          // Either way the ball is back in the user's court, same as the
+          // idle banner in Transcript, so notify every time — the IPC side
+          // already skips it while the window is focused.
+          if (s.goal && s.transcript.some((m) => m.role === 'agent')) {
+            notify(s.approved ? 'Hermes is waiting on you' : 'Plan ready for approval', s.goal);
           }
           return { status: 'idle' };
         case 'tool-result':
