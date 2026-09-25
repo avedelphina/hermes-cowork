@@ -134,6 +134,7 @@ Renderer: React 19 + TypeScript + Tailwind v4 + wouter + zustand.
 | [`docs/acp-notes.md`](docs/acp-notes.md) | ACP wire shapes verified against Hermes 0.20.6 |
 | [`docs/remote-connection.md`](docs/remote-connection.md) | running agents on another machine over SSH |
 | [`docs/remote-agents-roadmap.md`](docs/remote-agents-roadmap.md) | where remote agents go next (orchestration, team UX) |
+| [`docs/cloud-hub.md`](docs/cloud-hub.md) | self-hosted hub: durable runs, one API for desktop, web and iOS (proposed) |
 | [`docs/release-checklist.md`](docs/release-checklist.md) | pre-release gates, packaging, notarisation, upstream sync |
 | `docs/superpowers/` | original design + implementation plans |
 
