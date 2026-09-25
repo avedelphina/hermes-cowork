@@ -59,7 +59,7 @@ export const IpcChannel = {
   ChatUpdate: 'chat:update',
   ChatRemove: 'chat:remove',
 
-  // project filesystem (scoped to a project root)
+  // task filesystem (read-only, scoped to a task's working folder)
   FsList: 'fs:list',
   FsRead: 'fs:read',
   FsCheckpoint: 'fs:checkpoint', // pre-edit text held in main (taken once per task+file)

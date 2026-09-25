@@ -1,6 +1,6 @@
 // apps/desktop/tests/unit/cowork-store.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useCoworkStore } from '@renderer/features/cowork/cowork.store';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { useCoworkStore, relInCwd } from '@renderer/features/cowork/cowork.store';
 
 /** Bind the store to a session id — ingestAcp() drops events until then. */
 const bind = (sessionId = 's') =>
@@ -29,24 +29,58 @@ describe('cowork store', () => {
     expect(useCoworkStore.getState().transcript[0]?.text).toBe('Plan: 7 steps.');
   });
 
-  it('records artifacts from edit-kind tool calls (path from ACP locations), de-duplicated', () => {
-    const call = {
+  describe('edit tracking', () => {
+    const checkpoint = vi.fn();
+    const edit = (over: Record<string, unknown> = {}) => ({
       kind: 'tool-call' as const, sessionId: 's', toolCallId: 't1',
-      name: 'write: /tmp/draft.md', op: 'edit', paths: ['/tmp/draft.md'], args: undefined,
-    };
-    useCoworkStore.getState().ingestAcp(call);
-    useCoworkStore.getState().ingestAcp({ ...call, toolCallId: 't2' });
-    const arts = useCoworkStore.getState().artifacts;
-    expect(arts).toHaveLength(1);
-    expect(arts[0]?.path).toBe('/tmp/draft.md');
+      name: 'write', op: 'edit', paths: ['/w/draft.md'], args: undefined, ...over,
+    });
+    beforeEach(() => {
+      checkpoint.mockReset().mockResolvedValue('old');
+      (window as unknown as { hermes: unknown }).hermes = { fs: { checkpoint } };
+    });
+
+    it('checkpoints an edit-kind tool call inside the task folder, once per file', async () => {
+      useCoworkStore.getState().ingestAcp(edit());
+      useCoworkStore.getState().ingestAcp(edit({ toolCallId: 't2' }));
+      await vi.waitFor(() => expect(useCoworkStore.getState().checkpoints).toHaveLength(1));
+      expect(checkpoint).toHaveBeenCalledWith('t', 'draft.md');
+      expect(useCoworkStore.getState().checkpoints[0]).toMatchObject({ rel: 'draft.md', before: 'old' });
+    });
+
+    it('resolves relative paths against the task folder', async () => {
+      useCoworkStore.getState().ingestAcp(edit({ paths: [], args: { path: './src/a.ts' } }));
+      await vi.waitFor(() => expect(checkpoint).toHaveBeenCalledWith('t', 'src/a.ts'));
+    });
+
+    it('ignores paths outside the task folder and non-edit tools', () => {
+      useCoworkStore.getState().ingestAcp(edit({ paths: ['/tmp/x'] }));
+      useCoworkStore.getState().ingestAcp(edit({ paths: ['../x'] }));
+      useCoworkStore.getState().ingestAcp(edit({ op: 'read' }));
+      expect(checkpoint).not.toHaveBeenCalled();
+    });
+
+    it('bumps changeRev when an edit finishes and when the turn ends', () => {
+      const { ingestAcp } = useCoworkStore.getState();
+      ingestAcp(edit());
+      ingestAcp({ kind: 'tool-result', sessionId: 's', toolCallId: 'other', result: null });
+      expect(useCoworkStore.getState().changeRev).toBe(0);
+      ingestAcp({ kind: 'tool-result', sessionId: 's', toolCallId: 't1', result: null });
+      expect(useCoworkStore.getState().changeRev).toBe(1);
+      ingestAcp({ kind: 'done', sessionId: 's' });
+      expect(useCoworkStore.getState().changeRev).toBe(2);
+    });
   });
 
-  it('ignores read-kind tool calls', () => {
-    useCoworkStore.getState().ingestAcp({
-      kind: 'tool-call', sessionId: 's', toolCallId: 't1',
-      name: 'skill view (anikke)', op: 'read', paths: [], args: {},
-    });
-    expect(useCoworkStore.getState().artifacts).toHaveLength(0);
+  it('keeps reasoning apart from the reply', () => {
+    const { ingestAcp } = useCoworkStore.getState();
+    ingestAcp({ kind: 'token', sessionId: 's', text: 'hmm ', thought: true });
+    ingestAcp({ kind: 'token', sessionId: 's', text: 'ok', thought: true });
+    ingestAcp({ kind: 'token', sessionId: 's', text: 'Done.' });
+    expect(useCoworkStore.getState().transcript).toEqual([
+      { role: 'thought', text: 'hmm ok' },
+      { role: 'agent', text: 'Done.' },
+    ]);
   });
 
   it('tracks the plan step list from plan events', () => {
@@ -119,5 +153,25 @@ describe('cowork store', () => {
     const st = useCoworkStore.getState();
     expect(st.status).toBe('idle');
     expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '⚠️ ACP process exited' });
+  });
+});
+
+describe('agentState', () => {
+  it('blocked beats working beats idle', async () => {
+    const { agentState } = await import('@renderer/features/cowork/cowork.store');
+    expect(agentState('running', 1)).toBe('blocked');
+    expect(agentState('running', 0)).toBe('working');
+    expect(agentState('idle', 0)).toBe('idle');
+  });
+});
+
+describe('relInCwd', () => {
+  it('maps absolute and relative paths, rejects escapes', () => {
+    expect(relInCwd('/w/', '/w/a/b.ts')).toBe('a/b.ts');
+    expect(relInCwd('/w', 'a/b.ts')).toBe('a/b.ts');
+    expect(relInCwd('/w', '/other/a')).toBeNull();
+    expect(relInCwd('/w', '/wx/a')).toBeNull();
+    expect(relInCwd('/w', 'a/../../b')).toBeNull();
+    expect(relInCwd('', '/a')).toBeNull();
   });
 });

@@ -78,8 +78,8 @@ const api = {
     contextFiles: (id: string): Promise<string[]> => ipcRenderer.invoke(IpcChannel.ProjectContextFiles, id),
   },
   fs: {
-    list: (id: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, id, rel),
-    read: (id: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, id, rel),
+    list: (taskId: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, taskId, rel),
+    read: (taskId: string, rel: string): Promise<FilePreview> => ipcRenderer.invoke(IpcChannel.FsRead, taskId, rel),
     checkpoint: (taskId: string, rel: string): Promise<string | null> =>
       ipcRenderer.invoke(IpcChannel.FsCheckpoint, taskId, rel),
     snapshot: (taskId: string, rel: string): Promise<string | null> =>

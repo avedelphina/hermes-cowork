@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DirListing, FilePreview } from '@shared/types';
-import { activeProject, useProjectStore } from '../projects/project.store';
 import { useCoworkStore } from '../cowork/cowork.store';
 
 function crumbs(path: string): string[] {
@@ -15,17 +14,16 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Read-only browser over the current Cowork task's working folder. */
 export function FileBrowser() {
-  useProjectStore((s) => s.activeId);
-  const project = activeProject();
-  if (!project) {
-    return <div className="p-4 text-xs text-muted">Open a project to browse its files.</div>;
-  }
-  // key on the project id → switching projects remounts with fresh state.
-  return <Browser key={project.id} projectId={project.id} projectName={project.name} />;
+  const taskId = useCoworkStore((s) => s.taskId);
+  const cwd = useCoworkStore((s) => s.cwd);
+  if (!taskId) return <div className="p-4 text-xs text-muted">Start a task to browse its folder.</div>;
+  // key on the task id → switching tasks remounts with fresh state.
+  return <Browser key={taskId} taskId={taskId} rootName={cwd.split('/').filter(Boolean).pop() ?? cwd} />;
 }
 
-function Browser({ projectId, projectName }: { projectId: string; projectName: string }) {
+function Browser({ taskId, rootName }: { taskId: string; rootName: string }) {
   const [dir, setDir] = useState('');
   const [listing, setListing] = useState<DirListing | null>(null);
   const [sel, setSel] = useState<string | null>(null);
@@ -34,22 +32,22 @@ function Browser({ projectId, projectName }: { projectId: string; projectName: s
 
   const load = useCallback((rel: string) => {
     window.hermes.fs
-      .list(projectId, rel)
+      .list(taskId, rel)
       .then((l) => { setListing(l); setError(null); })
       .catch((e) => setError(String(e)));
-  }, [projectId]);
+  }, [taskId]);
 
   useEffect(() => { load(dir); }, [dir, load]);
 
   useEffect(() => {
     if (!sel) return;
     window.hermes.fs
-      .read(projectId, sel)
+      .read(taskId, sel)
       .then((p) => { setPreview(p); setError(null); })
       .catch((e) => setError(String(e)));
-  }, [projectId, sel]);
+  }, [taskId, sel]);
 
-  // Jump to a file requested from the Artifacts tab.
+  // Jump to a file requested from the Changes tab.
   const filesTarget = useCoworkStore((s) => s.filesTarget);
   const clearFilesTarget = useCoworkStore((s) => s.clearFilesTarget);
   useEffect(() => {
@@ -57,18 +55,16 @@ function Browser({ projectId, projectName }: { projectId: string; projectName: s
     const slash = filesTarget.lastIndexOf('/');
     const targetDir = slash >= 0 ? filesTarget.slice(0, slash) : '';
     window.hermes.fs
-      .list(projectId, targetDir)
+      .list(taskId, targetDir)
       .then((l) => { setDir(targetDir); setListing(l); setSel(filesTarget); setError(null); })
       .catch((e) => setError(String(e)));
     clearFilesTarget();
-  }, [filesTarget, projectId, clearFilesTarget]);
-
-  const project = { name: projectName };
+  }, [filesTarget, taskId, clearFilesTarget]);
 
   return (
     <div className="flex h-full flex-col text-xs">
       <div className="flex items-center gap-1 border-b border-border px-3 py-2 text-[11px] text-muted">
-        <button className="hover:text-fg" onClick={() => setDir('')}>{project.name}</button>
+        <button className="hover:text-fg" onClick={() => setDir('')}>{rootName}</button>
         {crumbs(dir).map((c, i) => (
           <span key={i} className="flex items-center gap-1">
             <span className="text-dim">/</span>

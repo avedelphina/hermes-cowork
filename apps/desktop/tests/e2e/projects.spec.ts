@@ -42,11 +42,10 @@ test('projects: create from folder, activate, prefill New task, browse files', a
   await win.getByRole('link', { name: /New task/i }).click();
   await expect(win.locator(`input[value="${work}"]`)).toBeVisible();
 
-  // File browser (Cowork right pane) lists and previews project files.
+  // The Files tab browses the task's folder, so without a task it says so.
   await win.getByRole('link', { name: /Current task/ }).click();
   await win.getByRole('button', { name: 'Files', exact: true }).click();
-  await win.getByRole('button', { name: /README\.md/ }).click();
-  await expect(win.locator('pre')).toContainText('hello from readme');
+  await expect(win.locator('body')).toContainText('Start a task to browse its folder.');
 
   // Rename + archive round-trip.
   await win.getByRole('link', { name: /Projects/i }).first().click();

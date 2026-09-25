@@ -55,7 +55,6 @@ of approval mode; the app never grants persistent permission on your behalf.
 | Cowork transcript stuck on "Hermes will propose a plan shortly…" | The ACP turn produced no events. Use **↻ Reconnect** in the goal header to reload the session from Hermes. |
 | A task shows "interrupted" | The app exited while it was live. Open it from the Tasks page to resume — Hermes replays the conversation via `session/load`. |
 | An edit went wrong | Cowork **Changes** tab → **Revert** restores the pre-edit file (or deletes it if it was new). |
-| Worker never finishes | Stop it from the Subtasks tab; its ACP child is killed. Re-dispatch if needed. |
 
 ## Recovery
 

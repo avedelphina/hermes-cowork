@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import type { AcpSupervisor, AcpEvent } from './acp-supervisor';
 import type { AcpServerMessage, AcpModels, AcpModelInfo } from '../../shared/types';
 import { translateAcpEvent } from './acp-translator';
+import { TokenCoalescer } from './token-coalescer';
 
 const ACP_PROTOCOL_VERSION = 1;
 const INITIALIZE_PARAMS = {
@@ -30,6 +31,8 @@ const INITIALIZE_PARAMS = {
 /** Ceiling for control requests (handshake, session/new|load, set_mode|model).
  * session/prompt is unbounded — a turn legitimately runs for minutes. */
 const CONTROL_TIMEOUT_MS = 120_000;
+/** A permission request must fail closed rather than leave an agent blocked indefinitely. */
+export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 type StartSessionOpts = {
   profile: string;
@@ -51,9 +54,12 @@ type PermissionOption = {
 
 type PendingPermission = {
   sessionId: string;
+  toolCallId: string;
   handle: string;
   requestId: string | number;
   options: PermissionOption[];
+  description: string;
+  timer: ReturnType<typeof setTimeout>;
 };
 
 type Conn = { handle: string; ready: Promise<void> };
@@ -94,6 +100,7 @@ export class AcpBridge extends EventEmitter {
   /** Sessions mid-`session/load` → handle. Their replay frames arrive before
    * the load response binds them, so ownership must already hold. */
   private loading = new Map<string, string>();
+  private tokens = new TokenCoalescer((m) => this.emit('event', m));
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -208,6 +215,7 @@ export class AcpBridge extends EventEmitter {
       throw err;
     } finally {
       if (this.loading.get(opts.sessionId) === handle) this.loading.delete(opts.sessionId);
+      this.tokens.flush(opts.sessionId); // replay tail must land before load resolves
     }
   }
 
@@ -256,7 +264,7 @@ export class AcpBridge extends EventEmitter {
         prompt: [{ type: 'text', text }],
       });
     } finally {
-      this.emit('event', { kind: 'done', sessionId } satisfies AcpServerMessage);
+      this.out({ kind: 'done', sessionId });
     }
   }
 
@@ -270,6 +278,7 @@ export class AcpBridge extends EventEmitter {
     const pending = this.pendingPermissions.get(key);
     if (!pending) return;
     this.pendingPermissions.delete(key);
+    clearTimeout(pending.timer);
     // Only ever answer for a session this app opened, on the child serving it.
     if (!this.owns(pending.handle, sessionId)) return;
     this.sup.send(pending.handle, {
@@ -292,6 +301,7 @@ export class AcpBridge extends EventEmitter {
     for (const [key, p] of this.pendingPermissions) {
       if (p.sessionId !== sessionId) continue;
       this.pendingPermissions.delete(key);
+      clearTimeout(p.timer);
       try {
         this.sup.send(p.handle, { jsonrpc: '2.0', id: p.requestId, result: { outcome: { outcome: 'cancelled' } } });
       } catch {
@@ -308,11 +318,40 @@ export class AcpBridge extends EventEmitter {
   stopAll(): void {
     this.acpToHandle.clear();
     this.modelsBySession.clear();
+    for (const pending of this.pendingPermissions.values()) clearTimeout(pending.timer);
     this.pendingPermissions.clear();
     this.loading.clear();
     this.conns.clear();
     this.isolatedHandles.clear();
     this.sup.shutdownAll();
+  }
+
+  /** Emit to the renderer. Tokens are rate-limited; anything else flushes them first to keep order. */
+  private out(msg: AcpServerMessage): void {
+    if (msg.kind === 'token') return this.tokens.push(msg);
+    this.tokens.flush(msg.sessionId);
+    this.emit('event', msg);
+  }
+
+  /** Expire a still-pending request by denying it once and informing the UI. */
+  private expirePermission(key: string): void {
+    const pending = this.pendingPermissions.get(key);
+    if (!pending) return;
+    this.pendingPermissions.delete(key);
+    if (!this.owns(pending.handle, pending.sessionId)) return;
+    try {
+      this.sup.send(pending.handle, {
+        jsonrpc: '2.0', id: pending.requestId, result: permissionOutcome(pending.options, false),
+      });
+    } catch {
+      return;
+    }
+    this.out({
+      kind: 'approval-expired',
+      sessionId: pending.sessionId,
+      toolCallId: pending.toolCallId,
+      description: pending.description,
+    });
   }
 
   /** True when `sessionId` was opened (or is being loaded) by this app on `handle`. */
@@ -349,11 +388,19 @@ export class AcpBridge extends EventEmitter {
           : [];
         const sid = typeof params?.['sessionId'] === 'string' ? (params['sessionId'] as string) : '';
         if (toolCallId && (typeof id === 'string' || typeof id === 'number')) {
-          this.pendingPermissions.set(permKey(sid, toolCallId), {
+          const key = permKey(sid, toolCallId);
+          const existing = this.pendingPermissions.get(key);
+          if (existing) clearTimeout(existing.timer);
+          const description = typeof toolCall?.['title'] === 'string' ? toolCall['title'] : 'Permission requested';
+          const timer = setTimeout(() => this.expirePermission(key), APPROVAL_TIMEOUT_MS);
+          this.pendingPermissions.set(key, {
             sessionId: sid,
+            toolCallId,
             handle: event.sessionId,
             requestId: id,
             options,
+            description,
+            timer,
           });
         }
       }
@@ -376,14 +423,14 @@ export class AcpBridge extends EventEmitter {
 
       if (!expected && !(event.kind === 'exit' && event.code === 0)) {
         for (const sessionId of affected.length ? affected : [event.sessionId]) {
-          this.emit('event', { kind: 'session-error', sessionId, message, fatal: true } satisfies AcpServerMessage);
+          this.out({ kind: 'session-error', sessionId, message, fatal: true });
         }
       }
       return;
     }
 
     for (const semantic of translateAcpEvent(event)) {
-      this.emit('event', semantic);
+      this.out(semantic);
     }
   };
 }

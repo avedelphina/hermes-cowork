@@ -93,8 +93,9 @@ export type AcpClientMessage =
 
 export type AcpServerMessage =
   // `role` defaults to 'agent'; 'user' appears when Hermes replays history
-  // during session/load.
-  | { kind: 'token'; sessionId: string; text: string; role?: 'user' | 'agent' }
+  // during session/load. `thought` marks reasoning text (ACP agent_thought_chunk)
+  // as opposed to the reply itself.
+  | { kind: 'token'; sessionId: string; text: string; role?: 'user' | 'agent'; thought?: boolean }
   // `op` is ACP's tool-call `kind`: read | edit | delete | move | search |
   // execute | think | fetch | other. `name` is the human title. `paths` are
   // the files the tool touches (from ACP `locations`).
@@ -104,6 +105,7 @@ export type AcpServerMessage =
   // checklist during execution and re-emitted whole when the agent re-plans.
   | { kind: 'plan'; sessionId: string; entries: Array<{ content: string; status: string }> }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
+  | { kind: 'approval-expired'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
   | { kind: 'done'; sessionId: string };
 

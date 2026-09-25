@@ -72,8 +72,8 @@ export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
  * Discriminator key: `sessionUpdate`. Variants we render:
  *
  *   "agent_message_chunk"   → token (assistant text streaming in)
- *   "agent_thought_chunk"   → token (thinking; folded into the same stream
- *                             for M1 — split later if the UI needs it)
+ *   "agent_thought_chunk"   → token with thought:true (reasoning, kept apart
+ *                             from the reply so the UI can fold it)
  *   "tool_call"             → tool-call (a tool invocation begins)
  *   "tool_call_update"      → tool-result if status==="completed"; otherwise
  *                             dropped (intermediate progress is not surfaced)
@@ -98,10 +98,13 @@ function translateSessionUpdate(
   const variant = u['sessionUpdate'];
 
   switch (variant) {
-    case 'agent_message_chunk':
-    case 'agent_thought_chunk': {
+    case 'agent_message_chunk': {
       const text = extractTextFromContentBlock(u['content']);
       return text ? [{ kind: 'token', sessionId, text }] : [];
+    }
+    case 'agent_thought_chunk': {
+      const text = extractTextFromContentBlock(u['content']);
+      return text ? [{ kind: 'token', sessionId, text, thought: true }] : [];
     }
     case 'user_message_chunk': {
       // Only seen while Hermes replays history during session/load.

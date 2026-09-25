@@ -416,10 +416,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
   handle(IpcChannel.ChatRemove, (_e, id: unknown) => chats.remove(str(id, 'id')));
 
-  // ── project filesystem (read-only, scoped to the project root) ──
-  handle(IpcChannel.FsList, (_e, id: unknown, rel?: unknown) => listDir(projectRoot(id), strOrNull(rel, 'path') ?? ''));
-  handle(IpcChannel.FsRead, (_e, id: unknown, rel: unknown) => readFilePreview(projectRoot(id), str(rel, 'path')));
-
   // Checkpoints are scoped to a task's working folder and held here, in main.
   // The renderer only ever sends a taskId + relative path — never the root and
   // never the content to write back, so it cannot turn revert into an
@@ -430,6 +426,10 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (!isExistingDir(t.cwd)) throw new Error('invalid task root');
     return t.cwd;
   };
+  // Read-only browsing of the task's own working folder (not the active
+  // project's — a task can run in any folder).
+  handle(IpcChannel.FsList, (_e, taskId: unknown, rel?: unknown) => listDir(taskRoot(taskId), strOrNull(rel, 'path') ?? ''));
+  handle(IpcChannel.FsRead, (_e, taskId: unknown, rel: unknown) => readFilePreview(taskRoot(taskId), str(rel, 'path')));
   // ponytail: in memory — checkpoints do not survive an app restart; persist
   // under userData if revert-after-restart is needed.
   const checkpoints = new Map<string, string | null>(); // `${taskId}\0${rel}` → pre-edit text

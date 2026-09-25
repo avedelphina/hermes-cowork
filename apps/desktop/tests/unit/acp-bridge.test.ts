@@ -10,7 +10,7 @@ vi.mock('node:child_process', async () => {
 });
 
 import { AcpSupervisor } from '@main/orchestrator/acp-supervisor';
-import { AcpBridge, permissionOutcome } from '@main/orchestrator/acp-bridge';
+import { AcpBridge, APPROVAL_TIMEOUT_MS, permissionOutcome } from '@main/orchestrator/acp-bridge';
 import { encodeFrame } from '@main/orchestrator/jsonrpc';
 import type { AcpServerMessage } from '@shared/types';
 
@@ -242,6 +242,67 @@ describe('AcpBridge.respondToPermission', () => {
       id: 'perm-req-7',
       result: { outcome: { outcome: 'selected', optionId: 'o-allow-once' } },
     });
+  });
+
+  it('expires a pending approval by denying it once and notifying the renderer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { bridge, proc, semanticEvents } = await openPooledPair();
+      proc.stdout!.push(permReq('p-expire', 'sess-1', 'tc-expire'));
+      await flush();
+      proc.written.length = 0;
+
+      await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
+
+      expect(proc.written).toEqual([
+        { jsonrpc: '2.0', id: 'p-expire', result: { outcome: { outcome: 'cancelled' } } },
+      ]);
+      expect(semanticEvents).toContainEqual({
+        kind: 'approval-expired', sessionId: 'sess-1', toolCallId: 'tc-expire', description: 'rm x',
+      });
+      bridge.respondToPermission('sess-1', 'tc-expire', true);
+      expect(proc.written).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears an approval expiry timer when the user responds', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { bridge, proc, semanticEvents } = await openPooledPair();
+      proc.stdout!.push(permReq('p-answer', 'sess-1', 'tc-answer'));
+      await flush();
+      proc.written.length = 0;
+      bridge.respondToPermission('sess-1', 'tc-answer', true);
+      await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
+
+      expect(proc.written).toEqual([
+        { jsonrpc: '2.0', id: 'p-answer', result: { outcome: { outcome: 'selected', optionId: 'o' } } },
+      ]);
+      expect(semanticEvents.filter((e) => e.kind === 'approval-expired')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears an approval expiry timer when the session stops', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { bridge, proc, semanticEvents } = await openPooledPair();
+      proc.stdout!.push(permReq('p-stop', 'sess-1', 'tc-stop'));
+      await flush();
+      proc.written.length = 0;
+      bridge.stopSession('sess-1');
+      await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
+
+      expect(proc.written).toEqual([
+        { jsonrpc: '2.0', id: 'p-stop', result: { outcome: { outcome: 'cancelled' } } },
+      ]);
+      expect(semanticEvents.filter((e) => e.kind === 'approval-expired')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('deny selects reject_once when offered, else cancelled', () => {

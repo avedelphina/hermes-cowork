@@ -1,6 +1,6 @@
 {
   "name": "@hermes-cowork/desktop",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Hermes Cowork desktop app",
   "author": "Tomas Kracmar",
@@ -9,6 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:mac": "electron-vite build && electron-builder --mac --arm64",
+    "build:linux": "electron-vite build && electron-builder --linux --x64",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
