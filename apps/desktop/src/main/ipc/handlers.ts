@@ -10,6 +10,7 @@ import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
 import { isValidSshTarget, isValidRemoteCwd } from '../orchestrator/spawn-spec';
+import { listRemoteProfiles } from '../orchestrator/remote-profiles';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
@@ -235,9 +236,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         // never one sent by the renderer.
         remote: null as RemoteOrigin | null,
       };
-      const agent = chatRemoteAgent(strOrNull(o['chatId'], 'chatId'));
+      const chatId = strOrNull(o['chatId'], 'chatId');
+      const agent = chatRemoteAgent(chatId);
       opts.remote = agent ? toOrigin(agent) : taskRemote(strOrNull(o['taskId'], 'taskId'));
-      const profile = agent ? agent.profile : (strOrNull(o['profile'], 'profile') ?? 'default');
+      // A session lives in the profile it was created under, so a chat keeps
+      // that profile even if its agent was edited to a different one since.
+      const profile = agent
+        ? (chats.get(chatId!)?.profile ?? agent.profile)
+        : (strOrNull(o['profile'], 'profile') ?? 'default');
       // An explicit cwd must exist — a moved/deleted project folder must fail,
       // not silently widen the task's scope to $HOME. Remote cwds live on the
       // remote host, so they get a shape check instead of an existence check.
@@ -569,6 +575,20 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     remoteAgents.update(str(id, 'id'), parseAgentFields(obj(raw, 'remote agent patch'), false)),
   );
   handle(IpcChannel.RemoteRemove, (_e, id: unknown) => remoteAgents.remove(str(id, 'id')));
+  // Either a stored agent (`{ id }`) or a draft being filled in (`{ sshTarget, … }`):
+  // the draft is validated like a create, and only ever runs a fixed `ls`-style script.
+  handle(IpcChannel.RemoteProfiles, (_e, raw: unknown) => {
+    const o = obj(raw, 'remote profiles request');
+    const id = strOrNull(o['id'], 'id');
+    if (id) {
+      const a = remoteAgents.get(id);
+      if (!a) throw new Error('This remote agent no longer exists.');
+      return listRemoteProfiles(toOrigin(a));
+    }
+    const remote = parseRemote(o);
+    if (!remote) throw new Error('sshTarget is required');
+    return listRemoteProfiles(remote);
+  });
 
   // Read-only browsing of the task's own working folder (not the active
   // project's — a task can run in any folder).

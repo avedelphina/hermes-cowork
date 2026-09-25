@@ -117,9 +117,16 @@ way to reach a remote agent.
 
 - **A remote agent is its own record** (`remote-agents.json`), not a project:
   `{ name, sshTarget, profile, hermesHome?, binaryPath? }`. Managed on the
-  **Remote agents** page (sidebar → Hermes), which also has a **Test
-  connection** button — a real handshake, so an ssh failure shows ssh's own
-  reason.
+  **Remote agents** page (sidebar → Hermes): add, **edit**, remove, and a
+  **Test connection** button — a real handshake, so an ssh failure shows ssh's
+  own reason. **Find profiles** connects over SSH and lists the profiles on the
+  remote (`default` if its Hermes home exists, plus each directory under
+  `<home>/profiles`) so the profile is picked, not typed. It runs one fixed
+  script (no Hermes started); the target is validated like any other, and only
+  the SSH target and optional home/binary come from the form.
+- **Editing** an agent changes how its existing chats connect (host, home,
+  binary), but a chat keeps the profile it was created under — a session only
+  exists in that profile's home.
 - **Chat** shows an **Agent** picker once at least one remote agent exists.
   The choice applies to the next new chat; an existing chat is bound to its
   agent (`ChatSession.remoteId`) and resumes over the same connection.

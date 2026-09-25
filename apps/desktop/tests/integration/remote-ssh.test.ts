@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { AcpSupervisor } from '@main/orchestrator/acp-supervisor';
 import { AcpBridge } from '@main/orchestrator/acp-bridge';
+import { listRemoteProfiles } from '@main/orchestrator/remote-profiles';
 import type { AcpServerMessage } from '../../src/shared/types';
 
 const TARGET = process.env['HERMES_REMOTE_TEST_TARGET'];
@@ -135,6 +136,17 @@ describeRemote('remote ACP over SSH', () => {
       await new Promise((r) => setTimeout(r, 2000));
     }
   }, 120_000);
+
+  it('lists the profiles that exist on the remote', async () => {
+    const profiles = await listRemoteProfiles({ sshTarget: TARGET! });
+    console.log(`[remote-profiles] ${JSON.stringify(profiles)}`);
+    expect(profiles.length).toBeGreaterThan(0);
+    expect(profiles[0]).toBe('default'); // default sorts first when the home exists
+  });
+
+  it('reports an unreachable host with a reason, not a hang', async () => {
+    await expect(listRemoteProfiles({ sshTarget: 'no-such-host.invalid' })).rejects.toThrow(/Could not reach no-such-host\.invalid/);
+  }, 30_000);
 
   it('leaves no orphaned hermes acp on the remote after stop', async () => {
     // shutdown() ends stdin immediately, SIGTERMs at +1s, SIGKILLs at +5s —

@@ -94,6 +94,8 @@ const api = {
     update: (id: string, patch: { name?: string; sshTarget?: string; profile?: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<RemoteAgent | null> =>
       ipcRenderer.invoke(IpcChannel.RemoteUpdate, id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.RemoteRemove, id),
+    profiles: (req: { id: string } | { sshTarget: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<string[]> =>
+      ipcRenderer.invoke(IpcChannel.RemoteProfiles, req),
   },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
