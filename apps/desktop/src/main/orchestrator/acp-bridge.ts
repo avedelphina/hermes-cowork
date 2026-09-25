@@ -18,7 +18,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { AcpSupervisor, AcpEvent } from './acp-supervisor';
-import type { AcpServerMessage, AcpModels, AcpModelInfo } from '../../shared/types';
+import type { AcpServerMessage, AcpModels, AcpModelInfo, RemoteOrigin } from '../../shared/types';
 import { translateAcpEvent } from './acp-translator';
 import { TokenCoalescer } from './token-coalescer';
 
@@ -39,6 +39,8 @@ type StartSessionOpts = {
   cwd: string;
   binaryPath: string;
   hermesHome: string;
+  /** Reach the agent over SSH instead of spawning locally. */
+  remote?: RemoteOrigin | null;
   /** Give this session its own ACP child (not the shared pool) so stopSession
    * can hard-kill the running turn — Hermes 0.20.6 has no session/cancel. */
   isolate?: boolean;
@@ -93,7 +95,7 @@ export class AcpBridge extends EventEmitter {
   /** Model state as reported by session/new (and session/load when present). */
   private modelsBySession = new Map<string, AcpModels>();
   private pendingPermissions = new Map<string, PendingPermission>();
-  /** One warm ACP connection per `${profile}\0${hermesHome}`. */
+  /** One warm ACP connection per `${profile}\0${hermesHome}\0${sshTarget}`. */
   private conns = new Map<string, Conn>();
   /** Handles spawned for a single isolated session — safe to hard-kill. */
   private isolatedHandles = new Set<string>();
@@ -178,6 +180,7 @@ export class AcpBridge extends EventEmitter {
       cwd: opts.cwd,
       binaryPath: opts.binaryPath,
       hermesHome: opts.hermesHome,
+      remote: opts.remote ?? null,
     });
     try {
       await this.sup.request(handle, 'initialize', INITIALIZE_PARAMS, CONTROL_TIMEOUT_MS);
@@ -221,7 +224,9 @@ export class AcpBridge extends EventEmitter {
 
   /** Get (or lazily create + initialize) the pooled connection for a profile. */
   private async connFor(opts: StartSessionOpts): Promise<string> {
-    const key = `${opts.profile}\0${opts.hermesHome}`;
+    // The SSH target is part of the identity: a local `anikke` and a remote
+    // `anikke` must never share a child.
+    const key = `${opts.profile}\0${opts.hermesHome}\0${opts.remote?.sshTarget ?? ''}`;
     let conn = this.conns.get(key);
     if (!conn) {
       const handle = randomUUID();
@@ -231,6 +236,7 @@ export class AcpBridge extends EventEmitter {
         cwd: opts.cwd,
         binaryPath: opts.binaryPath,
         hermesHome: opts.hermesHome,
+        remote: opts.remote ?? null,
       });
       const ready = this.sup
         .request(handle, 'initialize', INITIALIZE_PARAMS, CONTROL_TIMEOUT_MS)
@@ -411,7 +417,8 @@ export class AcpBridge extends EventEmitter {
       const expected = event.kind === 'exit' && event.expected;
       const message = event.kind === 'error'
         ? event.error
-        : event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`;
+        : (event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`) +
+          (event.detail ? ` ${event.detail}` : '');
 
       if (event.kind === 'exit') {
         for (const id of affected) { this.acpToHandle.delete(id); this.modelsBySession.delete(id); }

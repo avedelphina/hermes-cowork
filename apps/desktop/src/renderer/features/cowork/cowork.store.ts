@@ -1,6 +1,6 @@
 // apps/desktop/src/renderer/features/cowork/cowork.store.ts
 import { create } from 'zustand';
-import type { AcpServerMessage, CoworkTask, TaskStatus } from '@shared/types';
+import type { AcpServerMessage, CoworkTask, TaskStatus, RemoteOrigin } from '@shared/types';
 import { todoWrites, applyTodoWrite, toPlanEntries, type TodoItem } from '@shared/todos';
 
 type Approval = { toolCallId: string; description: string };
@@ -98,6 +98,8 @@ type CoworkStore = {
   goal: string;
   cwd: string;
   profile: string;
+  /** Where the agent runs. Set → SSH to another host (see docs/remote-connection.md). */
+  remote: RemoteOrigin | null;
   approvalMode: 'ask' | 'auto';
   /** 'running' while the agent owns the turn; 'idle' once it finishes/errors/stops. */
   status: 'idle' | 'running';
@@ -127,7 +129,7 @@ type CoworkStore = {
   /** Bumped when files may have changed on disk, so Changes re-reads them. */
   changeRev: number;
 
-  startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
+  startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; remote?: RemoteOrigin | null; kickoff: string }) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
   restoreTask: (task: CoworkTask) => void;
   /** The acp.load history replay has finished; live events gate re-plans again. */
@@ -158,6 +160,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   goal: '',
   cwd: '',
   profile: 'default',
+  remote: null,
   approvalMode: 'ask',
   status: 'idle',
   approved: false,
@@ -165,12 +168,13 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   filesTarget: null,
   ...CLEARED,
 
-  startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
+  startTask: ({ taskId, sessionId, goal, cwd, profile, remote, kickoff }) =>
+    set({ taskId, sessionId, goal, cwd, profile, remote: remote ?? null, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
+      remote: t.remote ?? null,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: true,
     }),
@@ -213,7 +217,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], planHistory: [], todoItems: [], nativePlan: false, replaying: true, status: 'running' }),
 
   reset: () => set({
-    taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
+    taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', remote: null, status: 'idle', approved: false,
     pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: false,
   }),
 

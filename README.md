@@ -50,6 +50,11 @@ What's in:
 - **File browser** — the **Files** tab is read-only and confined to the task's
   folder (`..` and symlink escape are rejected). **Open** on a Changes row
   jumps to the file.
+- **Remote agents** — a project can point at another machine (an SSH target);
+  its Cowork tasks then run `hermes acp` there over an ssh pipe, with the
+  same plan-gate and inline approvals. Files/Changes/checkpoints stay
+  local-only and are refused for remote tasks. See
+  [`docs/remote-connection.md`](docs/remote-connection.md).
 
 ## Requirements
 
@@ -125,6 +130,8 @@ Renderer: React 19 + TypeScript + Tailwind v4 + wouter + zustand.
 | [`docs/security-model.md`](docs/security-model.md) | permission + approval contract, renderer→main trust boundary |
 | [`docs/project-context.md`](docs/project-context.md) | how `AGENTS.md` / `.hermes.md` reach the agent |
 | [`docs/acp-notes.md`](docs/acp-notes.md) | ACP wire shapes verified against Hermes 0.20.6 |
+| [`docs/remote-connection.md`](docs/remote-connection.md) | running agents on another machine over SSH |
+| [`docs/remote-agents-roadmap.md`](docs/remote-agents-roadmap.md) | where remote agents go next (orchestration, team UX) |
 | [`docs/release-checklist.md`](docs/release-checklist.md) | pre-release gates, packaging, notarisation, upstream sync |
 | `docs/superpowers/` | original design + implementation plans |
 

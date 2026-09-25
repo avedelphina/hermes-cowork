@@ -168,6 +168,44 @@ reach the filesystem or the dashboard beyond what the UI needs).
   is not — `quitAndInstall` only runs from the explicit "Restart to update"
   click. _Enforced._
 
+## Remote agents (SSH)
+
+A project may declare a **remote origin** (`RemoteOrigin` — an SSH target plus
+optional remote home/binary overrides); tasks under it run `hermes acp` on
+that host over an ssh pipe (`docs/remote-connection.md`). What that changes
+for this contract:
+
+- **The trust boundary is per-machine.** Folder scope (principle 1) is
+  enforced against the *local* filesystem. A remote task's root lives on the
+  other machine, where this app's enforcement code cannot reach — so the Fs*
+  channels (file browser, checkpoints, revert) **refuse remote tasks
+  outright** rather than risk touching a same-named local path. The renderer
+  hides those tabs for remote tasks. _Enforced._
+- **Transport auth is SSH, and only SSH.** The remote command runs as
+  `ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 …
+  <target> 'HERMES_HOME=… exec hermes acp'`: no pty (framing integrity), no
+  interactive auth fallback (fail fast, no password prompt hanging a
+  session), bounded connect and dead-link detection, and `exec` so killing the local ssh process
+  ends the remote agent (verified: no orphans). Who can call which machine is
+  exactly the user's existing SSH key trust. _Enforced; e2e-tested
+  (`tests/integration/remote-ssh.test.ts`, runs against a real host when
+  `HERMES_REMOTE_TEST_TARGET` is set)._
+- **Approvals are unchanged and never silently remote-resolved.** A
+  destructive action on a remote task still prompts *this* machine's user
+  (principles 2–3); the answer travels back over the same pipe. "Remote" is
+  not a route around the plan gate or default-deny.
+- **Input validation at the IPC boundary.** `sshTarget` is restricted to a
+  strict charset (no whitespace, no leading `-`, no shell metacharacters —
+  option injection included); remote paths in the spawned command are
+  single-quote escaped; the local `HERMES_HOME` is scrubbed from the ssh
+  child's environment. A remote task's `cwd` must be absolute on the remote
+  host; the local existence check is skipped (it cannot be checked) but the
+  shape check fails closed. _Enforced._
+- **Remote profiles skip the local dashboard check** — a remote profile is
+  not in the local dashboard's list by definition. Name validation
+  (`isValidProfileName`) still applies before the name reaches a remote shell
+  fragment. _Enforced._
+
 ## What the app must never do silently
 
 - Start a task without a user-chosen existing root.

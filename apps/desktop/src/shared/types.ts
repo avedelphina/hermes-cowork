@@ -1,13 +1,30 @@
 // Dashboard-derived types (ProfileSummary, Status) live in the renderer's
 // api/schemas.ts as Zod schemas — they are only consumed there.
 
+/**
+ * How to reach a Hermes agent on another machine. v1 transport is SSH only —
+ * see docs/remote-connection.md. The agent runs as `hermes acp` on the far
+ * end of an ssh pipe; SSH keys are the entire auth boundary.
+ */
+export type RemoteOrigin = {
+  /** SSH destination: [user@]host or an ~/.ssh/config alias. */
+  sshTarget: string;
+  /** Remote *global* Hermes home (the dir containing profiles/). Default: ~/.hermes. */
+  hermesHome?: string | null;
+  /** Remote hermes binary. Default: "hermes" from the remote PATH. */
+  binaryPath?: string | null;
+};
+
 export type Project = {
   id: string;
   name: string;
   /** Local folder the project is scoped to. Null for chat-only projects
-   * (Cowork tasks require a folder; plain Chat does not). */
+   * (Cowork tasks require a folder; plain Chat does not). For a remote
+   * project this is a path on the *remote* host. */
   folderPath: string | null;
   profile: string;
+  /** Set when this project's agent runs on another machine over SSH. */
+  remote?: RemoteOrigin | null;
   createdAt: string;
   lastOpenedAt: string;
   archived: boolean;
@@ -49,6 +66,9 @@ export type CoworkTask = {
   projectId: string | null;
   /** Set when this task is a worker under a coordinator task. */
   parentTaskId: string | null;
+  /** Denormalized from the project at creation: where the agent actually
+   * runs. Null = local. Kept on the task so resume survives project edits. */
+  remote?: RemoteOrigin | null;
   status: TaskStatus;
   approved: boolean;
   createdAt: string;

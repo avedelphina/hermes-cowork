@@ -3,6 +3,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { FrameDecoder, encodeFrame, type JsonRpcMessage } from './jsonrpc';
+import { buildSpawnSpec } from './spawn-spec';
+import type { RemoteOrigin } from '../../shared/types';
 
 export type AcpSession = {
   id: string;
@@ -13,12 +15,14 @@ export type AcpSession = {
 export type AcpSpawnOptions = AcpSession & {
   binaryPath: string;
   hermesHome: string;
+  /** Reach the agent over SSH instead of spawning locally. */
+  remote?: RemoteOrigin | null;
 };
 
 export type AcpEvent =
   | { kind: 'message'; sessionId: string; msg: JsonRpcMessage }
   // `expected` is true when we asked the child to stop (shutdown/shutdownAll)
-  | { kind: 'exit'; sessionId: string; code: number | null; expected: boolean }
+  | { kind: 'exit'; sessionId: string; code: number | null; expected: boolean; detail?: string }
   | { kind: 'error'; sessionId: string; error: string };
 
 type PendingRequest = {
@@ -31,16 +35,27 @@ class AcpChild {
   readonly pending = new Map<string | number, PendingRequest>();
   /** Set by shutdown() so the exit handler can mark the exit as expected. */
   stopping = false;
+  /** Recent stderr. For an ssh child this is where "Permission denied" lives. */
+  stderrTail = '';
   constructor(public readonly proc: ChildProcess, public readonly session: AcpSession) {}
+}
+
+/** The last few stderr lines, for an error message a person can act on. */
+export function stderrSummary(tail: string, lines = 3, max = 300): string {
+  const s = tail.split('\n').map((l) => l.trim()).filter(Boolean).slice(-lines).join(' / ');
+  return s.length > max ? '…' + s.slice(-max) : s;
 }
 
 export class AcpSupervisor extends EventEmitter {
   private children = new Map<string, AcpChild>();
 
   spawn(opts: AcpSpawnOptions): void {
-    const proc = spawn(opts.binaryPath, ['acp'], {
-      cwd: opts.cwd,
-      env: { ...process.env, HERMES_HOME: opts.hermesHome },
+    const spec = buildSpawnSpec(opts);
+    const proc = spawn(spec.command, spec.args, {
+      // Remote spawns have no local cwd — the task folder is a remote path,
+      // delivered to the agent via session/new.
+      ...(spec.cwd ? { cwd: spec.cwd } : {}),
+      env: spec.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -55,7 +70,9 @@ export class AcpSupervisor extends EventEmitter {
 
     proc.stderr?.on('data', (chunk: Buffer) => {
       // Hermes ACP logs to stderr; surface for debugging.
-      console.error(`[acp ${opts.id}]`, chunk.toString('utf8').trimEnd());
+      const text = chunk.toString('utf8');
+      console.error(`[acp ${opts.id}]`, text.trimEnd());
+      child.stderrTail = (child.stderrTail + text).slice(-2000);
     });
 
     proc.on('error', (err) => {
@@ -64,12 +81,20 @@ export class AcpSupervisor extends EventEmitter {
     });
 
     proc.on('exit', (code) => {
-      this.rejectAllPending(child, new Error(`ACP child exited (code=${code ?? 'null'})`));
+      // Only ssh children: a local Hermes logs routine warnings to stderr that
+      // would be noise here, but ssh's stderr is the failure reason itself
+      // (Permission denied, Host key verification failed, command not found).
+      const detail = opts.remote && !child.stopping ? stderrSummary(child.stderrTail) : '';
+      this.rejectAllPending(
+        child,
+        new Error(`ACP child exited (code=${code ?? 'null'})${detail ? `: ${detail}` : ''}`),
+      );
       this.emit('event', {
         kind: 'exit',
         sessionId: opts.id,
         code,
         expected: child.stopping,
+        ...(detail ? { detail } : {}),
       } satisfies AcpEvent);
       this.children.delete(opts.id);
     });

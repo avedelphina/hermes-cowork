@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
-  CoworkTask, TaskStatus, ChatSession, UpdateStatus,
+  CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin,
 } from '../shared/types';
 
 const api = {
@@ -16,9 +16,9 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
-    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean }): Promise<{ sessionId: string }> =>
+    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; taskId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
     setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
@@ -69,9 +69,9 @@ const api = {
   },
   projects: {
     list: (): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectList),
-    create: (input: { name: string; folderPath: string | null; profile: string }): Promise<Project> =>
+    create: (input: { name: string; folderPath: string | null; profile: string; remote?: RemoteOrigin | null }): Promise<Project> =>
       ipcRenderer.invoke(IpcChannel.ProjectCreate, input),
-    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string | null }): Promise<Project | null> =>
+    update: (id: string, patch: { name?: string; profile?: string; folderPath?: string | null; remote?: RemoteOrigin | null }): Promise<Project | null> =>
       ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
     setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
     remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),

@@ -36,6 +36,7 @@ export function NewTaskDialog() {
 
 function Dialog() {
   const proj = activeProject();
+  const remote = proj?.remote ?? null;
   const [goal, setGoal] = useState('');
   const [cwd, setCwd] = useState(() => proj?.folderPath ?? '');
   const [profile, setProfile] = useState(() => proj?.profile ?? 'default');
@@ -70,7 +71,7 @@ function Dialog() {
     let sessionId: string | null = null;
     try {
       // Cowork tasks get their own ACP child so Stop can hard-cancel them.
-      ({ sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true }));
+      ({ sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true, projectId: activeProject()?.id ?? null }));
       // Always plan in `default` — "auto" only takes effect once the plan is
       // approved (see agentModeFor). Failing to set it must not start the task.
       await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR.ask });
@@ -81,7 +82,7 @@ function Dialog() {
       // Hand the kickoff to CoworkPage: it registers the event listener before
       // sending, so the streamed plan is not lost between routes.
       startTask({
-        taskId: task.id, sessionId, goal, cwd, profile,
+        taskId: task.id, sessionId, goal, cwd, profile, remote,
         kickoff: `${COWORK_SYSTEM_PROMPT}\n\nGoal: ${goal}\nWorking directory: ${cwd}\n\nPropose the plan now.`,
       });
       navigate('/cowork');
@@ -106,7 +107,9 @@ function Dialog() {
         className="mb-4 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
       />
 
-      <label className="mb-1 block text-xs text-muted">Working folder (absolute path)</label>
+      <label className="mb-1 block text-xs text-muted">
+        Working folder (absolute path{remote ? ` on ${remote.sshTarget}` : ''})
+      </label>
       <div className="mb-4 flex gap-2">
         <input
           value={cwd}
@@ -114,10 +117,18 @@ function Dialog() {
           placeholder="/Users/x/work/q2-report"
           className="flex-1 rounded border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none"
         />
-        <button onClick={() => { void pickFolder(); }} className="rounded bg-surface2 px-3 py-2 text-xs hover:bg-border">
-          Pick…
-        </button>
+        {!remote && (
+          <button onClick={() => { void pickFolder(); }} className="rounded bg-surface2 px-3 py-2 text-xs hover:bg-border">
+            Pick…
+          </button>
+        )}
       </div>
+
+      {remote && (
+        <p className="mb-4 -mt-2 text-[11px] text-accent">
+          ⇄ Remote task — the agent runs on {remote.sshTarget} over SSH. Set on the project.
+        </p>
+      )}
 
       <label className="mb-1 block text-xs text-muted">Profile</label>
       {profiles.length > 0 ? (
