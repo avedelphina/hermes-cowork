@@ -206,12 +206,16 @@ export function buildRemoteCommand(remote: RemoteOrigin, profile: string): strin
     return viaSh(`exec ${sudo}${runtime} exec -i ${name} sh -c ${shQuote(inside)}`);
   }
   if (remote.runAs) {
-    // `$HOME` would be the login user's, not the target's, so a non-default
-    // profile needs an explicit home; the default one is left to the target
-    // user's own environment.
-    if (profile !== 'default' && !remote.hermesHome?.trim()) {
-      throw new Error('Set the remote Hermes home to use a non-default profile when running as another user.');
+    if (!remote.hermesHome?.trim() && profile !== 'default') {
+      // Hermes' own `--profile` resolves under the *target* user's Hermes home,
+      // so nothing has to cross sudo's environment reset (`$HOME` here would be
+      // the login user's, and HERMES_HOME would need `env_keep` on the host).
+      // The sudoers rule can be exactly `<bin> --profile <name> acp`.
+      if (!isValidProfileName(profile)) throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
+      return viaSh(`exec ${sudo}${bin} --profile ${profile} acp`);
     }
+    // Default profile: left to the target user's own environment. An explicit
+    // home is carried in HERMES_HOME (which needs `env_keep` on the host).
     const env = explicit ? `HERMES_HOME=${remoteHomeFragment(remote, profile)} ` : '';
     return viaSh(`${env}exec ${sudo}${bin} acp`);
   }

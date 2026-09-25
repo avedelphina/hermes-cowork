@@ -167,9 +167,22 @@ tomas ALL=(root) NOPASSWD: /usr/local/bin/hermes acp
 Set the agent's binary path to `/usr/local/bin/hermes` so the command matches
 the rule. `-n` makes a missing or wrong rule fail immediately (a
 non-interactive ssh cannot answer a password prompt anyway). For the default
-profile nothing else is needed: root uses its own `/root/.hermes`. For a
-non-default profile, or a home elsewhere, set the remote Hermes home and let
-sudo keep it: `Defaults!/usr/local/bin/hermes env_keep += "HERMES_HOME"`.
+profile nothing else is needed: root uses its own `/root/.hermes`.
+
+For a **non-default profile** (e.g. `holly`, which the gateway runs as
+`hermes --profile holly gateway run`) the app runs
+`sudo -n -u root -- /usr/local/bin/hermes --profile holly acp`. Hermes resolves
+`--profile` under the target user's own home, so no environment has to survive
+sudo, no home needs setting, and the rule can pin the profile exactly:
+
+```
+tomas ALL=(root) NOPASSWD: /usr/local/bin/hermes --profile holly acp
+```
+
+Only if you set an explicit remote Hermes home does the app pass it as
+`HERMES_HOME` in the environment; sudo then needs
+`Defaults!/usr/local/bin/hermes env_keep += "HERMES_HOME"` or it silently
+drops it and Hermes falls back to the user's default profile.
 (Do not use `sudo … env HERMES_HOME=…`: then sudo runs `env`, and a rule that
 lets a user run `env` as root is a root shell.) A tighter alternative is a
 root-owned launcher that fixes the home itself, with the sudoers rule and the
