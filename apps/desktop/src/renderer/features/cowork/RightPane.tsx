@@ -30,6 +30,10 @@ export function RightPane() {
   const [width, setWidth] = useState(initialWidth);
   const changed = useCoworkStore((s) => s.checkpoints.length);
   const planEntries = useCoworkStore((s) => s.planEntries);
+  const remote = useCoworkStore((s) => s.remote);
+  // A remote task's files live on the other machine — the local file browser
+  // and checkpoints can't reach them (main refuses), so don't offer the tabs.
+  const tabs = remote ? TABS.filter((t) => t.id === 'plan') : TABS;
   const planDone = planEntries.filter((e) => e.status === 'completed').length;
   const badge: Partial<Record<TabId, string>> = {
     plan: planEntries.length ? `${planDone}/${planEntries.length}` : '',
@@ -71,7 +75,7 @@ export function RightPane() {
         className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent/30"
       />
       <div className="flex border-b border-border text-[11px]">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -88,9 +92,14 @@ export function RightPane() {
         ))}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {tab === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
-        {tab === 'files' && <FileBrowser />}
-        {tab === 'changes' && <div className="overflow-y-auto"><ChangesTab onOpenFile={() => setTab('files')} /></div>}
+        {(remote ? 'plan' : tab) === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
+        {!remote && tab === 'files' && <FileBrowser />}
+        {!remote && tab === 'changes' && <div className="overflow-y-auto"><ChangesTab onOpenFile={() => setTab('files')} /></div>}
+        {remote && (
+          <div className="border-t border-border px-3 py-2 text-[10px] text-dim">
+            Remote task — files and checkpoints stay on {remote.sshTarget}.
+          </div>
+        )}
       </div>
       <div className="border-t border-border p-3 text-[11px]">
         <div className="mb-2 text-[9px] uppercase tracking-wide text-dim">Mode</div>

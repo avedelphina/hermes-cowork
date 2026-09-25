@@ -10,6 +10,7 @@ export function ProjectsPage() {
   const [name, setName] = useState('');
   const [folder, setFolder] = useState('');
   const [profile, setProfile] = useState('default');
+  const [sshTarget, setSshTarget] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [ctx, setCtx] = useState<Record<string, string[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -45,11 +46,15 @@ export function ProjectsPage() {
   const create = async () => {
     setError(null);
     try {
-      await window.hermes.projects.create({ name, folderPath: folder.trim() || null, profile });
+      await window.hermes.projects.create({
+        name, folderPath: folder.trim() || null, profile,
+        remote: sshTarget.trim() ? { sshTarget: sshTarget.trim() } : null,
+      });
       await load();
       setCreating(false);
       setName('');
       setFolder('');
+      setSshTarget('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -96,6 +101,11 @@ export function ProjectsPage() {
             </span>
           )}
           <span className="text-[10px] text-dim">{p.profile}</span>
+          {p.remote && (
+            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent" title="Runs on another machine over SSH">
+              ⇄ {p.remote.sshTarget}
+            </span>
+          )}
         </div>
         <div className="truncate text-[11px] text-muted">
           {p.folderPath ?? 'no folder — chat only'}
@@ -169,15 +179,40 @@ export function ProjectsPage() {
             className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
           />
           <label className="mb-1 block text-xs text-muted">Profile</label>
-          <select
-            value={profile}
-            onChange={(e) => setProfile(e.target.value)}
+          {sshTarget.trim() ? (
+            // Remote profiles are not in the local dashboard's list, so the
+            // select would reject them — free-text instead.
+            <input
+              value={profile}
+              onChange={(e) => setProfile(e.target.value)}
+              placeholder="default"
+              className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+            />
+          ) : (
+            <select
+              value={profile}
+              onChange={(e) => setProfile(e.target.value)}
+              className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+            >
+              {(profiles.length ? profiles : [profile]).map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          )}
+          <label className="mb-1 block text-xs text-muted">
+            Remote SSH target <span className="text-dim">(optional — [user@]host or ~/.ssh/config alias; agent runs there)</span>
+          </label>
+          <input
+            value={sshTarget}
+            onChange={(e) => setSshTarget(e.target.value)}
+            placeholder="e.g. helsinki or root@192.0.2.10"
             className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
-          >
-            {(profiles.length ? profiles : [profile]).map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+          />
+          {sshTarget.trim() && (
+            <p className="mb-3 -mt-2 text-[10px] text-dim">
+              The folder above is a path on the remote host. Files/Changes tabs are unavailable for remote tasks.
+            </p>
+          )}
           {error && <p className="mb-2 text-xs text-danger">{error}</p>}
           <button
             onClick={() => void create()}

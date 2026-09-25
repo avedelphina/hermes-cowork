@@ -9,12 +9,12 @@
 import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
 
-import type { Project } from '../../shared/types';
+import type { Project, RemoteOrigin } from '../../shared/types';
 export type { Project };
 
 type Data = { projects: Project[]; activeId: string | null };
-type CreateInput = { name: string; folderPath: string | null; profile: string };
-type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived'>>;
+type CreateInput = { name: string; folderPath: string | null; profile: string; remote?: RemoteOrigin | null };
+type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived' | 'remote'>>;
 
 export class ProjectStore {
   private data: Data = { projects: [], activeId: null };
@@ -29,6 +29,7 @@ export class ProjectStore {
     const projects = (Array.isArray(parsed.projects) ? parsed.projects : []).map((p) => ({
       ...p,
       archived: p.archived ?? false, // migrate pre-archive records
+      remote: p.remote ?? null, // migrate pre-remote records
     }));
     return {
       projects,
@@ -56,6 +57,7 @@ export class ProjectStore {
     const now = new Date().toISOString();
     const project: Project = {
       name: input.name, folderPath: input.folderPath, profile: input.profile,
+      remote: input.remote ?? null,
       id: randomUUID(), createdAt: now, lastOpenedAt: now, archived: false,
     };
     this.data.projects.push(project);
@@ -67,7 +69,7 @@ export class ProjectStore {
   update(id: string, patch: UpdatePatch): Project | null {
     const project = this.get(id);
     if (!project) return null;
-    Object.assign(project, pick(patch, ['name', 'profile', 'folderPath', 'archived'] as const));
+    Object.assign(project, pick(patch, ['name', 'profile', 'folderPath', 'archived', 'remote'] as const));
     // Archiving the active project drops the active pointer to the next live one.
     if (project.archived && this.data.activeId === id) {
       this.data.activeId = this.data.projects.find((p) => !p.archived)?.id ?? null;

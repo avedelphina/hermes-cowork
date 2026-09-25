@@ -4,6 +4,28 @@ All notable changes to Hermes Cowork. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project is pre-1.0 so
 minor versions may carry breaking changes.
 
+## Unreleased
+
+### Added
+- **Remote agents over SSH.** A project can declare a remote origin
+  ([user@]host or an `~/.ssh/config` alias); its Cowork tasks spawn
+  `hermes acp` on that host (`ssh -T -o BatchMode=yes … 'exec hermes acp'`)
+  with plan-gating and inline approvals unchanged. Remote targets and paths
+  are strictly validated at the IPC boundary; the ACP connection pool keys
+  include the SSH target so same-named local/remote profiles never share a
+  child. See `docs/remote-connection.md`.
+- `tests/integration/remote-ssh.test.ts` — end-to-end proof against a real
+  host (handshake, full turn, orphan-free stop, fail-closed on bad target);
+  runs when `HERMES_REMOTE_TEST_TARGET` is set, skipped otherwise.
+- Remote projects/tasks show a ⇄ badge in the project list, task list, new
+  task dialog, and goal header.
+
+### Changed
+- **Trust boundary for remote tasks.** The file browser, checkpoints, and
+  revert are local-only and now refuse remote tasks outright (their files
+  live on the other machine); the renderer hides the Files/Changes tabs for
+  them. Remote cwds skip the local existence check but must be absolute.
+
 ## [0.2.0] — 2026-09-04
 
 First signed + notarised build.

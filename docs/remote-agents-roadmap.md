@@ -1,6 +1,8 @@
 # Remote agents — roadmap
 
-Status: **not started**. Written 2026-09-04 to capture the plan before work
+Status: **Phase 0+1 done** (2026-09-25 — see Phase 0 for results and
+[`remote-connection.md`](remote-connection.md) for the as-built design).
+Written 2026-09-04 to capture the plan before work
 begins, so it can be picked up cold later. This is the spike-first path
 toward calling a Hermes profile running on another machine, ahead of any
 bigger "team of specialist agents" product decision.
@@ -81,6 +83,30 @@ config UI now — Phase 0/1 only need the host field; the other four stay
 implicit until a concrete use case needs one split out.
 
 ## Phase 0 — Spike: prove the transport (do this first, nothing else)
+
+**DONE 2026-09-25.** The argv generalization landed as `orchestrator/spawn-spec.ts`
+(`buildSpawnSpec`), SSH is the transport, and the spike graduated into a real
+feature: projects carry an optional remote origin, tasks denormalize it, and
+the UI surfaces it. See [`remote-connection.md`](remote-connection.md) for the
+as-built design. Verified end-to-end against a real host
+(`tests/integration/remote-ssh.test.ts`):
+
+- Framing survives an ssh pipe unmodified (handshake, `session/new`,
+  `session/prompt`, streamed tokens, `done`) — the `-T` (no pty) flag matters.
+- Kill over SSH leaves no orphan: `exec` in the remote command means the
+  remote agent dies when the local ssh process is killed.
+- Bad target fails closed and fast (`BatchMode=yes` — no password-prompt hang).
+- Not proven live: an approval round-trip (the test host's profile had broken
+  model auth — HTTP 401 — so the agent never reached a tool call). The
+  approval path is the same transport-agnostic code as local and is
+  unit-tested; re-run the integration test against a host with working model
+  auth to close this out.
+- Answer to the spike's real question: **config/plumbing change, not
+  rework.** Nothing in ACP's session model leaked local-process assumptions;
+  everything above `spawn()` needed no changes beyond passing `remote`
+  through and keying the connection pool by SSH target.
+
+Original spike write-up below, kept for context.
 
 Goal: one remote profile, one task, round-trip works. No config UI, no
 product surface, throwaway code is fine.

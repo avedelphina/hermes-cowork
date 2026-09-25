@@ -7,7 +7,7 @@
 
 import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
-import type { CoworkTask, TaskStatus } from '../../shared/types';
+import type { CoworkTask, TaskStatus, RemoteOrigin } from '../../shared/types';
 export type { CoworkTask, TaskStatus };
 
 type Data = { tasks: CoworkTask[] };
@@ -18,6 +18,7 @@ type CreateInput = {
   acpSessionId: string;
   projectId: string | null;
   parentTaskId?: string | null;
+  remote?: RemoteOrigin | null;
 };
 
 // Statuses that mean "the agent was mid-flight" — if we find one at load time
@@ -34,7 +35,7 @@ export class TaskStore {
   private read(): Data {
     const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
     const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) => {
-      const migrated = { ...t, parentTaskId: t.parentTaskId ?? null };
+      const migrated = { ...t, parentTaskId: t.parentTaskId ?? null, remote: t.remote ?? null };
       return LIVE.includes(migrated.status) ? { ...migrated, status: 'interrupted' as const } : migrated;
     });
     return { tasks };
@@ -62,6 +63,7 @@ export class TaskStore {
       acpSessionId: input.acpSessionId,
       projectId: input.projectId,
       parentTaskId: input.parentTaskId ?? null,
+      remote: input.remote ?? null,
       id: randomUUID(),
       status: 'planning',
       approved: false,

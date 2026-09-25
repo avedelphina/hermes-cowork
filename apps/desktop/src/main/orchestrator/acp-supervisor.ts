@@ -3,6 +3,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { FrameDecoder, encodeFrame, type JsonRpcMessage } from './jsonrpc';
+import { buildSpawnSpec } from './spawn-spec';
+import type { RemoteOrigin } from '../../shared/types';
 
 export type AcpSession = {
   id: string;
@@ -13,6 +15,8 @@ export type AcpSession = {
 export type AcpSpawnOptions = AcpSession & {
   binaryPath: string;
   hermesHome: string;
+  /** Reach the agent over SSH instead of spawning locally. */
+  remote?: RemoteOrigin | null;
 };
 
 export type AcpEvent =
@@ -38,9 +42,12 @@ export class AcpSupervisor extends EventEmitter {
   private children = new Map<string, AcpChild>();
 
   spawn(opts: AcpSpawnOptions): void {
-    const proc = spawn(opts.binaryPath, ['acp'], {
-      cwd: opts.cwd,
-      env: { ...process.env, HERMES_HOME: opts.hermesHome },
+    const spec = buildSpawnSpec(opts);
+    const proc = spawn(spec.command, spec.args, {
+      // Remote spawns have no local cwd — the task folder is a remote path,
+      // delivered to the agent via session/new.
+      ...(spec.cwd ? { cwd: spec.cwd } : {}),
+      env: spec.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

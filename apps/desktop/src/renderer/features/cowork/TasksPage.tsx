@@ -102,6 +102,7 @@ export function TasksPage() {
                   <div className="truncate text-sm text-fg">{t.goal}</div>
                   <div className="mt-0.5 flex gap-2 text-[11px]">
                     <span className={blocked ? 'text-warn' : STATUS_STYLE[t.status]}>● {blocked ? 'blocked — needs approval' : STATUS_LABEL[t.status]}</span>
+                    {t.remote && <span className="text-accent">⇄ {t.remote.sshTarget}</span>}
                     <span className="text-dim">{proj?.name ?? t.cwd}</span>
                     <span className="text-dim">{new Date(t.updatedAt).toLocaleString()}</span>
                   </div>

@@ -9,6 +9,7 @@ import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
+import { isValidSshTarget } from '../orchestrator/spawn-spec';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
@@ -16,7 +17,7 @@ import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { UpdaterController } from '../update/updater';
-import type { TaskStatus } from '../../shared/types';
+import type { TaskStatus, RemoteOrigin } from '../../shared/types';
 
 type Context = {
   hermesBinary: string;
@@ -49,6 +50,30 @@ function obj(v: unknown, what: string): Record<string, unknown> {
 const TASK_STATUSES: readonly TaskStatus[] = [
   'planning', 'awaiting_approval', 'executing', 'done', 'failed', 'stopped', 'interrupted',
 ];
+
+/**
+ * Validate a renderer-supplied remote origin. Null/undefined → null (local
+ * task). Anything else must be a well-formed RemoteOrigin: a strict SSH
+ * target (no whitespace/metachars — see spawn-spec.isValidSshTarget) and
+ * optional string overrides. The renderer is untrusted; this is the boundary.
+ */
+function parseRemote(raw: unknown): RemoteOrigin | null {
+  if (raw === null || raw === undefined) return null;
+  const o = obj(raw, 'remote');
+  const sshTarget = str(o['sshTarget'], 'remote.sshTarget');
+  if (!isValidSshTarget(sshTarget)) throw new Error(`invalid SSH target: ${JSON.stringify(sshTarget)}`);
+  const hermesHome = strOrNull(o['hermesHome'], 'remote.hermesHome');
+  const binaryPath = strOrNull(o['binaryPath'], 'remote.binaryPath');
+  return { sshTarget, hermesHome, binaryPath };
+}
+
+/** A remote task's cwd is a path on the *remote* host — it must be absolute
+ * there (`/…` or `~/…`), and local existence checks do not apply. */
+function assertRemoteCwd(cwd: string): void {
+  if (!cwd.startsWith('/') && !cwd.startsWith('~/')) {
+    throw new Error(`Remote working folder must be an absolute path on the remote host, got: ${JSON.stringify(cwd)}`);
+  }
+}
 
 export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   // Every privileged channel is registered through this wrapper, never
@@ -146,21 +171,36 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.AcpStart,
     async (_e, raw: unknown) => {
       const o = obj(raw, 'acp:start options');
-      const opts = { profile: str(o['profile'], 'profile'), cwd: strOrNull(o['cwd'], 'cwd') ?? undefined, isolate: o['isolate'] === true };
+      const opts = {
+        profile: str(o['profile'], 'profile'),
+        cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
+        isolate: o['isolate'] === true,
+        remote: parseRemote(o['remote']),
+      };
       // Chat is not folder-scoped — it defaults to the home directory. A Cowork
       // task always passes an explicit folder the user picked. An explicit cwd
       // that does not exist fails closed (never a silent widening to $HOME).
       const cwd = opts.cwd ? opts.cwd : homedir();
-      if (!isExistingDir(cwd)) {
-        throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
+      if (opts.remote) {
+        // The path lives on the remote host; local existence checks don't
+        // apply, and neither does the local dashboard's profile list.
+        assertRemoteCwd(cwd);
+        if (opts.profile !== 'default' && !isValidProfileName(opts.profile)) {
+          throw new Error(`invalid profile name: ${JSON.stringify(opts.profile)}`);
+        }
+      } else {
+        if (!isExistingDir(cwd)) {
+          throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
+        }
+        await assertKnownProfile(opts.profile);
       }
-      await assertKnownProfile(opts.profile);
       return bridge.startSession({
         profile: opts.profile,
         cwd,
         isolate: !!opts.isolate,
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
+        remote: opts.remote,
       });
     },
   );
@@ -185,15 +225,24 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         sessionId: str(o['sessionId'], 'sessionId'),
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
+        remote: parseRemote(o['remote']),
       };
       const profile = strOrNull(o['profile'], 'profile') ?? 'default';
       // An explicit cwd must exist — a moved/deleted project folder must fail,
-      // not silently widen the task's scope to $HOME.
-      if (opts.cwd && !isExistingDir(opts.cwd)) {
-        throw new Error(`Cannot resume: "${opts.cwd}" is not an existing directory.`);
+      // not silently widen the task's scope to $HOME. Remote cwds live on the
+      // remote host, so they get a shape check instead of an existence check.
+      if (opts.remote) {
+        if (opts.cwd) assertRemoteCwd(opts.cwd);
+        if (profile !== 'default' && !isValidProfileName(profile)) {
+          throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
+        }
+      } else {
+        if (opts.cwd && !isExistingDir(opts.cwd)) {
+          throw new Error(`Cannot resume: "${opts.cwd}" is not an existing directory.`);
+        }
+        await assertKnownProfile(profile);
       }
       const cwd = opts.cwd ? opts.cwd : homedir();
-      await assertKnownProfile(profile);
       return bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -201,6 +250,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         isolate: !!opts.isolate,
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, profile),
+        remote: opts.remote,
       });
     },
   );
@@ -310,17 +360,27 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.ProjectCreate,
     (_e, raw: unknown) => {
       const o = obj(raw, 'project');
-      const input = { name: str(o['name'] ?? '', 'name'), folderPath: strOrNull(o['folderPath'], 'folderPath'), profile: str(o['profile'], 'profile') };
-      // A folder is optional (chat-only projects). If given, it must exist.
+      const input = {
+        name: str(o['name'] ?? '', 'name'),
+        folderPath: strOrNull(o['folderPath'], 'folderPath'),
+        profile: str(o['profile'], 'profile'),
+        remote: parseRemote(o['remote']),
+      };
+      // A folder is optional (chat-only projects). If given, it must exist —
+      // locally, or on the remote host for a remote project (shape-checked
+      // only; we cannot stat another machine's filesystem).
       const folderPath = input.folderPath?.trim() ? input.folderPath : null;
-      if (folderPath !== null && !isExistingDir(folderPath)) {
-        throw new Error(`"${folderPath}" is not an existing directory.`);
+      if (folderPath !== null) {
+        if (input.remote) assertRemoteCwd(folderPath);
+        else if (!isExistingDir(folderPath)) {
+          throw new Error(`"${folderPath}" is not an existing directory.`);
+        }
       }
       const name =
         input.name.trim() ||
         folderPath?.split('/').filter(Boolean).pop() ||
         'Project';
-      return projects.create({ name, folderPath, profile: input.profile });
+      return projects.create({ name, folderPath, profile: input.profile, remote: input.remote });
     },
   );
 
@@ -328,15 +388,22 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.ProjectUpdate,
     (_e, id: unknown, raw: unknown) => {
       const patch = obj(raw, 'project patch');
-      const next: { name?: string; profile?: string; folderPath?: string | null; archived?: boolean } = {};
+      const next: { name?: string; profile?: string; folderPath?: string | null; archived?: boolean; remote?: RemoteOrigin | null } = {};
       if (patch['name'] !== undefined) next.name = str(patch['name'], 'name');
       if (patch['profile'] !== undefined) next.profile = str(patch['profile'], 'profile');
       if (patch['archived'] !== undefined) next.archived = patch['archived'] === true;
+      if (patch['remote'] !== undefined) next.remote = parseRemote(patch['remote']);
       if (patch['folderPath'] !== undefined) {
         const fp = strOrNull(patch['folderPath'], 'folderPath');
         next.folderPath = fp?.trim() ? fp : null;
-        if (next.folderPath !== null && !isExistingDir(next.folderPath)) {
-          throw new Error(`"${next.folderPath}" is not an existing directory.`);
+        if (next.folderPath !== null) {
+          // Remote-aware: existence is only checkable for local folders. The
+          // effective remote is the patch's if given, else the stored one.
+          const remote = next.remote !== undefined ? next.remote : (projects.get(str(id, 'id'))?.remote ?? null);
+          if (remote) assertRemoteCwd(next.folderPath);
+          else if (!isExistingDir(next.folderPath)) {
+            throw new Error(`"${next.folderPath}" is not an existing directory.`);
+          }
         }
       }
       return projects.update(str(id, 'id'), next);
@@ -357,6 +424,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     const p = projects.get(str(id, 'id'));
     if (!p) throw new Error(`unknown project ${id}`);
     if (!p.folderPath) throw new Error(`project ${id} has no folder`);
+    if (p.remote) throw new Error('context files live on the remote host — not readable locally');
     return p.folderPath;
   };
 
@@ -374,10 +442,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       acpSessionId: str(o['acpSessionId'], 'acpSessionId'),
       projectId: strOrNull(o['projectId'], 'projectId'),
       parentTaskId: strOrNull(o['parentTaskId'], 'parentTaskId'),
+      remote: parseRemote(o['remote']),
     };
     // The stored cwd is the trust root for this task's checkpoint IPC, so it
-    // must be a real directory (same bar as acp:start).
-    if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
+    // must be a real directory (same bar as acp:start) — locally. For a
+    // remote task the root lives on the other machine and the local
+    // filesystem channels refuse it entirely (see taskRoot).
+    if (input.remote) assertRemoteCwd(input.cwd);
+    else if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
     return tasks.create(input);
   });
   handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
@@ -423,6 +495,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const taskRoot = (taskId: unknown): string => {
     const t = tasks.get(str(taskId, 'taskId'));
     if (!t) throw new Error(`unknown task ${String(taskId)}`);
+    // Folder scope is the trust boundary — and it is enforced against the
+    // *local* filesystem. A remote task's files live on the other machine;
+    // none of this code may reach them, so refuse rather than risk reading
+    // or writing a same-named local path.
+    if (t.remote) throw new Error('remote task — file browsing and checkpoints are local-only');
     if (!isExistingDir(t.cwd)) throw new Error('invalid task root');
     return t.cwd;
   };
@@ -440,7 +517,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   };
   function autoCheckpoint(ev: Extract<AcpServerMessage, { kind: 'tool-call' }>): void {
     const task = tasks.list().find((t) => t.acpSessionId === ev.sessionId);
-    if (!task) return;
+    if (!task || task.remote) return; // remote edits are out of local reach
     const args = (ev.args ?? {}) as { path?: unknown; file_path?: unknown; target?: unknown };
     const path = [ev.paths[0], args.path, args.file_path, args.target].find((p): p is string => typeof p === 'string');
     if (!path) return;
