@@ -40,6 +40,20 @@ class AcpChild {
   constructor(public readonly proc: ChildProcess, public readonly session: AcpSession) {}
 }
 
+/**
+ * Hermes reports most failures as "-32603 Internal error" and puts the real
+ * reason in `error.data.details` ("No LLM provider configured. Run `hermes
+ * model` …"). Without it the message is useless.
+ */
+export function errorDetail(data: unknown): string {
+  const raw = typeof data === 'string' ? data
+    : data && typeof data === 'object' && typeof (data as { details?: unknown }).details === 'string'
+      ? (data as { details: string }).details
+      : '';
+  const text = raw.trim().replace(/\s+/g, ' ');
+  return text ? ` — ${text.length > 400 ? text.slice(0, 400) + '…' : text}` : '';
+}
+
 /** The last few stderr lines, for an error message a person can act on. */
 export function stderrSummary(tail: string, lines = 3, max = 300): string {
   const s = tail.split('\n').map((l) => l.trim()).filter(Boolean).slice(-lines).join(' / ');
@@ -171,8 +185,8 @@ export class AcpSupervisor extends EventEmitter {
       if (pending) {
         child.pending.delete(id as string | number);
         if ('error' in msg && msg['error']) {
-          const err = msg['error'] as { code?: number; message?: string };
-          pending.reject(new Error(`ACP error ${err.code ?? '?'}: ${err.message ?? 'unknown'}`));
+          const err = msg['error'] as { code?: number; message?: string; data?: unknown };
+          pending.reject(new Error(`ACP error ${err.code ?? '?'}: ${err.message ?? 'unknown'}${errorDetail(err.data)}`));
         } else {
           pending.resolve(msg['result']);
         }
