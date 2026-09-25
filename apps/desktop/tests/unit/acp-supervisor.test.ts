@@ -9,7 +9,7 @@ vi.mock('node:child_process', async () => {
   return { ...actual, spawn: vi.fn() };
 });
 
-import { AcpSupervisor, stderrSummary, type AcpEvent } from '@main/orchestrator/acp-supervisor';
+import { AcpSupervisor, stderrSummary, errorDetail, type AcpEvent } from '@main/orchestrator/acp-supervisor';
 import { encodeFrame } from '@main/orchestrator/jsonrpc';
 
 class MockProc extends EventEmitter {
@@ -102,6 +102,18 @@ describe('AcpSupervisor', () => {
     await expect(promise).rejects.toThrow(/Invalid params/);
   });
 
+  it('request() includes Hermes\' error.data.details, where the real reason lives', async () => {
+    const { sup, proc } = makeSupervisor();
+    const promise = sup.request('s1', 'session/new', {});
+    await new Promise((r) => setImmediate(r));
+    const id = proc.lastWrittenJson()['id'] as string;
+    proc.stdout!.push(encodeFrame({
+      jsonrpc: '2.0', id,
+      error: { code: -32603, message: 'Internal error', data: { details: 'No LLM provider configured. Run `hermes model`.' } },
+    }));
+    await expect(promise).rejects.toThrow('ACP error -32603: Internal error — No LLM provider configured. Run `hermes model`.');
+  });
+
   it('rejects in-flight pending requests when the child exits', async () => {
     const { sup, proc } = makeSupervisor();
     const promise = sup.request('s1', 'initialize', {});
@@ -153,5 +165,14 @@ describe('stderrSummary', () => {
     expect(long.length).toBeLessThanOrEqual(301);
     expect(long.startsWith('…')).toBe(true);
     expect(stderrSummary('')).toBe('');
+  });
+});
+
+describe('errorDetail', () => {
+  it('reads details from an object or a string, collapses whitespace, caps length, and is empty otherwise', () => {
+    expect(errorDetail({ details: 'a\n  b' })).toBe(' — a b');
+    expect(errorDetail('plain')).toBe(' — plain');
+    expect(errorDetail('x'.repeat(500))).toHaveLength(3 + 400 + 1);
+    for (const none of [undefined, null, {}, { details: 5 }, '  ']) expect(errorDetail(none)).toBe('');
   });
 });

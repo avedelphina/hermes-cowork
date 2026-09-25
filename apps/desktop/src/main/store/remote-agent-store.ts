@@ -10,12 +10,18 @@ import { randomUUID } from 'node:crypto';
 import type { RemoteAgent, RemoteOrigin } from '../../shared/types';
 
 type Data = { agents: RemoteAgent[] };
-type CreateInput = Pick<RemoteAgent, 'name' | 'sshTarget' | 'hermesHome' | 'binaryPath' | 'profile'>;
+type CreateInput = Omit<RemoteAgent, 'id' | 'createdAt'>;
 type UpdatePatch = Partial<CreateInput>;
+
+/** Fields that describe how to reach and launch the agent (everything but name/profile). */
+const ORIGIN_KEYS = ['sshTarget', 'hermesHome', 'binaryPath', 'port', 'identityFile', 'proxyJump', 'runAs', 'container', 'command'] as const;
 
 /** The connection part of an agent — what the ACP spawn needs. */
 export function toOrigin(a: RemoteAgent): RemoteOrigin {
-  return { sshTarget: a.sshTarget, hermesHome: a.hermesHome, binaryPath: a.binaryPath };
+  return {
+    sshTarget: a.sshTarget, hermesHome: a.hermesHome, binaryPath: a.binaryPath, port: a.port,
+    identityFile: a.identityFile, proxyJump: a.proxyJump, runAs: a.runAs, container: a.container, command: a.command,
+  };
 }
 
 export class RemoteAgentStore {
@@ -23,7 +29,14 @@ export class RemoteAgentStore {
 
   constructor(private readonly filePath: string) {
     const parsed = (readJson(filePath) ?? {}) as Partial<Data>;
-    this.data = { agents: Array.isArray(parsed.agents) ? parsed.agents : [] };
+    // Older records predate the launch options — fill them in as "not set".
+    this.data = {
+      agents: (Array.isArray(parsed.agents) ? parsed.agents : []).map((a) => ({
+        ...a,
+        port: a.port ?? null, identityFile: a.identityFile ?? null, proxyJump: a.proxyJump ?? null,
+        runAs: a.runAs ?? null, container: a.container ?? null, command: a.command ?? null,
+      })),
+    };
   }
 
   private write(): void {
@@ -48,7 +61,7 @@ export class RemoteAgentStore {
   update(id: string, patch: UpdatePatch): RemoteAgent | null {
     const agent = this.get(id);
     if (!agent) return null;
-    Object.assign(agent, pick(patch, ['name', 'sshTarget', 'hermesHome', 'binaryPath', 'profile'] as const));
+    Object.assign(agent, pick(patch, ['name', 'profile', ...ORIGIN_KEYS] as const));
     this.write();
     return agent;
   }

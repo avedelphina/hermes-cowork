@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RemoteAgent } from '@shared/types';
+import type { RemoteAgent, RemoteAgentInput } from '@shared/types';
 import { useRemotesStore } from './remotes.store';
 
 type Probe = { state: 'testing' } | { state: 'ok'; ms: number } | { state: 'error'; message: string };
@@ -20,6 +20,14 @@ export function RemotesPage() {
   const [profile, setProfile] = useState('default');
   const [hermesHome, setHermesHome] = useState('');
   const [binaryPath, setBinaryPath] = useState('');
+  // Advanced deployment options — all optional.
+  const [port, setPort] = useState('');
+  const [identityFile, setIdentityFile] = useState('');
+  const [proxyJump, setProxyJump] = useState('');
+  const [runAs, setRunAs] = useState('');
+  const [ctRuntime, setCtRuntime] = useState<'' | 'docker' | 'podman'>('');
+  const [ctName, setCtName] = useState('');
+  const [command, setCommand] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [probes, setProbes] = useState<Record<string, Probe>>({});
   // Profiles found on the remote by "Find profiles"; null until asked.
@@ -28,22 +36,33 @@ export function RemotesPage() {
 
   useEffect(() => { void useRemotesStore.getState().reload(); }, []);
 
-  const reset = () => {
-    setEditingId(null); setName(''); setSshTarget(''); setProfile('default');
-    setHermesHome(''); setBinaryPath(''); setFound(null); setError(null);
+  const load = (r: RemoteAgent | null) => {
+    setEditingId(r?.id ?? null); setName(r?.name ?? ''); setSshTarget(r?.sshTarget ?? ''); setProfile(r?.profile ?? 'default');
+    setHermesHome(r?.hermesHome ?? ''); setBinaryPath(r?.binaryPath ?? '');
+    setPort(r?.port ? String(r.port) : ''); setIdentityFile(r?.identityFile ?? ''); setProxyJump(r?.proxyJump ?? '');
+    setRunAs(r?.runAs ?? ''); setCtRuntime(r?.container?.runtime ?? ''); setCtName(r?.container?.name ?? '');
+    setCommand(r?.command ?? '');
+    setFound(null); setError(null);
   };
+  const reset = () => load(null);
+  const edit = (r: RemoteAgent) => load(r);
 
-  const edit = (r: RemoteAgent) => {
-    setEditingId(r.id); setName(r.name); setSshTarget(r.sshTarget); setProfile(r.profile);
-    setHermesHome(r.hermesHome ?? ''); setBinaryPath(r.binaryPath ?? ''); setFound(null); setError(null);
-  };
+  // Everything the form describes, in the shape main validates.
+  const origin = () => ({
+    sshTarget,
+    hermesHome: hermesHome.trim() || null,
+    binaryPath: binaryPath.trim() || null,
+    port: port.trim() ? Number(port) : null,
+    identityFile: identityFile.trim() || null,
+    proxyJump: proxyJump.trim() || null,
+    runAs: runAs.trim() || null,
+    container: ctRuntime ? { runtime: ctRuntime, name: ctName.trim() } : null,
+    command: command.trim() || null,
+  });
 
   const save = async () => {
     setError(null);
-    const fields = {
-      name, sshTarget, profile,
-      hermesHome: hermesHome.trim() || null, binaryPath: binaryPath.trim() || null,
-    };
+    const fields: RemoteAgentInput = { name, profile, ...origin() };
     try {
       if (editingId) await window.hermes.remotes.update(editingId, fields);
       else await window.hermes.remotes.create(fields);
@@ -64,9 +83,7 @@ export function RemotesPage() {
     setError(null);
     setFinding(true);
     try {
-      const list = await window.hermes.remotes.profiles({
-        sshTarget, hermesHome: hermesHome.trim() || null, binaryPath: binaryPath.trim() || null,
-      });
+      const list = await window.hermes.remotes.profiles(origin());
       setFound(list);
       if (list.length === 0) setError('Connected, but no Hermes profiles were found there. Check the remote Hermes home.');
       else if (!list.includes(profile)) setProfile(list[0]!);
@@ -115,7 +132,12 @@ export function RemotesPage() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-fg">⇄ {r.name}</div>
-                  <div className="truncate text-[11px] text-dim">{r.profile} @ {r.sshTarget}</div>
+                  <div className="truncate text-[11px] text-dim">
+                    {r.profile} @ {r.sshTarget}
+                    {r.container && ` · ${r.container.runtime} ${r.container.name}`}
+                    {r.runAs && ` · as ${r.runAs}`}
+                    {r.command && ' · custom command'}
+                  </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
@@ -187,6 +209,52 @@ export function RemotesPage() {
             <input value={binaryPath} onChange={(e) => setBinaryPath(e.target.value)} placeholder="hermes" className={input + ' mt-1'} />
           </label>
         </div>
+        <details className="mt-4 rounded border border-border px-3 py-2" open={!!(port || identityFile || proxyJump || runAs || ctRuntime || command)}>
+          <summary className="cursor-pointer text-xs text-muted">Advanced deployment</summary>
+          <p className="mt-2 text-[11px] text-dim">
+            For hosts that need more than <code>user@host</code>. Anything an <code>~/.ssh/config</code> alias
+            already sets (port, key, jump host) can go there instead.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="text-xs text-muted">SSH port
+              <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" placeholder="22" className={input + ' mt-1'} />
+            </label>
+            <label className="text-xs text-muted">SSH key file
+              <input value={identityFile} onChange={(e) => setIdentityFile(e.target.value)} placeholder="~/.ssh/id_ed25519" className={input + ' mt-1'} />
+            </label>
+            <label className="col-span-2 text-xs text-muted">Jump host(s) <span className="text-dim">(comma-separated, user@host[:port])</span>
+              <input value={proxyJump} onChange={(e) => setProxyJump(e.target.value)} placeholder="bastion.example.com" className={input + ' mt-1'} />
+            </label>
+            <label className="text-xs text-muted">Run as user <span className="text-dim">(sudo -n)</span>
+              <input value={runAs} onChange={(e) => setRunAs(e.target.value)} placeholder="root" className={input + ' mt-1'} />
+            </label>
+            <span />
+            <label className="text-xs text-muted">Container runtime
+              <select value={ctRuntime} onChange={(e) => setCtRuntime(e.target.value as '' | 'docker' | 'podman')} className={input + ' mt-1'}>
+                <option value="">None — Hermes runs on the host</option>
+                <option value="docker">docker exec</option>
+                <option value="podman">podman exec</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted">Container name
+              <input value={ctName} onChange={(e) => setCtName(e.target.value)} disabled={!ctRuntime} placeholder="hermes-alison" className={input + ' mt-1 disabled:opacity-50'} />
+            </label>
+            <label className="col-span-2 text-xs text-muted">Custom command <span className="text-dim">(replaces everything above that launches Hermes)</span>
+              <textarea
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                rows={2}
+                placeholder='cd /srv/hermes && exec nix-shell --run "hermes acp"'
+                className={input + ' mt-1 font-mono text-xs'}
+              />
+              {command.trim() && (
+                <span className="mt-1 block text-[11px] text-warn">
+                  Runs verbatim on the remote and must speak ACP on stdin/stdout. You will be asked to confirm it when you save.
+                </span>
+              )}
+            </label>
+          </div>
+        </details>
         {error && <p className="mt-3 break-words text-xs text-danger">{error}</p>}
         <div className="mt-4 flex gap-2">
           <button

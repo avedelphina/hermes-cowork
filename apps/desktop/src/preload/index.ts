@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
-  CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin, RemoteAgent,
+  CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin, RemoteAgent, RemoteAgentInput,
 } from '../shared/types';
 
 const api = {
@@ -89,12 +89,11 @@ const api = {
   },
   remotes: {
     list: (): Promise<RemoteAgent[]> => ipcRenderer.invoke(IpcChannel.RemoteList),
-    create: (input: { name: string; sshTarget: string; profile: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<RemoteAgent> =>
-      ipcRenderer.invoke(IpcChannel.RemoteCreate, input),
-    update: (id: string, patch: { name?: string; sshTarget?: string; profile?: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<RemoteAgent | null> =>
+    create: (input: RemoteAgentInput): Promise<RemoteAgent> => ipcRenderer.invoke(IpcChannel.RemoteCreate, input),
+    update: (id: string, patch: Partial<RemoteAgentInput>): Promise<RemoteAgent | null> =>
       ipcRenderer.invoke(IpcChannel.RemoteUpdate, id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.RemoteRemove, id),
-    profiles: (req: { id: string } | { sshTarget: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<string[]> =>
+    profiles: (req: { id: string } | RemoteOrigin): Promise<string[]> =>
       ipcRenderer.invoke(IpcChannel.RemoteProfiles, req),
   },
   chats: {

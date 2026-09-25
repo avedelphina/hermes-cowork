@@ -13,7 +13,26 @@ export type RemoteOrigin = {
   hermesHome?: string | null;
   /** Remote hermes binary. Default: "hermes" from the remote PATH. */
   binaryPath?: string | null;
+  // ── how to reach it (ssh flags; an ~/.ssh/config alias covers these too) ──
+  /** SSH port (`-p`). */
+  port?: number | null;
+  /** Local private key (`-i`), absolute or `~/…`. */
+  identityFile?: string | null;
+  /** Jump host(s) (`-J`), comma-separated `[user@]host[:port]`. */
+  proxyJump?: string | null;
+  // ── who / where it runs on the remote ──
+  /** Run hermes as this user via `sudo -n -u <user>`. The remote needs a matching sudoers rule. */
+  runAs?: string | null;
+  /** Hermes lives in a container on the remote: `<runtime> exec -i <name> …`. */
+  container?: { runtime: 'docker' | 'podman'; name: string } | null;
+  /** Escape hatch: the whole remote command, verbatim. Remote agents only, user-confirmed. */
+  command?: string | null;
 };
+
+export const CONTAINER_RUNTIMES = ['docker', 'podman'] as const;
+
+/** What the Remote agents form sends: a name, a profile, and the origin fields. */
+export type RemoteAgentInput = { name: string; profile: string } & RemoteOrigin;
 
 /** A Hermes profile on another machine, reached over SSH (see RemoteAgentStore). */
 export type RemoteAgent = {
@@ -22,6 +41,12 @@ export type RemoteAgent = {
   sshTarget: string;
   hermesHome: string | null;
   binaryPath: string | null;
+  port: number | null;
+  identityFile: string | null;
+  proxyJump: string | null;
+  runAs: string | null;
+  container: { runtime: 'docker' | 'podman'; name: string } | null;
+  command: string | null;
   /** Profile on the remote host. */
   profile: string;
   createdAt: string;
