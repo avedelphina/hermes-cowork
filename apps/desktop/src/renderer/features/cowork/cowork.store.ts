@@ -1,6 +1,7 @@
 // apps/desktop/src/renderer/features/cowork/cowork.store.ts
 import { create } from 'zustand';
 import type { AcpServerMessage, CoworkTask, TaskStatus } from '@shared/types';
+import { todoWrites, applyTodoWrite, toPlanEntries, type TodoItem } from '@shared/todos';
 
 type Approval = { toolCallId: string; description: string };
 
@@ -48,10 +49,39 @@ const CLEARED = {
   approvals: [] as Approval[],
   planEntries: [] as Array<{ content: string; status: string }>,
   planHistory: [] as Array<Array<{ content: string; status: string }>>,
+  todoItems: [] as TodoItem[],
+  nativePlan: false,
+  replaying: false,
   checkpoints: [] as Array<{ rel: string; before: string | null; at: string }>,
   editCalls: [] as string[],
   changeRev: 0,
 };
+
+type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
+
+/**
+ * Take a new step list. Hermes re-plans in place after a steering message and
+ * just keeps going, so if the step list actually changed after the current
+ * plan was approved, the new plan needs its own approval gate.
+ */
+function withPlan(s: PlanState, entries: Array<{ content: string; status: string }>): Partial<CoworkStore> {
+  const next = entries.map((e) => e.content).join(' ');
+  const prev = s.planEntries.map((e) => e.content).join(' ');
+  // A history replay (restore / reconnect) re-plays old re-plans; those were
+  // already approved, so they must not re-arm the gate.
+  if (!s.replaying && s.approved && s.planEntries.length > 0 && next !== prev) {
+    persistTask(s.taskId, { approved: false, status: 'awaiting_approval' });
+    syncAgentMode({ ...s, approved: false });
+    if (s.goal) notify('New plan ready for approval', s.goal);
+    return {
+      planEntries: entries,
+      planHistory: [...s.planHistory, s.planEntries],
+      approved: false,
+      transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
+    };
+  }
+  return { planEntries: entries };
+}
 
 /** Fire-and-forget persistence of a task's lifecycle state. */
 function persistTask(id: string | null, patch: { status?: TaskStatus; approved?: boolean }): void {
@@ -84,6 +114,12 @@ type CoworkStore = {
   planEntries: Array<{ content: string; status: string }>;
   /** Earlier plans this task had, replaced by a later re-plan — kept so nothing vanishes silently. */
   planHistory: Array<Array<{ content: string; status: string }>>;
+  /** Todo list rebuilt from `todo_list` tool calls (see shared/todos.ts). */
+  todoItems: TodoItem[];
+  /** True from restore/reconnect until Hermes has finished replaying history. */
+  replaying: boolean;
+  /** True once Hermes sent a real `plan` update; the rebuilt list then stands down. */
+  nativePlan: boolean;
   /** File snapshots taken just before an approved edit — for diff + revert. */
   checkpoints: Array<{ rel: string; before: string | null; at: string }>;
   /** Tool-call ids of file edits in flight; their result means the file changed on disk. */
@@ -94,6 +130,8 @@ type CoworkStore = {
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; kickoff: string }) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
   restoreTask: (task: CoworkTask) => void;
+  /** The acp.load history replay has finished; live events gate re-plans again. */
+  endReplay: () => void;
   /** CoworkPage calls this after it has sent the kickoff. */
   clearKickoff: () => void;
   /** Ask the Files tab to open a task-relative path. */
@@ -128,16 +166,17 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   ...CLEARED,
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED }),
+    set({ taskId, sessionId, goal, cwd, profile, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
-      pendingKickoff: null, filesTarget: null, ...CLEARED,
+      pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: true,
     }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
+  endReplay: () => set({ replaying: false }),
   addCheckpoint: (rel, before) =>
     set((s) =>
       s.checkpoints.some((c) => c.rel === rel)
@@ -171,11 +210,11 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       return { status: 'idle', transcript: [...s.transcript, { role: 'system', text: '⏹ Stopped by you.' }] };
     }),
 
-  beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], planHistory: [], status: 'running' }),
+  beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], planHistory: [], todoItems: [], nativePlan: false, replaying: true, status: 'running' }),
 
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', status: 'idle', approved: false,
-    pendingKickoff: null, filesTarget: null, ...CLEARED,
+    pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: false,
   }),
 
   ingestAcp: (msg) =>
@@ -193,6 +232,12 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return { transcript: [...s.transcript, { role, text: msg.text }] };
         }
         case 'tool-call': {
+          // Hermes sends no `plan` frame for `todo_list`; rebuild it from the call.
+          const writes = s.nativePlan ? [] : todoWrites(msg.name, msg.args);
+          if (writes.length > 0) {
+            const todoItems = writes.reduce((items, w) => applyTodoWrite(items, w.todos, w.merge), s.todoItems);
+            return { todoItems, ...withPlan(s, toPlanEntries(todoItems)) };
+          }
           // ACP tags file-mutating tools with kind "edit" / "delete" / "move"
           // and lists the touched files under `paths`.
           if (msg.op !== 'edit' && msg.op !== 'delete' && msg.op !== 'move') return s;
@@ -210,25 +255,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           }
           return { editCalls: [...s.editCalls, msg.toolCallId] };
         }
-        case 'plan': {
-          const next = msg.entries.map((e) => e.content).join(' ');
-          const prev = s.planEntries.map((e) => e.content).join(' ');
-          // Hermes re-plans in place after a steering message and just keeps
-          // going. If the step list actually changed after the current plan
-          // was approved, that new plan needs its own approval gate.
-          if (s.approved && s.planEntries.length > 0 && next !== prev) {
-            persistTask(s.taskId, { approved: false, status: 'awaiting_approval' });
-            syncAgentMode({ ...s, approved: false });
-            if (s.goal) notify('New plan ready for approval', s.goal);
-            return {
-              planEntries: msg.entries,
-              planHistory: [...s.planHistory, s.planEntries],
-              approved: false,
-              transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
-            };
-          }
-          return { planEntries: msg.entries };
-        }
+        case 'plan':
+          return { nativePlan: true, ...withPlan(s, msg.entries) };
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
         case 'approval-expired':

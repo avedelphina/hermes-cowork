@@ -20,7 +20,8 @@ export function GoalHeader() {
     // A reload spawns a fresh ACP child — re-apply the effective mode to it.
     void window.hermes.acp.load({ sessionId, profile, cwd, isolate: true })
       .then(() => syncAgentMode(useCoworkStore.getState()))
-      .catch((e) => useCoworkStore.getState().ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }));
+      .catch((e) => useCoworkStore.getState().ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }))
+      .finally(() => useCoworkStore.getState().endReplay());
   };
 
   return (
