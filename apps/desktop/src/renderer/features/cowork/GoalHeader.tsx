@@ -1,8 +1,9 @@
-import { useCoworkStore, syncAgentMode } from './cowork.store';
+import { useCoworkStore, syncAgentMode, agentState } from './cowork.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
-  const { goal, cwd, profile, planTasks, sessionId, status, markStopped, beginReconnect } = useCoworkStore();
+  const { goal, cwd, profile, planTasks, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
+  const state = agentState(status, approvals.length);
   const total = planTasks.length;
   const done = planTasks.filter((t) => t.status === 'done').length;
 
@@ -51,8 +52,8 @@ export function GoalHeader() {
         <span>·</span>
         <span>👤 {profile}</span>
         <span>·</span>
-        <span className={status === 'running' ? 'text-success' : 'text-dim'}>
-          {status === 'running' ? '● working' : '○ idle'}
+        <span className={{ blocked: 'text-warn', working: 'text-success', idle: 'text-dim' }[state]}>
+          {{ blocked: '⏸ blocked — needs approval', working: '● working', idle: '○ idle' }[state]}
         </span>
         {total > 0 && (
           <>

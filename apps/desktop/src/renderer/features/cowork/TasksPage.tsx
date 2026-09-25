@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import type { CoworkTask, TaskStatus } from '@shared/types';
-import { useCoworkStore } from './cowork.store';
+import { useCoworkStore, agentState } from './cowork.store';
 import { useProjectStore } from '../projects/project.store';
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
@@ -30,6 +30,8 @@ export function TasksPage() {
   const [, navigate] = useLocation();
   const restoreTask = useCoworkStore((s) => s.restoreTask);
   const projects = useProjectStore((s) => s.projects);
+  const liveTaskId = useCoworkStore((s) => s.taskId);
+  const liveBlocked = useCoworkStore((s) => agentState(s.status, s.approvals.length) === 'blocked');
 
   const load = () => window.hermes.tasks.list().then(setTasks).catch(() => setTasks([]));
   useEffect(() => { void load(); }, []);
@@ -92,12 +94,14 @@ export function TasksPage() {
         <ul className="flex flex-col gap-2">
           {shown.map((t) => {
             const proj = projects.find((p) => p.id === t.projectId);
+            // Persisted status can't see a pending tool approval; the open task's live store can.
+            const blocked = liveBlocked && t.id === liveTaskId;
             return (
               <li key={t.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
                 <button className="min-w-0 text-left" onClick={() => open(t)}>
                   <div className="truncate text-sm text-fg">{t.goal}</div>
                   <div className="mt-0.5 flex gap-2 text-[11px]">
-                    <span className={STATUS_STYLE[t.status]}>● {STATUS_LABEL[t.status]}</span>
+                    <span className={blocked ? 'text-warn' : STATUS_STYLE[t.status]}>● {blocked ? 'blocked — needs approval' : STATUS_LABEL[t.status]}</span>
                     <span className="text-dim">{proj?.name ?? t.cwd}</span>
                     <span className="text-dim">{new Date(t.updatedAt).toLocaleString()}</span>
                   </div>

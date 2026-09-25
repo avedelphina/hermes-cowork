@@ -18,6 +18,11 @@ export function agentModeFor(approved: boolean, mode: 'ask' | 'auto'): string {
   return approved ? MODE_FOR[mode] : MODE_FOR.ask;
 }
 
+/** Live agent state for badges: waiting on the user beats working beats idle. */
+export function agentState(status: 'idle' | 'running', pendingApprovals: number): 'blocked' | 'working' | 'idle' {
+  return pendingApprovals > 0 ? 'blocked' : status === 'running' ? 'working' : 'idle';
+}
+
 /** Push the effective mode to the live session (after approve, re-plan, toggle, reconnect). */
 export function syncAgentMode(s: { sessionId: string | null; approved: boolean; approvalMode: 'ask' | 'auto' }): void {
   if (!s.sessionId) return;
@@ -233,6 +238,11 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         }
         case 'approval-request':
           return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
+        case 'approval-expired':
+          return {
+            approvals: s.approvals.filter((a) => a.toolCallId !== msg.toolCallId),
+            transcript: [...s.transcript, { role: 'system', text: `⌛ Approval expired and was denied: ${msg.description}` }],
+          };
         case 'session-error':
           persistTask(s.taskId, { status: 'failed' });
           if (s.goal) notify('Cowork task failed', s.goal);

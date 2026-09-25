@@ -121,3 +121,12 @@ describe('cowork store', () => {
     expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '⚠️ ACP process exited' });
   });
 });
+
+describe('agentState', () => {
+  it('blocked beats working beats idle', async () => {
+    const { agentState } = await import('@renderer/features/cowork/cowork.store');
+    expect(agentState('running', 1)).toBe('blocked');
+    expect(agentState('running', 0)).toBe('working');
+    expect(agentState('idle', 0)).toBe('idle');
+  });
+});

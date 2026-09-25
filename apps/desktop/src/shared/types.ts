@@ -104,6 +104,7 @@ export type AcpServerMessage =
   // checklist during execution and re-emitted whole when the agent re-plans.
   | { kind: 'plan'; sessionId: string; entries: Array<{ content: string; status: string }> }
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
+  | { kind: 'approval-expired'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
   | { kind: 'done'; sessionId: string };
 
