@@ -15,6 +15,18 @@ export type RemoteOrigin = {
   binaryPath?: string | null;
 };
 
+/** A Hermes profile on another machine, reached over SSH (see RemoteAgentStore). */
+export type RemoteAgent = {
+  id: string;
+  name: string;
+  sshTarget: string;
+  hermesHome: string | null;
+  binaryPath: string | null;
+  /** Profile on the remote host. */
+  profile: string;
+  createdAt: string;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -44,6 +56,8 @@ export type ChatSession = {
   /** Hermes profile the chat was created under — a session only exists in
    * that profile's HERMES_HOME, so resume must use it. Null on legacy rows. */
   profile: string | null;
+  /** Set when the chat runs on a remote agent; resume reconnects to it. */
+  remoteId: string | null;
   createdAt: string;
   updatedAt: string;
 };

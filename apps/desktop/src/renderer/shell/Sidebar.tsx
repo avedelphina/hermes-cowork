@@ -10,6 +10,7 @@ const COWORK_ITEMS: Item[] = [
 ];
 
 const HERMES_ITEMS: Item[] = [
+  { icon: '⇄', label: 'Remote agents', href: '/remotes' },
   { icon: '📋', label: 'Kanban', href: '/kanban' },
   { icon: '🧠', label: 'Memory', href: '/memory' },
   { icon: '🪛', label: 'Skills', href: '/skills' },

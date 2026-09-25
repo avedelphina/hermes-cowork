@@ -108,3 +108,27 @@ Profile names for remote tasks are resolved against the *remote* home:
   [security-model.md](security-model.md).
 - Chat stays local-only for now; the plumbing is shared, so a remote chat is
   a small follow-up, not new design.
+
+## Remote agents in Chat
+
+Chat can talk to a Hermes profile on another machine. Cowork tasks stay local
+by default; a remote *project* (above) is still possible but is no longer the
+way to reach a remote agent.
+
+- **A remote agent is its own record** (`remote-agents.json`), not a project:
+  `{ name, sshTarget, profile, hermesHome?, binaryPath? }`. Managed on the
+  **Remote agents** page (sidebar → Hermes), which also has a **Test
+  connection** button — a real handshake, so an ssh failure shows ssh's own
+  reason.
+- **Chat** shows an **Agent** picker once at least one remote agent exists.
+  The choice applies to the next new chat; an existing chat is bound to its
+  agent (`ChatSession.remoteId`) and resumes over the same connection.
+- **No folder.** Chat is not folder-scoped, so the session's cwd is `.` — the
+  remote login directory. No local project or folder is involved.
+- **Trust.** The renderer only names an agent id (`acp:start`) or a chat id
+  (`acp:load`); main reads the host from the stored record, exactly as for
+  remote projects. A chat whose agent was removed fails to resume with a clear
+  error instead of silently running locally.
+- **Connection pool.** The warm ACP child is keyed by profile, local home, host,
+  remote home and remote binary, so two agents on one host never share a child.
+

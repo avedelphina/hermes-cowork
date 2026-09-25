@@ -59,6 +59,12 @@ export const IpcChannel = {
   ChatUpdate: 'chat:update',
   ChatRemove: 'chat:remove',
 
+  // remote agents (Hermes profiles on other machines, over SSH)
+  RemoteList: 'remote:list',
+  RemoteCreate: 'remote:create',
+  RemoteUpdate: 'remote:update',
+  RemoteRemove: 'remote:remove',
+
   // task filesystem (read-only, scoped to a task's working folder)
   FsList: 'fs:list',
   FsRead: 'fs:read',

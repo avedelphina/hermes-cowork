@@ -15,9 +15,10 @@ import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
+import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { UpdaterController } from '../update/updater';
-import type { TaskStatus, RemoteOrigin } from '../../shared/types';
+import type { TaskStatus, RemoteOrigin, RemoteAgent } from '../../shared/types';
 
 type Context = {
   hermesBinary: string;
@@ -171,22 +172,25 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.AcpStart,
     async (_e, raw: unknown) => {
       const o = obj(raw, 'acp:start options');
+      // Where the agent runs is decided by stored records, never by a
+      // renderer-supplied host: the renderer only names a remote agent (chat)
+      // or a project.
+      const agent = remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'));
       const opts = {
-        profile: str(o['profile'], 'profile'),
+        profile: agent ? agent.profile : str(o['profile'], 'profile'),
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
-        // Where the agent runs is decided by the stored project, never by a
-        // renderer-supplied host: the renderer only names the project.
-        remote: projectRemote(strOrNull(o['projectId'], 'projectId')),
+        remote: agent ? toOrigin(agent) : projectRemote(strOrNull(o['projectId'], 'projectId')),
       };
-      // Chat is not folder-scoped — it defaults to the home directory. A Cowork
+      // Chat is not folder-scoped — it defaults to the home directory (on a
+      // remote agent: the remote login directory, "." over there). A Cowork
       // task always passes an explicit folder the user picked. An explicit cwd
       // that does not exist fails closed (never a silent widening to $HOME).
-      const cwd = opts.cwd ? opts.cwd : homedir();
+      const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
       if (opts.remote) {
         // The path lives on the remote host; local existence checks don't
         // apply, and neither does the local dashboard's profile list.
-        assertRemoteCwd(cwd);
+        if (opts.cwd) assertRemoteCwd(opts.cwd);
         if (opts.profile !== 'default' && !isValidProfileName(opts.profile)) {
           throw new Error(`invalid profile name: ${JSON.stringify(opts.profile)}`);
         }
@@ -227,10 +231,13 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         sessionId: str(o['sessionId'], 'sessionId'),
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
-        // Resuming: the task's own stored origin, not one sent by the renderer.
-        remote: taskRemote(strOrNull(o['taskId'], 'taskId')),
+        // Resuming: the chat's remote agent or the task's own stored origin,
+        // never one sent by the renderer.
+        remote: null as RemoteOrigin | null,
       };
-      const profile = strOrNull(o['profile'], 'profile') ?? 'default';
+      const agent = chatRemoteAgent(strOrNull(o['chatId'], 'chatId'));
+      opts.remote = agent ? toOrigin(agent) : taskRemote(strOrNull(o['taskId'], 'taskId'));
+      const profile = agent ? agent.profile : (strOrNull(o['profile'], 'profile') ?? 'default');
       // An explicit cwd must exist — a moved/deleted project folder must fail,
       // not silently widen the task's scope to $HOME. Remote cwds live on the
       // remote host, so they get a shape check instead of an existence check.
@@ -245,7 +252,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         }
         await assertKnownProfile(profile);
       }
-      const cwd = opts.cwd ? opts.cwd : homedir();
+      const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
       return bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -435,12 +442,23 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
+  const remoteAgents = new RemoteAgentStore(join(userData, 'remote-agents.json'));
   // Hoisted: the acp:* handlers above resolve a remote origin through these.
   function projectRemote(projectId: string | null): RemoteOrigin | null {
     return (projectId ? projects.get(projectId)?.remote : null) ?? null;
   }
   function taskRemote(taskId: string | null): RemoteOrigin | null {
     return (taskId ? tasks.get(taskId)?.remote : null) ?? null;
+  }
+  /** null → no remote agent; an id that no longer exists is an error, not a silent local fallback. */
+  function remoteAgentFor(id: string | null): RemoteAgent | null {
+    if (!id) return null;
+    const a = remoteAgents.get(id);
+    if (!a) throw new Error('This remote agent no longer exists.');
+    return a;
+  }
+  function chatRemoteAgent(chatId: string | null): RemoteAgent | null {
+    return remoteAgentFor((chatId ? chats.get(chatId)?.remoteId : null) ?? null);
   }
   handle(IpcChannel.TaskList, () => tasks.list());
   handle(IpcChannel.TaskCreate, (_e, raw: unknown) => {
@@ -487,6 +505,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         projectId: strOrNull(o['projectId'], 'projectId'),
         title: strOrNull(o['title'], 'title'),
         profile: strOrNull(o['profile'], 'profile'),
+        remoteId: remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'))?.id ?? null,
       });
     },
   );
@@ -514,6 +533,43 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (!isExistingDir(t.cwd)) throw new Error('invalid task root');
     return t.cwd;
   };
+  // ── remote agents (Hermes profiles on other machines, over SSH) ──
+  /** Validate the fields present in a renderer-supplied agent (all required on create). */
+  function parseAgentFields(o: Record<string, unknown>, requireAll: boolean) {
+    const out: Partial<Pick<RemoteAgent, 'name' | 'sshTarget' | 'hermesHome' | 'binaryPath' | 'profile'>> = {};
+    if (requireAll || o['name'] !== undefined) {
+      const name = str(o['name'], 'name').trim();
+      if (!name || name.length > 60) throw new Error('Name must be 1–60 characters.');
+      out.name = name;
+    }
+    if (requireAll || o['sshTarget'] !== undefined) {
+      const t = str(o['sshTarget'], 'sshTarget').trim();
+      if (!isValidSshTarget(t)) throw new Error(`invalid SSH target: ${JSON.stringify(t)}`);
+      out.sshTarget = t;
+    }
+    if (requireAll || o['profile'] !== undefined) {
+      const profile = (strOrNull(o['profile'], 'profile') ?? '').trim() || 'default';
+      if (profile !== 'default' && !isValidProfileName(profile)) throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
+      out.profile = profile;
+    }
+    for (const k of ['hermesHome', 'binaryPath'] as const) {
+      if (requireAll || o[k] !== undefined) out[k] = strOrNull(o[k], k)?.trim() || null;
+    }
+    return out;
+  }
+  handle(IpcChannel.RemoteList, () => remoteAgents.list());
+  handle(IpcChannel.RemoteCreate, (_e, raw: unknown) => {
+    const f = parseAgentFields(obj(raw, 'remote agent'), true);
+    return remoteAgents.create({
+      name: f.name!, sshTarget: f.sshTarget!, profile: f.profile!,
+      hermesHome: f.hermesHome ?? null, binaryPath: f.binaryPath ?? null,
+    });
+  });
+  handle(IpcChannel.RemoteUpdate, (_e, id: unknown, raw: unknown) =>
+    remoteAgents.update(str(id, 'id'), parseAgentFields(obj(raw, 'remote agent patch'), false)),
+  );
+  handle(IpcChannel.RemoteRemove, (_e, id: unknown) => remoteAgents.remove(str(id, 'id')));
+
   // Read-only browsing of the task's own working folder (not the active
   // project's — a task can run in any folder).
   handle(IpcChannel.FsList, (_e, taskId: unknown, rel?: unknown) => listDir(taskRoot(taskId), strOrNull(rel, 'path') ?? ''));

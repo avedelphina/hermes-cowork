@@ -108,6 +108,34 @@ describeRemote('remote ACP over SSH', () => {
     bridge.stopSession(sessionId);
   }, 180_000);
 
+  it('opens a chat-style session (pooled, cwd ".") and reloads it', async () => {
+    // Remote chat has no folder: "." resolves to the remote login directory.
+    const opts = {
+      profile: 'default',
+      cwd: '.',
+      binaryPath: '/nonexistent/local/hermes',
+      hermesHome: '/nonexistent/local/home',
+      remote: { sshTarget: TARGET! },
+    };
+    // Own bridge, so its pooled children can be torn down before the orphan check.
+    const chatBridge = new AcpBridge(new AcpSupervisor());
+    try {
+      const { sessionId } = await chatBridge.startSession(opts);
+      expect(sessionId).toBeTruthy();
+      expect(chatBridge.getModels(sessionId)?.availableModels.length ?? 0).toBeGreaterThan(0);
+
+      // A different remote identity (own binary override) must not reuse that child.
+      const other = await chatBridge.startSession({ ...opts, remote: { sshTarget: TARGET!, binaryPath: 'hermes' } });
+      expect(other.sessionId).not.toBe(sessionId);
+
+      const again = await chatBridge.loadSession({ ...opts, sessionId });
+      expect(again.sessionId).toBe(sessionId);
+    } finally {
+      chatBridge.stopAll();
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }, 120_000);
+
   it('leaves no orphaned hermes acp on the remote after stop', async () => {
     // shutdown() ends stdin immediately, SIGTERMs at +1s, SIGKILLs at +5s —
     // wait past the whole grace period before checking the far end.

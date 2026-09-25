@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useChatsStore } from './chats.store';
 import { useProjectStore } from '../projects/project.store';
+import { useRemotesStore } from '../remotes/remotes.store';
 
 export function SessionList({
   activeId,
@@ -13,6 +14,7 @@ export function SessionList({
 }) {
   const chats = useChatsStore((s) => s.chats);
   const projects = useProjectStore((s) => s.projects);
+  const remotes = useRemotesStore((s) => s.remotes);
 
   useEffect(() => {
     void useChatsStore.getState().reload();
@@ -47,6 +49,11 @@ export function SessionList({
             }
           >
             <div className="truncate text-fg">{c.title ?? 'Untitled chat'}</div>
+            {c.remoteId && (
+              <div className="mt-0.5 text-[10px] text-accent">
+                ⇄ {remotes.find((r) => r.id === c.remoteId)?.name ?? 'removed agent'}
+              </div>
+            )}
             {projectName(c.projectId) && (
               <div className="mt-0.5 text-[10px] text-dim">{projectName(c.projectId)}</div>
             )}

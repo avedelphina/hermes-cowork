@@ -4,6 +4,7 @@ import { Composer } from './Composer';
 import { useChatStore } from './chat.store';
 import { useChatsStore } from './chats.store';
 import { activeProject, useProjectStore } from '../projects/project.store';
+import { useRemotesStore } from '../remotes/remotes.store';
 import { api } from '../../api/rest-client';
 
 /** Conversation surface for Chat mode. */
@@ -12,6 +13,8 @@ export function useChatSurface() {
   const setChatId = useChatStore((s) => s.setChatId);
   const ingest = useChatStore((s) => s.ingest);
   const [profile, setProfile] = useState('default');
+  // The remote agent new chats talk to; null = this computer.
+  const [remoteId, setRemoteId] = useState<string | null>(null);
   // Resolves once the active profile is known, so a message sent right after
   // mount does not start the chat under 'default' by accident.
   const profileReady = useRef<Promise<string>>(Promise.resolve('default'));
@@ -23,6 +26,7 @@ export function useChatSurface() {
       .catch(() => 'default');
     void profileReady.current.then(setProfile);
     void useChatsStore.getState().reload();
+    void useRemotesStore.getState().reload();
     return () => { off(); };
   }, [ingest]);
 
@@ -30,10 +34,14 @@ export function useChatSurface() {
   const ensureSession = async () => {
     const current = useChatStore.getState().sessionId;
     if (current) return current;
-    const proj = activeProject();
-    const chatProfile = proj?.profile ?? (await profileReady.current);
+    // A remote agent is its own thing — no local project, folder or profile.
+    const agent = remoteId ? useRemotesStore.getState().remotes.find((r) => r.id === remoteId) ?? null : null;
+    if (remoteId && !agent) throw new Error('That remote agent no longer exists.');
+    const proj = agent ? null : activeProject();
+    const chatProfile = agent?.profile ?? proj?.profile ?? (await profileReady.current);
     const { sessionId: id } = await window.hermes.acp.start({
       profile: chatProfile,
+      ...(agent ? { remoteId: agent.id } : {}),
       ...(proj?.folderPath ? { cwd: proj.folderPath } : {}),
     });
     startSession(id);
@@ -43,6 +51,7 @@ export function useChatSurface() {
         projectId: proj?.id ?? null,
         title: null,
         profile: chatProfile,
+        remoteId: agent?.id ?? null,
       });
       setChatId(chat.id);
       void useChatsStore.getState().reload();
@@ -61,12 +70,16 @@ export function useChatSurface() {
     if (current) void window.hermes.acp.stop(current);
     startSession(chat.acpSessionId);
     setChatId(chat.id);
-    const proj = chat.projectId
+    // Show which agent this chat belongs to (and keep it for the next new chat).
+    setRemoteId(chat.remoteId);
+    const proj = chat.projectId && !chat.remoteId
       ? useProjectStore.getState().projects.find((p) => p.id === chat.projectId)
       : null;
     try {
       await window.hermes.acp.load({
         sessionId: chat.acpSessionId,
+        // Main reconnects to the chat's remote agent, if it has one.
+        chatId: chat.id,
         // The profile it was created under — a different one is a different
         // HERMES_HOME with no such session.
         profile: chat.profile ?? proj?.profile ?? (await profileReady.current),
@@ -82,7 +95,7 @@ export function useChatSurface() {
     }
   };
 
-  return { profile, ensureSession, pick };
+  return { profile, remoteId, setRemoteId, ensureSession, pick };
 }
 
 export function ChatSurface({ profile, ensureSession }: { profile: string; ensureSession: () => Promise<string | null> }) {
