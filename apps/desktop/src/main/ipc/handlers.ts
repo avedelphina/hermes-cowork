@@ -9,7 +9,7 @@ import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
-import { isValidSshTarget } from '../orchestrator/spawn-spec';
+import { isValidSshTarget, isValidRemoteCwd } from '../orchestrator/spawn-spec';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
@@ -68,10 +68,10 @@ function parseRemote(raw: unknown): RemoteOrigin | null {
 }
 
 /** A remote task's cwd is a path on the *remote* host — it must be absolute
- * there (`/…` or `~/…`), and local existence checks do not apply. */
+ * there (no `~`, no `..`), and local existence checks do not apply. */
 function assertRemoteCwd(cwd: string): void {
-  if (!cwd.startsWith('/') && !cwd.startsWith('~/')) {
-    throw new Error(`Remote working folder must be an absolute path on the remote host, got: ${JSON.stringify(cwd)}`);
+  if (!isValidRemoteCwd(cwd)) {
+    throw new Error(`Remote working folder must be an absolute path on the remote host (no ~ or ..), got: ${JSON.stringify(cwd)}`);
   }
 }
 
@@ -175,7 +175,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         profile: str(o['profile'], 'profile'),
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
-        remote: parseRemote(o['remote']),
+        // Where the agent runs is decided by the stored project, never by a
+        // renderer-supplied host: the renderer only names the project.
+        remote: projectRemote(strOrNull(o['projectId'], 'projectId')),
       };
       // Chat is not folder-scoped — it defaults to the home directory. A Cowork
       // task always passes an explicit folder the user picked. An explicit cwd
@@ -225,7 +227,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         sessionId: str(o['sessionId'], 'sessionId'),
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
-        remote: parseRemote(o['remote']),
+        // Resuming: the task's own stored origin, not one sent by the renderer.
+        remote: taskRemote(strOrNull(o['taskId'], 'taskId')),
       };
       const profile = strOrNull(o['profile'], 'profile') ?? 'default';
       // An explicit cwd must exist — a moved/deleted project folder must fail,
@@ -432,6 +435,13 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
+  // Hoisted: the acp:* handlers above resolve a remote origin through these.
+  function projectRemote(projectId: string | null): RemoteOrigin | null {
+    return (projectId ? projects.get(projectId)?.remote : null) ?? null;
+  }
+  function taskRemote(taskId: string | null): RemoteOrigin | null {
+    return (taskId ? tasks.get(taskId)?.remote : null) ?? null;
+  }
   handle(IpcChannel.TaskList, () => tasks.list());
   handle(IpcChannel.TaskCreate, (_e, raw: unknown) => {
     const o = obj(raw, 'task');
@@ -442,7 +452,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       acpSessionId: str(o['acpSessionId'], 'acpSessionId'),
       projectId: strOrNull(o['projectId'], 'projectId'),
       parentTaskId: strOrNull(o['parentTaskId'], 'parentTaskId'),
-      remote: parseRemote(o['remote']),
+      // Denormalised from the project so resume survives later project edits.
+      remote: projectRemote(strOrNull(o['projectId'], 'projectId')),
     };
     // The stored cwd is the trust root for this task's checkpoint IPC, so it
     // must be a real directory (same bar as acp:start) — locally. For a

@@ -182,9 +182,10 @@ for this contract:
   outright** rather than risk touching a same-named local path. The renderer
   hides those tabs for remote tasks. _Enforced._
 - **Transport auth is SSH, and only SSH.** The remote command runs as
-  `ssh -T -o BatchMode=yes <target> 'HERMES_HOME=… exec hermes acp'`: no pty
-  (framing integrity), no interactive auth fallback (fail fast, no password
-  prompt hanging a session), and `exec` so killing the local ssh process
+  `ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 …
+  <target> 'HERMES_HOME=… exec hermes acp'`: no pty (framing integrity), no
+  interactive auth fallback (fail fast, no password prompt hanging a
+  session), bounded connect and dead-link detection, and `exec` so killing the local ssh process
   ends the remote agent (verified: no orphans). Who can call which machine is
   exactly the user's existing SSH key trust. _Enforced; e2e-tested
   (`tests/integration/remote-ssh.test.ts`, runs against a real host when

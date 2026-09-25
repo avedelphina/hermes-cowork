@@ -22,7 +22,7 @@ export type AcpSpawnOptions = AcpSession & {
 export type AcpEvent =
   | { kind: 'message'; sessionId: string; msg: JsonRpcMessage }
   // `expected` is true when we asked the child to stop (shutdown/shutdownAll)
-  | { kind: 'exit'; sessionId: string; code: number | null; expected: boolean }
+  | { kind: 'exit'; sessionId: string; code: number | null; expected: boolean; detail?: string }
   | { kind: 'error'; sessionId: string; error: string };
 
 type PendingRequest = {
@@ -35,7 +35,15 @@ class AcpChild {
   readonly pending = new Map<string | number, PendingRequest>();
   /** Set by shutdown() so the exit handler can mark the exit as expected. */
   stopping = false;
+  /** Recent stderr. For an ssh child this is where "Permission denied" lives. */
+  stderrTail = '';
   constructor(public readonly proc: ChildProcess, public readonly session: AcpSession) {}
+}
+
+/** The last few stderr lines, for an error message a person can act on. */
+export function stderrSummary(tail: string, lines = 3, max = 300): string {
+  const s = tail.split('\n').map((l) => l.trim()).filter(Boolean).slice(-lines).join(' / ');
+  return s.length > max ? '…' + s.slice(-max) : s;
 }
 
 export class AcpSupervisor extends EventEmitter {
@@ -62,7 +70,9 @@ export class AcpSupervisor extends EventEmitter {
 
     proc.stderr?.on('data', (chunk: Buffer) => {
       // Hermes ACP logs to stderr; surface for debugging.
-      console.error(`[acp ${opts.id}]`, chunk.toString('utf8').trimEnd());
+      const text = chunk.toString('utf8');
+      console.error(`[acp ${opts.id}]`, text.trimEnd());
+      child.stderrTail = (child.stderrTail + text).slice(-2000);
     });
 
     proc.on('error', (err) => {
@@ -71,12 +81,20 @@ export class AcpSupervisor extends EventEmitter {
     });
 
     proc.on('exit', (code) => {
-      this.rejectAllPending(child, new Error(`ACP child exited (code=${code ?? 'null'})`));
+      // Only ssh children: a local Hermes logs routine warnings to stderr that
+      // would be noise here, but ssh's stderr is the failure reason itself
+      // (Permission denied, Host key verification failed, command not found).
+      const detail = opts.remote && !child.stopping ? stderrSummary(child.stderrTail) : '';
+      this.rejectAllPending(
+        child,
+        new Error(`ACP child exited (code=${code ?? 'null'})${detail ? `: ${detail}` : ''}`),
+      );
       this.emit('event', {
         kind: 'exit',
         sessionId: opts.id,
         code,
         expected: child.stopping,
+        ...(detail ? { detail } : {}),
       } satisfies AcpEvent);
       this.children.delete(opts.id);
     });

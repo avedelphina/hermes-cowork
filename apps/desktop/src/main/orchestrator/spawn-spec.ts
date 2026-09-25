@@ -3,13 +3,15 @@
 // Maps ACP spawn options to a concrete child-process invocation. Two shapes:
 //
 //   local:  <binaryPath> acp                      (HERMES_HOME in env, cwd set)
-//   remote: ssh -T -o BatchMode=yes <target> 'HERMES_HOME=<home> exec <bin> acp'
+//   remote: ssh -T -o BatchMode=yes … <target> 'HERMES_HOME=<home> exec <bin> acp'
 //
 // Remote details (docs/remote-connection.md):
 //  - `-T` disables the pseudo-terminal so the length-framed JSON-RPC stream
 //    survives the pipe unmangled.
 //  - `BatchMode=yes` fails fast on missing keys instead of hanging forever on
 //    an interactive password prompt.
+//  - `ConnectTimeout` / `ServerAlive*` bound a black-holed host and a dropped
+//    connection (a dead link otherwise hangs the task for minutes, silently).
 //  - `exec` replaces the remote shell with hermes, so killing the local ssh
 //    process (stopSession / app quit) drops the connection and the remote
 //    agent exits on stdin EOF — no orphaned remote Hermes.
@@ -52,6 +54,15 @@ export function isValidSshTarget(target: string): boolean {
     !target.startsWith('@') &&
     !target.endsWith('@')
   );
+}
+
+/**
+ * A working folder on the remote host: an absolute path with no `..`. `~` is
+ * not accepted — the path is handed to Hermes verbatim via session/new, and
+ * nothing on that side expands it.
+ */
+export function isValidRemoteCwd(cwd: string): boolean {
+  return cwd.startsWith('/') && !cwd.split('/').includes('..') && !/[\0\r\n]/.test(cwd);
 }
 
 /** POSIX single-quote escaping for a fragment of the remote command line. */
@@ -111,7 +122,15 @@ export function buildSpawnSpec(opts: SpawnSpecInput): SpawnSpec {
   delete env['HERMES_HOME'];
   return {
     command: 'ssh',
-    args: ['-T', '-o', 'BatchMode=yes', sshTarget, remoteCmd],
+    args: [
+      '-T',
+      '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=10',
+      '-o', 'ServerAliveInterval=15',
+      '-o', 'ServerAliveCountMax=3',
+      sshTarget,
+      remoteCmd,
+    ],
     env,
     cwd: undefined,
   };

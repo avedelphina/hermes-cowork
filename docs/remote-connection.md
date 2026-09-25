@@ -18,13 +18,16 @@ out.
 The spawned command for a remote session is:
 
 ```
-ssh -T -o BatchMode=yes <target> 'HERMES_HOME=<home> exec <binary> acp'
+ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 \
+    -o ServerAliveCountMax=3 <target> 'HERMES_HOME=<home> exec <binary> acp'
 ```
 
 - `-T` — no pseudo-terminal. A pty would mangle the length-framed JSON-RPC
   stream (CR/LF translation, echo).
 - `BatchMode=yes` — fail fast instead of hanging forever on an interactive
   password prompt. Key-based auth (or an ssh-agent) is required.
+- `ConnectTimeout` / `ServerAlive*` — an unreachable host fails in ~10 s, and a
+  dropped connection is noticed in ~45 s instead of hanging the task silently.
 - `exec` — the remote shell replaces itself with `hermes acp`, so when the
   local ssh process is killed (stopSession / app quit), the connection drops
   and the remote process gets EOF on stdin and exits. No orphaned remote
@@ -76,6 +79,13 @@ Profile names for remote tasks are resolved against the *remote* home:
   optional port syntax via ssh config aliases only (no whitespace, no
   leading `-`, no shell metacharacters). Remote paths are single-quote
   escaped. The renderer is untrusted; this is enforced in main.
+- **Where the agent runs is never renderer-supplied.** `acp:start` and
+  `tasks:create` take a `projectId` and `acp:load` takes a `taskId`; main
+  reads the SSH origin from the stored project/task. Only `projects:create` /
+  `projects:update` accept a `remote`, and those are the user configuring a
+  project.
+- **Remote folders** must be plain absolute paths: no `~` (nothing on the
+  Hermes side expands it) and no `..` segments.
 
 ## Failure semantics
 

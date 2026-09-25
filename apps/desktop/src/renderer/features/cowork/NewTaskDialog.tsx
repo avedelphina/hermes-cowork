@@ -71,14 +71,13 @@ function Dialog() {
     let sessionId: string | null = null;
     try {
       // Cowork tasks get their own ACP child so Stop can hard-cancel them.
-      ({ sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true, remote }));
+      ({ sessionId } = await window.hermes.acp.start({ profile, cwd, isolate: true, projectId: activeProject()?.id ?? null }));
       // Always plan in `default` — "auto" only takes effect once the plan is
       // approved (see agentModeFor). Failing to set it must not start the task.
       await window.hermes.acp.setMode({ sessionId, modeId: MODE_FOR.ask });
       const task = await window.hermes.tasks.create({
         goal, cwd, profile, acpSessionId: sessionId,
         projectId: activeProject()?.id ?? null,
-        remote,
       });
       // Hand the kickoff to CoworkPage: it registers the event listener before
       // sending, so the streamed plan is not lost between routes.

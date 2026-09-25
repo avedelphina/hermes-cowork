@@ -9,7 +9,7 @@ vi.mock('node:child_process', async () => {
   return { ...actual, spawn: vi.fn() };
 });
 
-import { AcpSupervisor, type AcpEvent } from '@main/orchestrator/acp-supervisor';
+import { AcpSupervisor, stderrSummary, type AcpEvent } from '@main/orchestrator/acp-supervisor';
 import { encodeFrame } from '@main/orchestrator/jsonrpc';
 
 class MockProc extends EventEmitter {
@@ -33,7 +33,7 @@ class MockProc extends EventEmitter {
   }
 }
 
-function makeSupervisor() {
+function makeSupervisor(remote?: { sshTarget: string }) {
   const proc = new MockProc();
   vi.mocked(cp.spawn).mockReturnValue(proc as unknown as cp.ChildProcess);
   const sup = new AcpSupervisor();
@@ -42,6 +42,7 @@ function makeSupervisor() {
   sup.spawn({
     id: 's1', profile: 'default', cwd: '/tmp',
     binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+    ...(remote ? { remote } : {}),
   });
   return { sup, proc, events };
 }
@@ -106,5 +107,51 @@ describe('AcpSupervisor', () => {
     const promise = sup.request('s1', 'initialize', {});
     proc.emit('exit', 1);
     await expect(promise).rejects.toThrow(/exited/);
+  });
+
+  describe('why a child died', () => {
+    const tick = () => new Promise((r) => setImmediate(r));
+
+    it('puts ssh stderr in the error for a remote child', async () => {
+      const { sup, proc, events } = makeSupervisor({ sshTarget: 'box' });
+      const pending = sup.request('s1', 'session/new', {}, 5000).catch((e: Error) => e);
+      proc.stderr!.push('Warning: Permanently added host\nroot@box: Permission denied (publickey).\n');
+      await tick();
+      proc.emit('exit', 255);
+      const err = (await pending) as Error;
+      expect(err.message).toContain('code=255');
+      expect(err.message).toContain('Permission denied (publickey)');
+      expect(events).toContainEqual(expect.objectContaining({ kind: 'exit', code: 255, detail: expect.stringContaining('Permission denied') }));
+    });
+
+    it('keeps a local child\'s routine stderr out of the error', async () => {
+      const { sup, proc, events } = makeSupervisor();
+      const pending = sup.request('s1', 'session/new', {}, 5000).catch((e: Error) => e);
+      proc.stderr!.push('WARNING Nous client unavailable\n');
+      await tick();
+      proc.emit('exit', 1);
+      expect(((await pending) as Error).message).toBe('ACP child exited (code=1)');
+      expect(events.find((e) => e.kind === 'exit')).not.toHaveProperty('detail');
+    });
+
+    it('does not blame stderr for a stop we asked for', async () => {
+      const { sup, proc, events } = makeSupervisor({ sshTarget: 'box' });
+      proc.stderr!.push('Killed by signal 15.\n');
+      await tick();
+      sup.shutdown('s1');
+      proc.emit('exit', 0);
+      await tick();
+      expect(events.find((e) => e.kind === 'exit')).not.toHaveProperty('detail');
+    });
+  });
+});
+
+describe('stderrSummary', () => {
+  it('keeps the last few non-empty lines and caps the length', () => {
+    expect(stderrSummary('a\n\nb\nc\nd\n')).toBe('b / c / d');
+    const long = stderrSummary('x'.repeat(1000));
+    expect(long.length).toBeLessThanOrEqual(301);
+    expect(long.startsWith('…')).toBe(true);
+    expect(stderrSummary('')).toBe('');
   });
 });

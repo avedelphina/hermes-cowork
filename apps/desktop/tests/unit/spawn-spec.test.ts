@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { buildSpawnSpec, isValidSshTarget, shQuote } from '@main/orchestrator/spawn-spec';
+import { buildSpawnSpec, isValidSshTarget, isValidRemoteCwd, shQuote } from '@main/orchestrator/spawn-spec';
 
 const LOCAL = {
   profile: 'anikke',
@@ -51,7 +51,9 @@ describe('buildSpawnSpec — remote', () => {
     const spec = buildSpawnSpec({ ...LOCAL, remote });
     expect(spec.command).toBe('ssh');
     expect(spec.args.slice(0, 3)).toEqual(['-T', '-o', 'BatchMode=yes']);
-    expect(spec.args[3]).toBe('root@helsinki');
+    // A dead link or black-holed host must fail in seconds, not hang the task.
+    expect(spec.args).toEqual(expect.arrayContaining(['ConnectTimeout=10', 'ServerAliveInterval=15', 'ServerAliveCountMax=3']));
+    expect(spec.args.at(-2)).toBe('root@helsinki');
     // No local cwd: the task folder lives on the remote host.
     expect(spec.cwd).toBeUndefined();
     expect(spec.env['HERMES_HOME']).toBeUndefined();
@@ -59,12 +61,12 @@ describe('buildSpawnSpec — remote', () => {
 
   it('defaults to $HOME/.hermes/profiles/<name> and PATH-resolved hermes', () => {
     const spec = buildSpawnSpec({ ...LOCAL, remote });
-    expect(spec.args[4]).toBe('HERMES_HOME=$HOME/.hermes/profiles/anikke exec hermes acp');
+    expect(spec.args.at(-1)).toBe('HERMES_HOME=$HOME/.hermes/profiles/anikke exec hermes acp');
   });
 
   it('uses the global home for the default profile', () => {
     const spec = buildSpawnSpec({ ...LOCAL, profile: 'default', remote });
-    expect(spec.args[4]).toBe('HERMES_HOME=$HOME/.hermes exec hermes acp');
+    expect(spec.args.at(-1)).toBe('HERMES_HOME=$HOME/.hermes exec hermes acp');
   });
 
   it('quotes explicit remote home and binary overrides', () => {
@@ -72,7 +74,7 @@ describe('buildSpawnSpec — remote', () => {
       ...LOCAL,
       remote: { sshTarget: 'helsinki', hermesHome: '/opt/hermes home', binaryPath: '/usr/local/bin/hermes' },
     });
-    expect(spec.args[4]).toBe(
+    expect(spec.args.at(-1)).toBe(
       "HERMES_HOME='/opt/hermes home'/profiles/anikke exec '/usr/local/bin/hermes' acp",
     );
   });
@@ -85,5 +87,19 @@ describe('buildSpawnSpec — remote', () => {
   it('rejects an unsafe profile name before it reaches the remote shell', () => {
     expect(() => buildSpawnSpec({ ...LOCAL, profile: 'a;id', remote })).toThrow(/invalid profile/);
     expect(() => buildSpawnSpec({ ...LOCAL, profile: '../x', remote })).toThrow(/invalid profile/);
+  });
+});
+
+describe('isValidRemoteCwd', () => {
+  it('accepts plain absolute paths', () => {
+    expect(isValidRemoteCwd('/srv/work')).toBe(true);
+    expect(isValidRemoteCwd('/home/me/my project')).toBe(true);
+  });
+
+  it('rejects ~, relative paths, .. segments and control characters', () => {
+    for (const bad of ['~/work', 'work', '', '/srv/../etc', '/srv/work\n', '/srv/\0x']) {
+      expect(isValidRemoteCwd(bad), JSON.stringify(bad)).toBe(false);
+    }
+    expect(isValidRemoteCwd('/srv/a..b')).toBe(true); // only a whole ".." segment is a traversal
   });
 });

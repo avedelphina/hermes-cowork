@@ -226,7 +226,7 @@ export class AcpBridge extends EventEmitter {
   private async connFor(opts: StartSessionOpts): Promise<string> {
     // The SSH target is part of the identity: a local `anikke` and a remote
     // `anikke` must never share a child.
-    const key = `${opts.profile} ${opts.hermesHome} ${opts.remote?.sshTarget ?? ''}`;
+    const key = `${opts.profile}\0${opts.hermesHome}\0${opts.remote?.sshTarget ?? ''}`;
     let conn = this.conns.get(key);
     if (!conn) {
       const handle = randomUUID();
@@ -417,7 +417,8 @@ export class AcpBridge extends EventEmitter {
       const expected = event.kind === 'exit' && event.expected;
       const message = event.kind === 'error'
         ? event.error
-        : event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`;
+        : (event.code === null ? 'Hermes ACP process was killed.' : `Hermes ACP process exited (code ${event.code}).`) +
+          (event.detail ? ` ${event.detail}` : '');
 
       if (event.kind === 'exit') {
         for (const id of affected) { this.acpToHandle.delete(id); this.modelsBySession.delete(id); }

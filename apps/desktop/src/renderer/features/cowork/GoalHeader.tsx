@@ -2,7 +2,7 @@ import { useCoworkStore, syncAgentMode, agentState } from './cowork.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
-  const { goal, cwd, profile, remote, planEntries, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
+  const { taskId, goal, cwd, profile, remote, planEntries, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
   const state = agentState(status, approvals.length);
   const total = planEntries.length;
   const done = planEntries.filter((e) => e.status === 'completed').length;
@@ -18,7 +18,7 @@ export function GoalHeader() {
     if (!sessionId) return;
     beginReconnect();
     // A reload spawns a fresh ACP child — re-apply the effective mode to it.
-    void window.hermes.acp.load({ sessionId, profile, cwd, isolate: true, remote })
+    void window.hermes.acp.load({ sessionId, profile, cwd, isolate: true, taskId })
       .then(() => syncAgentMode(useCoworkStore.getState()))
       .catch((e) => useCoworkStore.getState().ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }))
       .finally(() => useCoworkStore.getState().endReplay());

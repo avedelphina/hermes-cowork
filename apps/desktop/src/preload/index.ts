@@ -16,9 +16,9 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd?: string; isolate?: boolean; remote?: RemoteOrigin | null }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
-    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; remote?: RemoteOrigin | null }): Promise<{ sessionId: string }> =>
+    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; taskId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
     setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
@@ -99,7 +99,7 @@ const api = {
     list: (): Promise<CoworkTask[]> => ipcRenderer.invoke(IpcChannel.TaskList),
     create: (input: {
       goal: string; cwd: string; profile: string; acpSessionId: string;
-      projectId: string | null; parentTaskId?: string | null; remote?: RemoteOrigin | null;
+      projectId: string | null; parentTaskId?: string | null;
     }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
     update: (id: string, patch: { status?: TaskStatus; approved?: boolean }): Promise<CoworkTask | null> =>
       ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),
