@@ -45,14 +45,11 @@ What's in:
 - **Checkpoints** — every edit snapshots the file first. The **Changes** tab
   shows a diff and a **Revert** (restores the pre-edit content, or deletes a
   new file).
-- **Multi-agent** — the **Subtasks** tab dispatches worker agents (goal +
-  profile), with bounded concurrency, per-worker timeouts, and `depends-on`
-  ordering. **Synthesise results** feeds every finished worker's output back to
-  the coordinator with provenance.
 - **Read-first Hermes surfaces** — Skills, Memory, Cron, Kanban, Insights, plus
   gateway start/stop/restart and a profile manager.
-- **File browser** — read-only, confined to the project root (`..` and symlink
-  escape are rejected).
+- **File browser** — the **Files** tab is read-only and confined to the task's
+  folder (`..` and symlink escape are rejected). **Open** on a Changes row
+  jumps to the file.
 
 ## Requirements
 

@@ -2,10 +2,10 @@ import { useCoworkStore, syncAgentMode, agentState } from './cowork.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
-  const { goal, cwd, profile, planTasks, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
+  const { goal, cwd, profile, planEntries, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
   const state = agentState(status, approvals.length);
-  const total = planTasks.length;
-  const done = planTasks.filter((t) => t.status === 'done').length;
+  const total = planEntries.length;
+  const done = planEntries.filter((e) => e.status === 'completed').length;
 
   if (!goal) return null;
 
@@ -58,7 +58,7 @@ export function GoalHeader() {
         {total > 0 && (
           <>
             <span>·</span>
-            <span className="text-success">step {done + 1} of {total}</span>
+            <span className="text-success">{done} of {total} steps done</span>
           </>
         )}
         {sessionId && <ModelPicker key={sessionId} sessionId={sessionId} className="ml-auto" />}

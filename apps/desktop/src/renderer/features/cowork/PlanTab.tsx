@@ -12,8 +12,12 @@ export function PlanTab() {
   const approvePlan = useCoworkStore((s) => s.approvePlan);
   const markStopped = useCoworkStore((s) => s.markStopped);
 
-  const firstAgent = transcript.find((m) => m.role === 'agent')?.text ?? '';
-  const hasProposal = planEntries.length > 0 || firstAgent.trim().length > 0;
+  // Fallback when the model wrote its plan as chat text instead of calling
+  // the todo tool: its latest reply (reasoning is kept out of it).
+  const textPlan = [...transcript].reverse().find((m) => m.role === 'agent')?.text ?? '';
+  const hasProposal = planEntries.length > 0 || textPlan.trim().length > 0;
+
+  const done = planEntries.filter((e) => e.status === 'completed').length;
 
   const approve = () => {
     approvePlan();
@@ -65,18 +69,51 @@ export function PlanTab() {
         </details>
       )}
       {planEntries.length > 0 ? (
-        <ol className="flex flex-col gap-1">
-          {planEntries.map((e, i) => (
-            <li key={i} className="flex gap-2">
-              <span className={e.status === 'completed' ? 'text-success' : e.status === 'in_progress' ? 'text-accent' : 'text-dim'}>
-                {STATUS_MARK[e.status] ?? '○'}
-              </span>
-              <span className={e.status === 'pending' && !approved ? 'text-muted' : 'text-fg'}>{e.content}</span>
-            </li>
-          ))}
-        </ol>
+        <>
+          <div>
+            <div className="mb-1 flex justify-between text-[10px] text-dim">
+              <span>Progress</span>
+              <span>{done} of {planEntries.length} done</span>
+            </div>
+            <div
+              className="h-1 overflow-hidden rounded bg-surface2"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={planEntries.length}
+              aria-valuenow={done}
+            >
+              <div className="h-full bg-success" style={{ width: `${(done / planEntries.length) * 100}%` }} />
+            </div>
+          </div>
+          <ol className="flex flex-col gap-1.5">
+            {planEntries.map((e, i) => (
+              <li key={i} className="flex gap-2">
+                <span className={e.status === 'completed' ? 'text-success' : e.status === 'in_progress' ? 'text-accent' : 'text-dim'}>
+                  {STATUS_MARK[e.status] ?? '○'}
+                </span>
+                <span
+                  className={
+                    e.status === 'completed'
+                      ? 'text-muted line-through'
+                      : e.status === 'pending' && !approved
+                        ? 'text-muted'
+                        : 'text-fg'
+                  }
+                >
+                  {e.content}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </>
       ) : (
-        <Markdown text={firstAgent} className={approved ? 'text-fg' : 'text-muted'} />
+        <>
+          <p className="rounded border border-border bg-surface2 px-2 py-1.5 text-[10px] text-warn">
+            Hermes described its plan in text instead of a step list, so progress can&apos;t be tracked here.
+            Ask it to put the plan in its todo tool.
+          </p>
+          <Markdown text={textPlan} className={approved ? 'text-fg' : 'text-muted'} />
+        </>
       )}
 
       {!approved ? (
@@ -106,7 +143,9 @@ export function PlanTab() {
           </p>
         </div>
       ) : (
-        <p className="mt-2 text-[10px] text-success">✓ Plan approved — executing.</p>
+        <p className="mt-2 text-[10px] text-success">
+          {planEntries.length > 0 && done === planEntries.length ? '✓ All steps done.' : '✓ Plan approved — executing.'}
+        </p>
       )}
     </div>
   );

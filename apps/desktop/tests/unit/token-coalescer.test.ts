@@ -44,4 +44,11 @@ describe('TokenCoalescer', () => {
     vi.advanceTimersByTime(TOKEN_WINDOW_MS);
     expect(out).toEqual([tok('u1', 's', 'user'), tok('u2', 's', 'user'), tok('x', 'other'), tok('a1')]);
   });
+
+  it('keeps thoughts and replies as separate messages, flag intact', () => {
+    const th = (text: string) => ({ ...tok(text), thought: true as const });
+    c.push(th('a')); c.push(th('b')); c.push(tok('c'));
+    vi.advanceTimersByTime(TOKEN_WINDOW_MS);
+    expect(out).toEqual([th('a'), th('b'), tok('c')]);
+  });
 });

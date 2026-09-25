@@ -50,3 +50,27 @@ export function lineDiff(before: string, after: string): { rows: DiffRow[]; adde
 
   return { rows, added, removed };
 }
+
+/**
+ * Collapse unchanged runs to `context` lines around each change. Skipped
+ * stretches become a single `{ type: ' ', text: '⋯ N unchanged lines', skipped: true }`
+ * row so a one-line edit in a 400-line file stays readable.
+ */
+export function hunks(rows: DiffRow[], context = 3): Array<DiffRow & { skipped?: true }> {
+  const keep = new Array<boolean>(rows.length).fill(false);
+  rows.forEach((r, i) => {
+    if (r.type === ' ') return;
+    for (let k = Math.max(0, i - context); k <= Math.min(rows.length - 1, i + context); k++) keep[k] = true;
+  });
+  const out: Array<DiffRow & { skipped?: true }> = [];
+  let skipped = 0;
+  const flush = () => {
+    if (skipped) out.push({ type: ' ', text: `⋯ ${skipped} unchanged line${skipped > 1 ? 's' : ''}`, skipped: true });
+    skipped = 0;
+  };
+  rows.forEach((r, i) => {
+    if (keep[i]) { flush(); out.push(r); } else skipped++;
+  });
+  flush();
+  return out;
+}

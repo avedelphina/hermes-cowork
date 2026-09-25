@@ -43,6 +43,11 @@ describe('translateAcpEvent — session/update (Hermes 0.20.6 wire shapes)', () 
     ]);
   });
 
+  it('marks thought chunks so the UI can fold them', () => {
+    const out = translateAcpEvent(msg({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'hmm' } }));
+    expect(out).toEqual([{ kind: 'token', sessionId: 's1', text: 'hmm', thought: true }]);
+  });
+
   it('maps a completed tool_call_update to a tool-result', () => {
     const out = translateAcpEvent(msg({ sessionUpdate: 'tool_call_update', status: 'completed', toolCallId: 't1', rawOutput: { ok: true } }));
     expect(out).toEqual([{ kind: 'tool-result', sessionId: 's1', toolCallId: 't1', result: { ok: true } }]);

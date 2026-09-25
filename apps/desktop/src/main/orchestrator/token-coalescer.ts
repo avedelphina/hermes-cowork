@@ -11,7 +11,7 @@ import type { AcpServerMessage } from '../../shared/types';
 export const TOKEN_WINDOW_MS = 60;
 
 type Token = Extract<AcpServerMessage, { kind: 'token' }>;
-type Window = { role: Token['role']; text: string; timer: ReturnType<typeof setTimeout> };
+type Window = { role: Token['role']; thought: boolean; text: string; timer: ReturnType<typeof setTimeout> };
 
 export class TokenCoalescer {
   private windows = new Map<string, Window>();
@@ -22,12 +22,14 @@ export class TokenCoalescer {
     const w = this.windows.get(t.sessionId);
     if (!w) {
       this.send(t);
-      this.open(t.sessionId, t.role);
+      this.open(t.sessionId, t.role, !!t.thought);
       return;
     }
-    // Merge only same-role text (history replay interleaves user/agent turns).
-    if (w.text && w.role !== t.role) this.drain(t.sessionId, w);
+    // Merge only same-role, same-kind text (history replay interleaves
+    // user/agent turns; thoughts and replies must stay separate messages).
+    if (w.text && (w.role !== t.role || w.thought !== !!t.thought)) this.drain(t.sessionId, w);
     w.role = t.role;
+    w.thought = !!t.thought;
     w.text += t.text;
   }
 
@@ -40,22 +42,23 @@ export class TokenCoalescer {
     this.drain(sessionId, w);
   }
 
-  private open(sessionId: string, role: Token['role']): void {
+  private open(sessionId: string, role: Token['role'], thought: boolean): void {
     const timer = setTimeout(() => {
       const w = this.windows.get(sessionId);
       if (!w) return;
       if (!w.text) return void this.windows.delete(sessionId);
       this.drain(sessionId, w);
-      this.open(sessionId, w.role); // just sent: stay rate-limited for another window
+      this.open(sessionId, w.role, w.thought); // just sent: stay rate-limited for another window
     }, TOKEN_WINDOW_MS);
     timer.unref?.();
-    this.windows.set(sessionId, { role, text: '', timer });
+    this.windows.set(sessionId, { role, thought, text: '', timer });
   }
 
   private drain(sessionId: string, w: Window): void {
     if (!w.text) return;
     const msg: Token = { kind: 'token', sessionId, text: w.text };
     if (w.role) msg.role = w.role;
+    if (w.thought) msg.thought = true;
     w.text = '';
     this.send(msg);
   }
