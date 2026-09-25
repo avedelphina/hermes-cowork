@@ -196,6 +196,9 @@ task on it).
 
 ## Phase 4 — Team/mesh product decision (the "bigger app")
 
+**Direction proposed 2026-09-25:** a self-hosted hub with durable runs — see
+[`cloud-hub.md`](cloud-hub.md).
+
 Only after Phase 0 (and ideally Phase 1) prove the mechanics: decide whether
 "specialist agents across machines, handoff between them, mimic a team" is
 built as a new mode inside this app, or changes the app's positioning enough
