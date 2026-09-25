@@ -93,6 +93,54 @@ describe('cowork store', () => {
     ]);
   });
 
+  describe('plan from todo_list calls (Hermes sends no plan frame)', () => {
+    const todo = (args: unknown, name = 'todo_list', id = 'c1') =>
+      ({ kind: 'tool-call' as const, sessionId: 's', toolCallId: id, name, op: 'other', paths: [], args });
+    const items = [{ id: 'a', content: 'alpha', status: 'pending' }, { id: 'b', content: 'beta', status: 'pending' }];
+
+    it('builds the plan from a write, then ticks it with a merge', () => {
+      const { ingestAcp } = useCoworkStore.getState();
+      ingestAcp(todo({ todos: items }));
+      expect(useCoworkStore.getState().planEntries).toEqual([
+        { content: 'alpha', status: 'pending' }, { content: 'beta', status: 'pending' },
+      ]);
+      ingestAcp(todo({ merge: true, todos: [{ id: 'a', status: 'completed' }] }, 'todo_list: updating 1 task(s)', 'c2'));
+      expect(useCoworkStore.getState().planEntries[0]).toEqual({ content: 'alpha', status: 'completed' });
+    });
+
+    it('also reads a call made through the tool_call wrapper (history replay shape)', () => {
+      useCoworkStore.getState().ingestAcp(todo({ calls: [{ name: 'todo_list', arguments: { todos: items } }] }, 'tool_call'));
+      expect(useCoworkStore.getState().planEntries).toHaveLength(2);
+    });
+
+    it('stands down once Hermes sends a native plan', () => {
+      const { ingestAcp } = useCoworkStore.getState();
+      ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'native', status: 'pending' }] });
+      ingestAcp(todo({ todos: items }));
+      expect(useCoworkStore.getState().planEntries).toEqual([{ content: 'native', status: 'pending' }]);
+    });
+
+    it('re-gates a live re-plan but not one replayed from history', () => {
+      const s = useCoworkStore.getState();
+      s.ingestAcp(todo({ todos: items }));
+      s.approvePlan();
+      s.ingestAcp(todo({ merge: true, todos: [{ id: 'c', content: 'gamma' }] }, 'todo_list', 'c2'));
+      expect(useCoworkStore.getState().approved).toBe(false);
+
+      useCoworkStore.getState().beginReconnect(); // replaying
+      useCoworkStore.getState().approvePlan();
+      const r = useCoworkStore.getState();
+      r.ingestAcp(todo({ todos: items }));
+      r.ingestAcp(todo({ merge: true, todos: [{ id: 'c', content: 'gamma' }] }, 'todo_list', 'c2'));
+      expect(useCoworkStore.getState().approved).toBe(true);
+      expect(useCoworkStore.getState().planEntries).toHaveLength(3);
+
+      useCoworkStore.getState().endReplay();
+      useCoworkStore.getState().ingestAcp(todo({ merge: true, todos: [{ id: 'd', content: 'delta' }] }, 'todo_list', 'c3'));
+      expect(useCoworkStore.getState().approved).toBe(false);
+    });
+  });
+
   it('does not re-gate when a plan event only ticks statuses', () => {
     const s = useCoworkStore.getState();
     s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'pending' }] });

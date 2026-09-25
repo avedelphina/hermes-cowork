@@ -6,7 +6,7 @@ import { api } from '../../api/rest-client';
 
 const COWORK_SYSTEM_PROMPT = `You are running in Hermes Cowork mode.
 
-First, propose a concise plan by calling your 'todo' tool — one item per
+First, propose a concise plan by calling your todo tool ('todo_list', or 'todo' on older Hermes) — one item per
 concrete step, all 'pending' — and then STOP. The plan must go in the tool
 call, not in a chat message: the app's Plan panel and progress tracking read
 only the tool's list. Do not take any action, edit any file, or run

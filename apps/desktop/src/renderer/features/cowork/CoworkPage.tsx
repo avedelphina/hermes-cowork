@@ -22,7 +22,8 @@ export function CoworkPage() {
       const sessionId = s.sessionId;
       void window.hermes.acp.load({ sessionId, profile: s.profile, cwd: s.cwd, isolate: true })
         .then(() => syncAgentMode(useCoworkStore.getState()))
-        .catch((e) => ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }));
+        .catch((e) => ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }))
+        .finally(() => useCoworkStore.getState().endReplay());
     }
     return () => { off(); };
   }, [ingestAcp]);
