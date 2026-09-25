@@ -1,0 +1,14 @@
+name: Setup
+description: pnpm + Node (from .nvmrc) + frozen install. Run actions/checkout first.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+      with:
+        version: 10.33.2
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash

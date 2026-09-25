@@ -6,7 +6,7 @@
 - [ ] `pnpm -r build` clean.
 - [ ] e2e against a real Hermes 0.20.6:
   - [ ] `pnpm --filter @hermes-cowork/desktop exec playwright test` — smoke,
-        projects, cowork-flow, multi-agent all pass.
+        projects, cowork-flow all pass.
 - [ ] Clean-machine check: fresh clone, `corepack enable`, `nvm use`,
       `pnpm install`, `pnpm --filter @hermes-cowork/desktop dev` launches with
       no manual steps (no `node_modules` surgery).
@@ -30,14 +30,28 @@ electron-builder auto-discovers it (`CSC_IDENTITY_AUTO_DISCOVERY` default).
 
 ### CI workflow (preferred)
 
-`.github/workflows/release.yml` runs on a pushed `v*` tag: verifies the tag
-matches `package.json`, runs typecheck/lint/test/build, then
-`electron-builder --mac --arm64 --publish always --config.mac.notarize=true`
-— signs with the Developer ID cert from `CSC_LINK`, notarises via
-`notarytool`, staples, and publishes a **draft** GitHub release with the
-DMG + `latest-mac.yml` + `.blockmap`. Review the draft, then publish.
+`.github/workflows/release.yml` runs on a pushed `v*` tag:
 
-Repository secrets (already set — Settings → Secrets and variables → Actions):
+1. `prepare` — fails unless the tagged commit is on `main` and the tag matches
+   both `package.json` versions; runs typecheck/lint/test/build; creates a
+   draft GitHub release with auto-generated notes.
+2. `release-mac` — `electron-builder --mac --arm64 --publish always
+   --config.mac.notarize=true`: signs with the Developer ID cert from
+   `CSC_LINK`, notarises via `notarytool`, staples, uploads the DMG + zip +
+   `latest-mac.yml` + blockmaps, then verifies `codesign` / `spctl` /
+   `stapler`.
+3. `release-linux` — builds the x64 AppImage and uploads it with
+   `latest-linux.yml`.
+4. `publish` — only if both platform jobs passed, un-drafts the release and
+   marks it latest. If either fails, the draft stays unpublished: fix and
+   re-run the failed jobs (or delete the draft and re-tag).
+
+PRs that touch packaging (`apps/desktop/electron-builder.yml`, `build/`,
+`package.json`, the lockfile, `.github/`) also build an unsigned DMG and
+AppImage in `ci.yml`, so packaging breaks before merge, not at release time.
+
+Repository secrets (already set — Settings → Secrets and variables → Actions;
+the Linux build needs none):
 `CSC_LINK` (base64 of the Developer ID `.p12`), `CSC_KEY_PASSWORD`,
 `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
 
@@ -66,7 +80,7 @@ pnpm --filter @hermes-cowork/desktop exec electron-builder \
   --mac --arm64 --config.mac.notarize=true --config.mac.notarize.keychainProfile=hermes-notary
 ```
 
-Output: `apps/desktop/release/Hermes Cowork-<version>-arm64.dmg` plus
+Output: `apps/desktop/release/Hermes-Cowork-<version>-arm64.dmg` plus
 `latest-mac.yml` and `.blockmap`. Verify:
 
 ```bash
@@ -83,7 +97,7 @@ in `ps` output. Use the keychain profile.
 
 - [ ] Install the DMG on a clean machine, double-click launch (no quarantine
       workaround), run one Cowork task end to end (plan → approve → edit →
-      revert) and one two-worker task.
+      revert).
 - [ ] `codesign` / `spctl` / `stapler` checks above pass on the shipped DMG's
       app.
 
@@ -92,10 +106,11 @@ in `ps` output. Use the keychain profile.
 - [ ] Merge the release branch to `main`; the tag must sit on a `main` commit
       whose `package.json` version equals the tag.
 - [ ] `git tag v<version> && git push origin v<version>` — the Release
-      workflow builds and opens a draft.
-- [ ] Review the draft release, paste the `CHANGELOG.md` section, publish.
+      workflow builds both platforms and publishes automatically.
+- [ ] Optionally replace the auto-generated release notes with the
+      `CHANGELOG.md` section (`gh release edit v<version> --notes-file …`).
 - [ ] (Local fallback only) `gh release create v<version>
-      "apps/desktop/release/Hermes Cowork-<version>-arm64.dmg"
+      "apps/desktop/release/Hermes-Cowork-<version>-arm64.dmg"
       "apps/desktop/release/latest-mac.yml" ... --title "Hermes Cowork v<version>"`.
 - [ ] Confirm the download link in `README.md` resolves to the new DMG.
 

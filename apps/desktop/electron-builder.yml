@@ -1,6 +1,9 @@
 appId: com.hermescowork.desktop
 productName: Hermes Cowork
-artifactName: ${productName}-${version}-${arch}.${ext}
+# Hyphenated on purpose: with `${productName}` (has a space) GitHub renames the
+# uploaded .zip.blockmap to `Hermes.Cowork-…`, which latest-mac.yml does not
+# reference, so delta updates 404 and fall back to a full download.
+artifactName: Hermes-Cowork-${version}-${arch}.${ext}
 directories:
   output: release
   buildResources: build
