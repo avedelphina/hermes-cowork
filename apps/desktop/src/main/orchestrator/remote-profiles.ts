@@ -6,7 +6,7 @@
 
 import { execFile } from 'node:child_process';
 import { isValidProfileName } from './hermes-home';
-import { buildRemoteExec, remoteProfilesScript } from './spawn-spec';
+import { buildRemoteExec, remoteProfilesCommand } from './spawn-spec';
 import { stderrSummary } from './acp-supervisor';
 import type { RemoteOrigin } from '../../shared/types';
 
@@ -21,7 +21,7 @@ export function parseProfileList(stdout: string): string[] {
 }
 
 export function listRemoteProfiles(remote: RemoteOrigin): Promise<string[]> {
-  const { command, args, env } = buildRemoteExec(remote, remoteProfilesScript(remote));
+  const { command, args, env } = buildRemoteExec(remote, remoteProfilesCommand(remote));
   return new Promise((resolve, reject) => {
     execFile(command, args, { env, timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 }, (err, stdout, stderr) => {
       if (err) {

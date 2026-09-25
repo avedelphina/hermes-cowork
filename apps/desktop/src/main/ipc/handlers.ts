@@ -9,7 +9,7 @@ import { AcpBridge } from '../orchestrator/acp-bridge';
 import type { AcpServerMessage, AcpClientMessage } from '../../shared/types';
 import { findHermesBinary, verifyHermesVersion, MIN_HERMES_VERSION } from '../orchestrator/hermes-runtime';
 import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
-import { isValidSshTarget, isValidRemoteCwd } from '../orchestrator/spawn-spec';
+import { isValidRemoteCwd, normalizeRemote, buildRemoteCommand } from '../orchestrator/spawn-spec';
 import { listRemoteProfiles } from '../orchestrator/remote-profiles';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
@@ -54,19 +54,14 @@ const TASK_STATUSES: readonly TaskStatus[] = [
 ];
 
 /**
- * Validate a renderer-supplied remote origin. Null/undefined → null (local
- * task). Anything else must be a well-formed RemoteOrigin: a strict SSH
- * target (no whitespace/metachars — see spawn-spec.isValidSshTarget) and
- * optional string overrides. The renderer is untrusted; this is the boundary.
+ * Validate a renderer-supplied remote origin for a project. Null/undefined →
+ * null (local). The renderer is untrusted; this is the boundary (see
+ * spawn-spec.normalizeRemote). A free-form command is refused here — it exists
+ * only on remote agents, where the user confirms it.
  */
 function parseRemote(raw: unknown): RemoteOrigin | null {
   if (raw === null || raw === undefined) return null;
-  const o = obj(raw, 'remote');
-  const sshTarget = str(o['sshTarget'], 'remote.sshTarget');
-  if (!isValidSshTarget(sshTarget)) throw new Error(`invalid SSH target: ${JSON.stringify(sshTarget)}`);
-  const hermesHome = strOrNull(o['hermesHome'], 'remote.hermesHome');
-  const binaryPath = strOrNull(o['binaryPath'], 'remote.binaryPath');
-  return { sshTarget, hermesHome, binaryPath };
+  return normalizeRemote(raw, false);
 }
 
 /** A remote task's cwd is a path on the *remote* host — it must be absolute
@@ -540,40 +535,62 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return t.cwd;
   };
   // ── remote agents (Hermes profiles on other machines, over SSH) ──
-  /** Validate the fields present in a renderer-supplied agent (all required on create). */
-  function parseAgentFields(o: Record<string, unknown>, requireAll: boolean) {
-    const out: Partial<Pick<RemoteAgent, 'name' | 'sshTarget' | 'hermesHome' | 'binaryPath' | 'profile'>> = {};
-    if (requireAll || o['name'] !== undefined) {
-      const name = str(o['name'], 'name').trim();
-      if (!name || name.length > 60) throw new Error('Name must be 1–60 characters.');
-      out.name = name;
-    }
-    if (requireAll || o['sshTarget'] !== undefined) {
-      const t = str(o['sshTarget'], 'sshTarget').trim();
-      if (!isValidSshTarget(t)) throw new Error(`invalid SSH target: ${JSON.stringify(t)}`);
-      out.sshTarget = t;
-    }
-    if (requireAll || o['profile'] !== undefined) {
-      const profile = (strOrNull(o['profile'], 'profile') ?? '').trim() || 'default';
-      if (profile !== 'default' && !isValidProfileName(profile)) throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
-      out.profile = profile;
-    }
-    for (const k of ['hermesHome', 'binaryPath'] as const) {
-      if (requireAll || o[k] !== undefined) out[k] = strOrNull(o[k], k)?.trim() || null;
-    }
-    return out;
+  const ORIGIN_FIELDS = ['sshTarget', 'hermesHome', 'binaryPath', 'port', 'identityFile', 'proxyJump', 'runAs', 'container', 'command'] as const;
+
+  /**
+   * A full, validated agent from renderer input. On update the patch is merged
+   * over the stored record first, so cross-field rules (runAs + profile,
+   * command vs the other launch settings) are checked on the result.
+   */
+  function parseAgent(o: Record<string, unknown>, existing: RemoteAgent | null) {
+    const name = (Object.hasOwn(o, 'name') || !existing ? str(o['name'], 'name') : existing.name).trim();
+    if (!name || name.length > 60) throw new Error('Name must be 1–60 characters.');
+    const profileRaw = Object.hasOwn(o, 'profile') || !existing ? strOrNull(o['profile'], 'profile') : existing.profile;
+    const profile = (profileRaw ?? '').trim() || 'default';
+    if (profile !== 'default' && !isValidProfileName(profile)) throw new Error(`invalid profile name: ${JSON.stringify(profile)}`);
+
+    const merged: Record<string, unknown> = existing ? { ...toOrigin(existing) } : {};
+    for (const k of ORIGIN_FIELDS) if (Object.hasOwn(o, k)) merged[k] = o[k];
+    const origin = normalizeRemote(merged, true);
+    buildRemoteCommand(origin, profile); // throws on combinations that cannot launch (e.g. runAs + profile, no home)
+    return { name, profile, ...origin } as Omit<RemoteAgent, 'id' | 'createdAt'> & RemoteOrigin;
   }
+
+  /**
+   * A free-form command runs on a remote host with the user's SSH login, so it
+   * is confirmed here in main, with the exact command shown — a compromised
+   * renderer cannot approve it for the user.
+   */
+  async function confirmCustomCommand(target: string, command: string, existing: RemoteAgent | null): Promise<void> {
+    if (existing && existing.command === command && existing.sshTarget === target) return; // unchanged
+    const options = {
+      type: 'warning' as const,
+      buttons: ['Cancel', 'Allow'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Run a custom command on a remote host?',
+      message: `Cowork will run this command on ${target} every time this agent connects:`,
+      detail: `${command}\n\nOnly allow commands you wrote or trust.`,
+    };
+    const win = ctx.win();
+    const res = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    if (res.response !== 1) throw new Error('The custom command was not approved.');
+  }
+
   handle(IpcChannel.RemoteList, () => remoteAgents.list());
-  handle(IpcChannel.RemoteCreate, (_e, raw: unknown) => {
-    const f = parseAgentFields(obj(raw, 'remote agent'), true);
-    return remoteAgents.create({
-      name: f.name!, sshTarget: f.sshTarget!, profile: f.profile!,
-      hermesHome: f.hermesHome ?? null, binaryPath: f.binaryPath ?? null,
-    });
+  handle(IpcChannel.RemoteCreate, async (_e, raw: unknown) => {
+    const a = parseAgent(obj(raw, 'remote agent'), null);
+    if (a.command) await confirmCustomCommand(a.sshTarget, a.command, null);
+    return remoteAgents.create(a);
   });
-  handle(IpcChannel.RemoteUpdate, (_e, id: unknown, raw: unknown) =>
-    remoteAgents.update(str(id, 'id'), parseAgentFields(obj(raw, 'remote agent patch'), false)),
-  );
+  handle(IpcChannel.RemoteUpdate, async (_e, id: unknown, raw: unknown) => {
+    const existing = remoteAgents.get(str(id, 'id'));
+    if (!existing) return null;
+    const a = parseAgent(obj(raw, 'remote agent patch'), existing);
+    if (a.command) await confirmCustomCommand(a.sshTarget, a.command, existing);
+    return remoteAgents.update(existing.id, a);
+  });
   handle(IpcChannel.RemoteRemove, (_e, id: unknown) => remoteAgents.remove(str(id, 'id')));
   // Either a stored agent (`{ id }`) or a draft being filled in (`{ sshTarget, … }`):
   // the draft is validated like a create, and only ever runs a fixed `ls`-style script.

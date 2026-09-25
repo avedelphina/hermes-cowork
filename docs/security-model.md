@@ -186,7 +186,11 @@ for this contract:
   <target> 'HERMES_HOME=… exec hermes acp'`: no pty (framing integrity), no
   interactive auth fallback (fail fast, no password prompt hanging a
   session), bounded connect and dead-link detection, and `exec` so killing the local ssh process
-  ends the remote agent (verified: no orphans). Who can call which machine is
+  ends the remote agent (verified: no orphans). Deployment variations (SSH
+  port/key/jump host, run-as via `sudo -n`, docker/podman exec) are structured
+  fields validated in main; a free-form remote command exists only on remote
+  agents and needs a native confirmation dialog in main showing the exact
+  command, so a compromised renderer cannot grant it. Who can call which machine is
   exactly the user's existing SSH key trust. _Enforced; e2e-tested
   (`tests/integration/remote-ssh.test.ts`, runs against a real host when
   `HERMES_REMOTE_TEST_TARGET` is set)._

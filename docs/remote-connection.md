@@ -139,3 +139,70 @@ way to reach a remote agent.
 - **Connection pool.** The warm ACP child is keyed by profile, local home, host,
   remote home and remote binary, so two agents on one host never share a child.
 
+## Deployment variations
+
+SSH is the only transport, so it has to cover how people actually deploy
+Hermes. Each variation is a structured, validated field on a remote agent
+(**Remote agents → Advanced deployment**); none of them lets the renderer
+inject shell. The remote command is always run through `sh -c`, so the login
+shell (fish, tcsh) does not matter.
+
+| Deployment | Setting | Remote command (inside `exec sh -c '…'`) |
+|---|---|---|
+| Plain host, `hermes` on the PATH | – | `HERMES_HOME=$HOME/.hermes[/profiles/<p>] exec hermes acp` |
+| Hermes outside the non-login PATH / custom home | binary path, Hermes home | `HERMES_HOME='<home>'[/profiles/<p>] exec '<bin>' acp` |
+| Non-default port, key, or via a bastion | SSH port, key file, jump host | adds `-p`, `-i … -o IdentitiesOnly=yes`, `-J` to the ssh call (an `~/.ssh/config` alias works too) |
+| Run as another user | Run as user | `exec sudo -n -u <user> -- <bin> acp` |
+| Hermes in a container | Container runtime + name | `exec docker exec -i <name> sh -c '…exec hermes acp'` |
+| Anything else | Custom command | the command, verbatim |
+
+**Run as another user.** The binary is run *directly* under `sudo -n`, so the
+rule on the host can be exactly the command:
+
+```
+# /etc/sudoers.d/hermes-acp   (check with: visudo -cf /etc/sudoers.d/hermes-acp)
+tomas ALL=(root) NOPASSWD: /usr/local/bin/hermes acp
+```
+
+Set the agent's binary path to `/usr/local/bin/hermes` so the command matches
+the rule. `-n` makes a missing or wrong rule fail immediately (a
+non-interactive ssh cannot answer a password prompt anyway). For the default
+profile nothing else is needed: root uses its own `/root/.hermes`. For a
+non-default profile, or a home elsewhere, set the remote Hermes home and let
+sudo keep it: `Defaults!/usr/local/bin/hermes env_keep += "HERMES_HOME"`.
+(Do not use `sudo … env HERMES_HOME=…`: then sudo runs `env`, and a rule that
+lets a user run `env` as root is a root shell.) A tighter alternative is a
+root-owned launcher that fixes the home itself, with the sudoers rule and the
+agent's binary path pointing at it. Note that the agent then runs its commands
+as that user — for root that is as powerful as a root SSH login, minus the root
+login.
+
+**Containers.** The command runs inside the container as its default user. The
+container's own `HERMES_HOME` is respected (images typically set it, e.g.
+`/opt/data`, and have no `~/.hermes`); it is only overridden when you set a
+Hermes home or use a non-default profile, in which case the profile home is
+derived from the container's environment (`${HERMES_HOME:-$HOME/.hermes}`).
+The container runtime runs on the host as the SSH user, so that user needs
+access to it (docker group, or combine with *Run as user*). Verified against
+Hermes in a docker container: session opens, models list, profiles list, and
+stopping leaves no `hermes acp` running inside it.
+
+**Custom command.** For setups the fields do not cover (nix-shell, virtualenv
+activation, systemd-run). It is used verbatim, must speak ACP on
+stdin/stdout, and replaces the Hermes home, binary, run-as and container
+settings (the form refuses the combination). Because it runs arbitrary code on
+a remote host with your SSH login, **main asks you to confirm it in a native
+dialog showing the exact command** whenever it is saved or the target changes;
+a compromised renderer cannot approve it. It exists only on remote agents
+(never on projects), and profile listing is unavailable with it.
+
+**Find profiles** works for plain hosts and containers; with *Run as user* or a
+custom command it cannot see the profiles, so type the name.
+
+## Not covered (yet)
+
+Transports other than SSH (a relay, WebSocket, or a Hermes-hosted endpoint),
+Windows hosts, interactive SSH authentication (password / 2FA prompts — key
+or agent auth only), and per-run working folders on a remote (see
+[`background-runs.md`](background-runs.md)).
+

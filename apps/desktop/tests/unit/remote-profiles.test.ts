@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { parseProfileList } from '@main/orchestrator/remote-profiles';
-import { remoteProfilesScript, buildRemoteExec } from '@main/orchestrator/spawn-spec';
+import { remoteProfilesCommand, buildRemoteExec } from '@main/orchestrator/spawn-spec';
 
 describe('parseProfileList', () => {
   it('puts default first, sorts the rest, drops junk and duplicates', () => {
@@ -13,15 +13,19 @@ describe('parseProfileList', () => {
   });
 });
 
-describe('remoteProfilesScript', () => {
+describe('remoteProfilesCommand', () => {
   it('lists the default home and its profiles dir, expanding $HOME on the remote', () => {
-    const s = remoteProfilesScript({ sshTarget: 'box' });
+    const s = remoteProfilesCommand({ sshTarget: 'box' });
+    expect(s).toContain('exec sh -c');
     expect(s).toContain('d=$HOME/.hermes;');
     expect(s).toContain('"$d"/profiles/*/');
   });
 
   it('quotes an explicit remote home', () => {
-    expect(remoteProfilesScript({ sshTarget: 'box', hermesHome: "/srv/o'brien" })).toContain(`d='/srv/o'\\''brien';`);
+    const c = remoteProfilesCommand({ sshTarget: 'box', hermesHome: "/srv/o'brien" });
+    expect(c).toContain('/srv/o');
+    expect(c).toContain('brien');
+    expect(c).not.toContain("o'brien"); // the quote is escaped, not left to end the string early
   });
 });
 
