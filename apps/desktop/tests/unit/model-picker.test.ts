@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupByProvider } from '@renderer/shell/ModelPicker';
+import { groupByProvider, providerLabel } from '@renderer/shell/ModelPicker';
 
 const m = (modelId: string) => ({ modelId, name: modelId });
 
@@ -11,5 +11,13 @@ describe('groupByProvider', () => {
       ['openrouter', ['openrouter:a/b']],
       ['', ['plain']],
     ]);
+  });
+});
+
+describe('providerLabel', () => {
+  it('says gh-copilot for copilot, passes others through, names the ungrouped bucket', () => {
+    expect(providerLabel('copilot')).toBe('gh-copilot');
+    expect(providerLabel('openrouter')).toBe('openrouter');
+    expect(providerLabel('')).toBe('other');
   });
 });

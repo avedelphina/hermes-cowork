@@ -18,6 +18,10 @@ export function groupByProvider(models: AcpModelInfo[]): Array<{ provider: strin
   return [...groups].map(([provider, list]) => ({ provider, models: list }));
 }
 
+/** Group headings. The ids keep Hermes' own provider slug; only the heading says what it is. */
+const PROVIDER_LABELS: Record<string, string> = { copilot: 'gh-copilot' };
+export const providerLabel = (provider: string) => PROVIDER_LABELS[provider] ?? (provider || 'other');
+
 const label = (m: AcpModelInfo) => {
   const i = m.modelId.indexOf(':');
   return i > 0 ? m.modelId.slice(i + 1) : m.name;
@@ -95,7 +99,7 @@ export function ModelPicker({ sessionId, className }: Props) {
       className={cls + ' hover:text-fg focus:border-accent focus:outline-none disabled:opacity-50'}
     >
       {groups.map((g) => (
-        <optgroup key={g.provider} label={g.provider || 'other'}>
+        <optgroup key={g.provider} label={providerLabel(g.provider)}>
           {g.models.map((m) => (
             <option key={m.modelId} value={m.modelId}>{label(m)}</option>
           ))}
