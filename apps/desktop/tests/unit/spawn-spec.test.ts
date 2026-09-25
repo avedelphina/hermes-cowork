@@ -92,8 +92,14 @@ describe('buildSpawnSpec — remote', () => {
         .toBe(wrap("HERMES_HOME='/root/.hermes'/profiles/anikke exec sudo -n -u root -- '/usr/local/bin/hermes' acp"));
     });
 
-    it('refuses a non-default profile with no explicit home ($HOME would be the wrong user\'s)', () => {
-      expect(() => cmd({ runAs: 'root' })).toThrow(/Set the remote Hermes home/);
+    it('selects a non-default profile with Hermes\' --profile, so nothing has to survive sudo\'s env reset', () => {
+      expect(cmd({ runAs: 'root', binaryPath: '/usr/local/bin/hermes' }, 'holly'))
+        .toBe(wrap("exec sudo -n -u root -- '/usr/local/bin/hermes' --profile holly acp"));
+      expect(cmd({ runAs: 'root' }, 'holly')).toBe(wrap('exec sudo -n -u root -- hermes --profile holly acp'));
+    });
+
+    it('rejects a hostile profile name under run-as too', () => {
+      expect(() => cmd({ runAs: 'root' }, 'a;id')).toThrow(/invalid profile/);
     });
   });
 
