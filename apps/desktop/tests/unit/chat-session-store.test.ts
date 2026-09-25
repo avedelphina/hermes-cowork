@@ -20,6 +20,15 @@ describe('ChatSessionStore', () => {
     expect(new ChatSessionStore(file).get(c.id)?.acpSessionId).toBe('s1');
   });
 
+  it('remembers a remote agent, and old records read back as local', () => {
+    const store = new ChatSessionStore(file);
+    const c = store.create({ ...input, remoteId: 'r1' });
+    expect(new ChatSessionStore(file).get(c.id)?.remoteId).toBe('r1');
+    expect(store.create(input).remoteId).toBeNull();
+    writeFileSync(file, JSON.stringify({ chats: [{ id: 'old', acpSessionId: 's', createdAt: 'a', updatedAt: 'a' }] }));
+    expect(new ChatSessionStore(file).get('old')?.remoteId).toBeNull();
+  });
+
   it('update sets the title and bumps updatedAt', async () => {
     const store = new ChatSessionStore(file);
     const c = store.create(input);

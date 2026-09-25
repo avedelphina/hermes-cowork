@@ -50,6 +50,8 @@ What's in:
 - **File browser** — the **Files** tab is read-only and confined to the task's
   folder (`..` and symlink escape are rejected). **Open** on a Changes row
   jumps to the file.
+- **Remote agents in Chat** — add a Hermes profile on another machine (Remote
+  agents page, with a connection test) and pick it in Chat.
 - **Remote agents** — a project can point at another machine (an SSH target);
   its Cowork tasks then run `hermes acp` there over an ssh pipe, with the
   same plan-gate and inline approvals. Files/Changes/checkpoints stay

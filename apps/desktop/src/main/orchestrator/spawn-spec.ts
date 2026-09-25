@@ -98,6 +98,37 @@ function remoteBinaryFragment(remote: RemoteOrigin): string {
   return bin ? shQuote(bin) : 'hermes';
 }
 
+/** ssh flags shared by every remote command we run. */
+const SSH_OPTS = [
+  '-T',
+  '-o', 'BatchMode=yes',
+  '-o', 'ConnectTimeout=10',
+  '-o', 'ServerAliveInterval=15',
+  '-o', 'ServerAliveCountMax=3',
+];
+
+/** An ssh invocation of `script` on the remote, with the same flags and env hygiene as the ACP child. */
+export function buildRemoteExec(remote: RemoteOrigin, script: string): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+  if (!isValidSshTarget(remote.sshTarget)) {
+    throw new Error(`invalid SSH target: ${JSON.stringify(remote.sshTarget)}`);
+  }
+  const env = { ...process.env };
+  delete env['HERMES_HOME'];
+  return { command: 'ssh', args: [...SSH_OPTS, remote.sshTarget, script], env };
+}
+
+/**
+ * Shell script that prints the profiles on a remote, one per line: `default`
+ * when the Hermes home exists, then each directory under `<home>/profiles`.
+ */
+export function remoteProfilesScript(remote: RemoteOrigin): string {
+  return (
+    `d=${remoteHomeFragment(remote, 'default')}; ` +
+    `[ -d "$d" ] && echo default; ` +
+    `for p in "$d"/profiles/*/; do [ -d "$p" ] && basename "$p"; done; true`
+  );
+}
+
 /** Build the concrete spawn invocation for a local or remote ACP child. */
 export function buildSpawnSpec(opts: SpawnSpecInput): SpawnSpec {
   if (!opts.remote) {
@@ -108,30 +139,11 @@ export function buildSpawnSpec(opts: SpawnSpecInput): SpawnSpec {
       cwd: opts.cwd,
     };
   }
-  const { sshTarget } = opts.remote;
-  if (!isValidSshTarget(sshTarget)) {
-    throw new Error(`invalid SSH target: ${JSON.stringify(sshTarget)}`);
-  }
   const remoteCmd =
     `HERMES_HOME=${remoteHomeFragment(opts.remote, opts.profile)} ` +
     `exec ${remoteBinaryFragment(opts.remote)} acp`;
-  // Scrub the local HERMES_HOME from the child's environment: the remote home
-  // is set inside the remote command, and a leaked local value would be a
-  // silent lie about which home is in play.
-  const env = { ...process.env };
-  delete env['HERMES_HOME'];
-  return {
-    command: 'ssh',
-    args: [
-      '-T',
-      '-o', 'BatchMode=yes',
-      '-o', 'ConnectTimeout=10',
-      '-o', 'ServerAliveInterval=15',
-      '-o', 'ServerAliveCountMax=3',
-      sshTarget,
-      remoteCmd,
-    ],
-    env,
-    cwd: undefined,
-  };
+  // buildRemoteExec scrubs the local HERMES_HOME from the child's environment:
+  // the remote home is set inside the remote command, and a leaked local value
+  // would be a silent lie about which home is in play.
+  return { ...buildRemoteExec(opts.remote, remoteCmd), cwd: undefined };
 }

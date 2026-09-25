@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
   AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, DirListing, FilePreview,
-  CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin,
+  CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin, RemoteAgent,
 } from '../shared/types';
 
 const api = {
@@ -16,9 +16,9 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null; remoteId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
-    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; taskId?: string | null }): Promise<{ sessionId: string }> =>
+    load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; taskId?: string | null; chatId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
     send: (msg: AcpClientMessage): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpSend, msg),
     setMode: (opts: { sessionId: string; modeId: string }): Promise<void> =>
@@ -87,9 +87,19 @@ const api = {
     revert: (taskId: string, rel: string): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel),
   },
+  remotes: {
+    list: (): Promise<RemoteAgent[]> => ipcRenderer.invoke(IpcChannel.RemoteList),
+    create: (input: { name: string; sshTarget: string; profile: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<RemoteAgent> =>
+      ipcRenderer.invoke(IpcChannel.RemoteCreate, input),
+    update: (id: string, patch: { name?: string; sshTarget?: string; profile?: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<RemoteAgent | null> =>
+      ipcRenderer.invoke(IpcChannel.RemoteUpdate, id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.RemoteRemove, id),
+    profiles: (req: { id: string } | { sshTarget: string; hermesHome?: string | null; binaryPath?: string | null }): Promise<string[]> =>
+      ipcRenderer.invoke(IpcChannel.RemoteProfiles, req),
+  },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
-    create: (input: { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null }): Promise<ChatSession> =>
+    create: (input: { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null }): Promise<ChatSession> =>
       ipcRenderer.invoke(IpcChannel.ChatCreate, input),
     update: (id: string, patch: { title?: string | null; projectId?: string | null }): Promise<ChatSession | null> =>
       ipcRenderer.invoke(IpcChannel.ChatUpdate, id, patch),

@@ -11,7 +11,7 @@ import type { ChatSession } from '../../shared/types';
 export type { ChatSession };
 
 type Data = { chats: ChatSession[] };
-type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null };
+type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null };
 
 export class ChatSessionStore {
   private data: Data = { chats: [] };
@@ -27,6 +27,7 @@ export class ChatSessionStore {
       title: c.title ?? null,
       projectId: c.projectId ?? null,
       profile: c.profile ?? null,
+      remoteId: c.remoteId ?? null, // migrate pre-remote records
     }));
     return { chats };
   }
@@ -52,6 +53,7 @@ export class ChatSessionStore {
       title: input.title,
       projectId: input.projectId,
       profile: input.profile,
+      remoteId: input.remoteId ?? null,
       createdAt: now,
       updatedAt: now,
     };

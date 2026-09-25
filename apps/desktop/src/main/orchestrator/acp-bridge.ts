@@ -95,7 +95,7 @@ export class AcpBridge extends EventEmitter {
   /** Model state as reported by session/new (and session/load when present). */
   private modelsBySession = new Map<string, AcpModels>();
   private pendingPermissions = new Map<string, PendingPermission>();
-  /** One warm ACP connection per `${profile}\0${hermesHome}\0${sshTarget}`. */
+  /** One warm ACP connection per profile + home + remote identity (host, remote home, remote binary). */
   private conns = new Map<string, Conn>();
   /** Handles spawned for a single isolated session — safe to hard-kill. */
   private isolatedHandles = new Set<string>();
@@ -226,7 +226,8 @@ export class AcpBridge extends EventEmitter {
   private async connFor(opts: StartSessionOpts): Promise<string> {
     // The SSH target is part of the identity: a local `anikke` and a remote
     // `anikke` must never share a child.
-    const key = `${opts.profile}\0${opts.hermesHome}\0${opts.remote?.sshTarget ?? ''}`;
+    const r = opts.remote;
+    const key = [opts.profile, opts.hermesHome, r?.sshTarget ?? '', r?.hermesHome ?? '', r?.binaryPath ?? ''].join('\0');
     let conn = this.conns.get(key);
     if (!conn) {
       const handle = randomUUID();
