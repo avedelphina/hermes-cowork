@@ -164,8 +164,9 @@ cowork-pipe stop <run-id>
 - **Containers:** the pipe runs on the host and wraps `docker exec -i`, which
   needs `python3` on the host. The alternative is running it inside the
   container (`$HERMES_HOME/bin`), where it lives as long as the container. Open.
-- The replay is read into memory whole, and a client more than 64 MB behind is
-  dropped (it re-attaches from disk).
+- The replay streams from disk in chunks, bounded by the same 64 MB backlog
+  limit as the live stream; a client that falls behind is dropped and
+  re-attaches from disk.
 
 ## The hub
 
@@ -278,7 +279,7 @@ Question: can an ACP run outlive its client, and resume without losing or
 repeating anything? Run 2026-09-25 on macOS with
 [`tests/integration/cowork-pipe.test.ts`](../apps/desktop/tests/integration/cowork-pipe.test.ts).
 
-**Confirmed with a scripted agent** (5 tests, about 3 s, part of `pnpm -r test`;
+**Confirmed with a scripted agent** (6 tests, about 3 s, part of `pnpm -r test`;
 they need `python3`; 10 runs in a row all passed):
 
 - Killing the client with SIGKILL leaves the agent running and recording.
@@ -293,6 +294,8 @@ they need `python3`; 10 runs in a row all passed):
 - A run whose daemon died exits 75 on attach and is never restarted.
 - A newer attach takes over, and the old client exits 0. So does a client whose
   stdin is closed; the agent keeps running.
+- An attach that lands while the daemon is still starting waits for it instead
+  of reporting the run interrupted.
 - Removing a live run's directory stops its agent.
 - Checked once by hand that the tests catch real bugs: forwarding partial
   frames fails the half-frame test, and replaying from offset 0 fails the
@@ -318,6 +321,19 @@ profile on OpenRouter):
 - The first real run seemed to hang. The cause was the model provider returning
   HTTP 403 (quota) and the test looking in the wrong place, not the pipe. When a
   real run misbehaves, `~/.cowork/runs/<run>/stderr` holds Hermes' log.
+
+**Found and fixed in review**
+
+- A second attach landing between the run-dir lock and the daemon's `sock`
+  bind got a refused connect with no `exit` file and reported the run
+  interrupted (75) — a run that was alive and still starting. Connect now
+  waits while neither `sock` nor `exit` exists (covered by a test).
+- An argv-less attach to a nonexistent run created the run dir (the lock) and
+  then removed it on the way out, so it could delete a dir a racing attach had
+  just claimed. It now refuses without claiming anything.
+- The replay at attach read the whole record into memory; the 64 MB backlog
+  cap only applied to the live stream. Replay now streams from disk in
+  chunks under the same cap.
 
 **Not verified yet**
 

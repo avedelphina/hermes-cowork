@@ -71,8 +71,14 @@ def read_exit():
         return None
 
 
-def connect(retry):
-    """Connect to the run's daemon. `retry` while a daemon we just started comes up."""
+def connect(wait=False):
+    """Connect to the run's daemon.
+
+    With `wait`, retry while neither `sock` nor `exit` is there: the run dir
+    (the lock) exists before the daemon binds `sock`, and an attach that lands
+    in that window must wait instead of reporting the run dead. Without it,
+    a refused connect means a dead daemon — give up at once.
+    """
     deadline = time.monotonic() + 10
     while True:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -82,7 +88,7 @@ def connect(retry):
             return s
         except OSError:
             s.close()
-        if not retry or os.path.exists('exit') or time.monotonic() > deadline:
+        if not wait or os.path.exists('sock') or os.path.exists('exit') or time.monotonic() > deadline:
             return None
         time.sleep(0.02)
 
@@ -92,15 +98,20 @@ def connect(retry):
 def attach(run_id, offset, argv):
     rdir = run_dir(run_id)
     os.makedirs(base_dir(), mode=0o700, exist_ok=True)
-    try:
-        os.mkdir(rdir, 0o700)  # the lock: exactly one attach starts the agent for a run
-        fresh = True
-    except FileExistsError:
-        fresh = False
+    fresh = False
+    if argv:
+        try:
+            os.mkdir(rdir, 0o700)  # the lock: exactly one attach starts the agent for a run
+            fresh = True
+        except FileExistsError:
+            pass
+    elif not os.path.isdir(rdir):
+        # Never let an argv-less attach claim (and on failure remove) a fresh
+        # run dir: a racing attach that does carry the agent command would be
+        # left pointing at a deleted directory. Refusing is safe — the hub
+        # re-attaches and either joins the run or learns it does not exist.
+        die('no such run: %s (a new run needs the agent command after --)' % run_id)
     if fresh:
-        if not argv:
-            os.rmdir(rdir)
-            die('a new run needs the agent command after --')
         with open(os.path.join(rdir, 'stderr'), 'ab') as err:
             # Own session: the daemon outlives this client, its ssh session and its terminal.
             subprocess.Popen([sys.executable, os.path.abspath(__file__), '_daemon', rdir, '--'] + argv,
@@ -108,7 +119,7 @@ def attach(run_id, offset, argv):
                              start_new_session=True)
     os.chdir(rdir)
 
-    sock = connect(retry=fresh)
+    sock = connect(wait=True)
     forwarded = 0
     if sock:
         detached = threading.Event()
@@ -169,7 +180,7 @@ def attach(run_id, offset, argv):
 def alive():
     """Whether the run's daemon answers. A dying daemon's listener can still accept a
     connection (the kernel may close it after the client sockets), so connecting is not enough."""
-    sock = connect(retry=False)
+    sock = connect()
     if not sock:
         return False
     try:
@@ -188,7 +199,7 @@ def stop(run_id):
         os.chdir(run_dir(run_id))
     except (FileNotFoundError, NotADirectoryError):
         return 0
-    sock = connect(retry=False)
+    sock = connect()
     if not sock:
         return 0
     sock.sendall(b'stop\n')
@@ -208,6 +219,7 @@ class Client:
         self.sock = sock
         self.inbuf = bytearray()
         self.outbuf = bytearray()
+        self.replay = None        # open 'frames' handle while catching up from disk
 
 
 class Daemon:
@@ -289,12 +301,13 @@ class Daemon:
         # a power cut kills the agent too.
         write_all(self.frames, data)
         c = self.client
-        if c:
-            if not c.outbuf:
-                self.sel.modify(c.sock, EVENT_RW, self.on_client)
-            c.outbuf += data
-            if len(c.outbuf) > MAX_BACKLOG:
-                self.drop(c)
+        if c is None or c.replay is not None:
+            return  # no client, or still catching up from disk: the replay reads this too
+        if not c.outbuf:
+            self.sel.modify(c.sock, EVENT_RW, self.on_client)
+        c.outbuf += data
+        if len(c.outbuf) > MAX_BACKLOG:
+            self.drop(c)
 
     # connections
     def on_accept(self, listener, mask):
@@ -340,13 +353,43 @@ class Daemon:
         if self.client:
             self.drop(self.client)  # newest attach wins
         c = self.client = Client(sock)
-        # ponytail: the replay is read into memory whole (MAX_BACKLOG caps it).
-        with open('frames', 'rb') as f:
-            f.seek(offset)
-            c.outbuf += f.read()
+        # Replay streams from disk in chunks (bounded by MAX_BACKLOG, like the
+        # live stream) instead of reading the whole record into memory: a quiet
+        # agent parked on an approval would otherwise pin a huge `frames` file.
+        try:
+            c.replay = open('frames', 'rb')
+            c.replay.seek(offset)
+            self.fill_replay(c)
+        except OSError:
+            self.close_replay(c)
         self.sel.modify(sock, EVENT_RW if c.outbuf else selectors.EVENT_READ, self.on_client)
         if rest:
             self.from_client(c, rest)
+
+    @staticmethod
+    def fill_replay(c):
+        """Read up to MAX_BACKLOG of not-yet-buffered replay into the out buffer."""
+        while c.replay is not None and len(c.outbuf) < MAX_BACKLOG:
+            chunk = c.replay.read(min(1 << 20, MAX_BACKLOG - len(c.outbuf)))
+            if not chunk:
+                Daemon.close_replay(c)  # caught up: the live stream takes over
+                return
+            c.outbuf += chunk
+
+    @staticmethod
+    def close_replay(c):
+        if c.replay is not None:
+            try:
+                c.replay.close()
+            except OSError:
+                pass
+            c.replay = None
+
+    def drop(self, c):
+        self.close_replay(c)
+        if self.client is c:
+            self.client = None
+        self.close(c.sock)  # its half-sent frame (c.inbuf) dies with it
 
     def on_client(self, sock, mask):
         c = self.client
@@ -366,6 +409,8 @@ class Daemon:
             except OSError:
                 return self.drop(c)
             del c.outbuf[:n]
+            if c.replay is not None:
+                self.fill_replay(c)  # keep the catch-up ahead of the socket
             if not c.outbuf:
                 self.sel.modify(sock, selectors.EVENT_READ, self.on_client)
 
@@ -383,11 +428,6 @@ class Daemon:
             return None
         except OSError:
             return b''
-
-    def drop(self, c):
-        if self.client is c:
-            self.client = None
-        self.close(c.sock)  # its half-sent frame (c.inbuf) dies with it
 
     def close(self, sock):
         self.pending.pop(sock, None)

@@ -7,6 +7,12 @@ minor versions may carry breaking changes.
 ## Unreleased
 
 ### Added
+- **Durable ACP runs (`cowork-pipe`).** Spike 0 of the cloud-hub design: a
+  Python daemon (standard library only) that runs an ACP agent under a
+  detached session, records everything it prints, and lets clients die and
+  re-attach at a byte offset — nothing lost, nothing twice, one agent per
+  run id ever. `attach`/`stop` only; not wired into the app yet. Scripted
+  and real-Hermes integration tests included. See `docs/cloud-hub.md`.
 - **Remote agents over SSH.** A project can declare a remote origin
   ([user@]host or an `~/.ssh/config` alias); its Cowork tasks spawn
   `hermes acp` on that host (`ssh -T -o BatchMode=yes … 'exec hermes acp'`)

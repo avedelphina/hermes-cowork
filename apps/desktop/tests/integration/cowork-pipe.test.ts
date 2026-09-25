@@ -16,6 +16,7 @@
 //   5. stop ends the agent; a finished run replays its record and reports the exit code
 //   6. a run whose daemon died exits 75 on attach and is never restarted
 //   7. a newer attach takes over; the old client, and one whose stdin closes, exit 0
+//   8. an attach during the daemon's boot waits for it instead of exiting 75
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -56,6 +57,21 @@ for line in iter(sys.stdin.readline, ''):
 `;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// A minimal ping-only agent. The interesting window is the daemon's own boot
+// (Python start-up between the run-dir lock and binding `sock`), where a
+// second attach lands too early and must wait instead of reporting the run
+// dead; the sleep just keeps the agent silent while that race resolves.
+const SLOW_AGENT = `
+import time
+time.sleep(0.3)
+import json, sys
+for line in iter(sys.stdin.readline, ''):
+    m = json.loads(line)
+    if m.get('method') == 'ping':
+        sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': m.get('id'), 'result': 'pong'}) + '\\n')
+        sys.stdout.flush()
+`;
 
 async function until<T>(fn: () => T | undefined | false, ms = 10_000, what = 'condition'): Promise<T> {
   const t0 = Date.now();
@@ -141,9 +157,12 @@ const record = (dir: string, runId: string, from = 0): Frame[] =>
 
 suite('cowork-pipe (scripted agent)', HAS_PYTHON, ({ dir }) => {
   let fake = '';
+  let slow = '';
   beforeAll(() => {
     fake = join(dir(), 'fake-agent.py');
     writeFileSync(fake, FAKE_AGENT);
+    slow = join(dir(), 'slow-agent.py');
+    writeFileSync(slow, SLOW_AGENT);
   });
 
   it('keeps the agent through a client crash and resumes at the processed offset', async () => {
@@ -218,6 +237,21 @@ suite('cowork-pipe (scripted agent)', HAS_PYTHON, ({ dir }) => {
     expect(isAlive((hello['params'] as { pid: number }).pid)).toBe(true);
     expect(stopRun(dir(), 'r4')).toBe(0);
     expect(isAlive((hello['params'] as { pid: number }).pid)).toBe(false);
+  }, 30_000);
+
+  it('waits for a daemon that is still starting instead of reporting the run dead', async () => {
+    // The run dir is the lock, but the daemon binds `sock` only once its own
+    // Python has booted: an attach landing in that window must wait for it,
+    // not report the run interrupted (75).
+    const a = new PipeClient(dir(), 'r6', 0, ['python3', slow]);
+    await until(() => existsSync(join(dir(), 'r6', 'sock')), 10_000, 'daemon up');
+    await sleep(150); // a polls every 20 ms: it is the client before b even starts
+    const b = new PipeClient(dir(), 'r6', 0); // no argv: never starts a second agent
+    expect(await a.exited).toBe(0); // b attached and took over — it did not die early
+    b.send({ id: 'ping-3', method: 'ping' });
+    await until(() => b.find((f) => f['id'] === 'ping-3'), 10_000, 'pong');
+    expect(stopRun(dir(), 'r6')).toBe(0);
+    expect(await b.exited).toBe(0); // the agent's own exit code
   }, 30_000);
 
   it('stops the agent when its run dir is removed, so it cannot linger unreachable', async () => {
