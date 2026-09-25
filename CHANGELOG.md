@@ -13,6 +13,10 @@ minor versions may carry breaking changes.
   re-attach at a byte offset — nothing lost, nothing twice, one agent per
   run id ever. `attach`/`stop` only; not wired into the app yet. Scripted
   and real-Hermes integration tests included. See `docs/cloud-hub.md`.
+
+## [0.2.10] — 2026-09-25
+
+### Added
 - **Remote agents over SSH.** A project can declare a remote origin
   ([user@]host or an `~/.ssh/config` alias); its Cowork tasks spawn
   `hermes acp` on that host (`ssh -T -o BatchMode=yes … 'exec hermes acp'`)
