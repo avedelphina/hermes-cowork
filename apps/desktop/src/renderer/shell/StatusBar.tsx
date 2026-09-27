@@ -21,7 +21,7 @@ export function StatusBar() {
 
   return (
     <div className="relative flex items-center gap-3 border-t border-border bg-bg px-3 py-1.5 text-[11px] text-muted">
-      <GatewayDot status={status} stale={stale} />
+      <DashboardDot stale={stale} />
       <button
         className="ml-auto hover:text-fg"
         aria-label="Runtime status details"
@@ -82,17 +82,7 @@ export function StatusBar() {
   );
 }
 
-function GatewayDot({ status, stale }: { status: Status | null; stale: boolean }) {
-  if (stale) return <span className="flex items-center gap-1"><span className="text-danger">●</span> disconnected</span>;
-  if (!status) return <span className="text-dim">● gateway: —</span>;
-  const { running, platforms } = status.gateway;
-  if (!running) {
-    return <span className="flex items-center gap-1"><span className="text-danger">●</span> gateway: stopped</span>;
-  }
-  return (
-    <span className="flex items-center gap-1">
-      <span className="text-success">●</span>
-      gateway: {platforms.join(', ') || 'idle'}
-    </span>
-  );
+function DashboardDot({ stale }: { stale: boolean }) {
+  if (stale) return <span className="flex items-center gap-1"><span className="text-danger">●</span> dashboard: disconnected</span>;
+  return <span className="flex items-center gap-1"><span className="text-success">●</span> dashboard: connected</span>;
 }

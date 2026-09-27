@@ -15,6 +15,11 @@ export function CoworkPage() {
     // replay a resumed task's history via session/load.
     const off = window.hermes.acp.onEvent(ingestAcp);
     const s = useCoworkStore.getState();
+    if (s.sessionId) {
+      void window.hermes.acp.drain(s.sessionId).then((events) => {
+        for (const event of events) ingestAcp(event);
+      });
+    }
     if (s.pendingKickoff && s.sessionId) {
       s.clearKickoff();
       void window.hermes.acp.send({ kind: 'prompt', sessionId: s.sessionId, text: s.pendingKickoff });

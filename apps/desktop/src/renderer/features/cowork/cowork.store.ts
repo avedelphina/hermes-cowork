@@ -55,6 +55,9 @@ const CLEARED = {
   checkpoints: [] as Array<{ rel: string; before: string | null; at: string }>,
   editCalls: [] as string[],
   changeRev: 0,
+  currentActivity: null as string | null,
+  activity: [] as Array<{ at: string; label: string; detail?: string }>,
+  seenEventIds: [] as number[],
 };
 
 type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
@@ -128,6 +131,12 @@ type CoworkStore = {
   editCalls: string[];
   /** Bumped when files may have changed on disk, so Changes re-reads them. */
   changeRev: number;
+  /** Human-readable activity derived only from observed ACP events. */
+  currentActivity: string | null;
+  /** Recent observed operations, newest first. */
+  activity: Array<{ at: string; label: string; detail?: string }>;
+  /** Main-process journal ids already applied, preventing replay duplication. */
+  seenEventIds: number[];
 
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; remote?: RemoteOrigin | null; kickoff: string }) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
@@ -226,25 +235,33 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       // Ignore events for other ACP sessions (worker sessions, chat), and any
       // event that arrives before this task is bound to a session.
       if (!s.sessionId || msg.sessionId !== s.sessionId) return s;
+      if (typeof msg.eventId === 'number' && s.seenEventIds.includes(msg.eventId)) return s;
+      const seenEventIds = typeof msg.eventId === 'number'
+        ? [...s.seenEventIds, msg.eventId].slice(-500)
+        : s.seenEventIds;
+      const record = (label: string, detail?: string): Partial<CoworkStore> => {
+        const entry = { at: new Date().toISOString(), label, ...(detail ? { detail } : {}) };
+        return { currentActivity: label, activity: [entry, ...s.activity].slice(0, 20), seenEventIds };
+      };
       switch (msg.kind) {
         case 'token': {
           const role = msg.thought ? 'thought' : 'agent';
           const last = s.transcript[s.transcript.length - 1];
           if (last && last.role === role) {
-            return { transcript: [...s.transcript.slice(0, -1), { role, text: last.text + msg.text }] };
+            return { transcript: [...s.transcript.slice(0, -1), { role, text: last.text + msg.text }], ...record(msg.thought ? 'Thinking' : 'Responding') };
           }
-          return { transcript: [...s.transcript, { role, text: msg.text }] };
+          return { transcript: [...s.transcript, { role, text: msg.text }], ...record(msg.thought ? 'Thinking' : 'Responding') };
         }
         case 'tool-call': {
           // Hermes sends no `plan` frame for `todo_list`; rebuild it from the call.
           const writes = s.nativePlan ? [] : todoWrites(msg.name, msg.args);
           if (writes.length > 0) {
             const todoItems = writes.reduce((items, w) => applyTodoWrite(items, w.todos, w.merge), s.todoItems);
-            return { todoItems, ...withPlan(s, toPlanEntries(todoItems)) };
+            return { todoItems, ...withPlan(s, toPlanEntries(todoItems)), ...record('Updating plan') };
           }
           // ACP tags file-mutating tools with kind "edit" / "delete" / "move"
           // and lists the touched files under `paths`.
-          if (msg.op !== 'edit' && msg.op !== 'delete' && msg.op !== 'move') return s;
+          if (msg.op !== 'edit' && msg.op !== 'delete' && msg.op !== 'move') return { ...s, ...record(`${msg.name}`, msg.op) };
           const args = (msg.args ?? {}) as { path?: string; file_path?: string; target?: string };
           const path = msg.paths[0] ?? args.path ?? args.file_path ?? args.target;
           const rel = path ? relInCwd(s.cwd, path) : null;
@@ -257,16 +274,17 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
               .then((before) => useCoworkStore.getState().addCheckpoint(rel, before))
               .catch(() => { /* ignore */ });
           }
-          return { editCalls: [...s.editCalls, msg.toolCallId] };
+          return { editCalls: [...s.editCalls, msg.toolCallId], ...record(msg.name, `${msg.op}${path ? ` · ${path}` : ''}`) };
         }
         case 'plan':
-          return { nativePlan: true, ...withPlan(s, msg.entries) };
+          return { nativePlan: true, ...withPlan(s, msg.entries), ...record('Plan updated') };
         case 'approval-request':
-          return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }] };
+          return { approvals: [...s.approvals, { toolCallId: msg.toolCallId, description: msg.description }], ...record('Waiting for approval', msg.description) };
         case 'approval-expired':
           return {
             approvals: s.approvals.filter((a) => a.toolCallId !== msg.toolCallId),
             transcript: [...s.transcript, { role: 'system', text: `⌛ Approval expired and was denied: ${msg.description}` }],
+            ...record('Approval expired', msg.description),
           };
         case 'session-error':
           persistTask(s.taskId, { status: 'failed' });
@@ -274,6 +292,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return {
             status: 'idle',
             transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }],
+            ...record('Failed', msg.message),
           };
         case 'done':
           persistTask(s.taskId, { status: s.approved ? 'done' : 'awaiting_approval' });
@@ -285,9 +304,11 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           if (s.goal && s.transcript.some((m) => m.role === 'agent')) {
             notify(s.approved ? 'Hermes is waiting on you' : 'Plan ready for approval', s.goal);
           }
-          return { status: 'idle', changeRev: s.changeRev + 1 };
+          return { status: 'idle', changeRev: s.changeRev + 1, ...record('Waiting for you') };
         case 'tool-result':
-          return s.editCalls.includes(msg.toolCallId) ? { changeRev: s.changeRev + 1 } : s;
+          return s.editCalls.includes(msg.toolCallId)
+            ? { changeRev: s.changeRev + 1, ...record('Tool finished') }
+            : { ...s, ...record('Tool finished') };
         default:
           // Unknown kind: never replace state with undefined — that nukes the
           // entire store because zustand's setState replaces (not merges) when

@@ -218,6 +218,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   });
 
   handle(IpcChannel.AcpModels, (_e, sessionId: unknown) => bridge.getModels(str(sessionId, 'sessionId')));
+  handle(IpcChannel.AcpDrain, (_e, sessionId: unknown) => bridge.drainEvents(str(sessionId, 'sessionId')));
 
   handle(
     IpcChannel.AcpLoad,

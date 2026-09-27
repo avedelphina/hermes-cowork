@@ -6,6 +6,7 @@ import { useCoworkStore } from './cowork.store';
 
 const TABS = [
   { id: 'plan', label: 'Plan' },
+  { id: 'activity', label: 'Activity' },
   { id: 'files', label: 'Files' },
   { id: 'changes', label: 'Changes' },
 ] as const;
@@ -30,6 +31,8 @@ export function RightPane() {
   const [width, setWidth] = useState(initialWidth);
   const changed = useCoworkStore((s) => s.checkpoints.length);
   const planEntries = useCoworkStore((s) => s.planEntries);
+  const activity = useCoworkStore((s) => s.activity);
+  const currentActivity = useCoworkStore((s) => s.currentActivity);
   const remote = useCoworkStore((s) => s.remote);
   // A remote task's files live on the other machine — the local file browser
   // and checkpoints can't reach them (main refuses), so don't offer the tabs.
@@ -37,6 +40,7 @@ export function RightPane() {
   const planDone = planEntries.filter((e) => e.status === 'completed').length;
   const badge: Partial<Record<TabId, string>> = {
     plan: planEntries.length ? `${planDone}/${planEntries.length}` : '',
+    activity: activity.length ? String(activity.length) : '',
     changes: changed ? String(changed) : '',
   };
 
@@ -93,6 +97,28 @@ export function RightPane() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {(remote ? 'plan' : tab) === 'plan' && <div className="overflow-y-auto"><PlanTab /></div>}
+        {!remote && tab === 'activity' && (
+          <div className="overflow-y-auto px-3 py-3 text-[11px]">
+            <div className="mb-3 text-[9px] uppercase tracking-wide text-dim">Observed activity</div>
+            <div className="mb-3 rounded border border-border bg-surface2 px-2 py-2">
+              <div className="text-dim">Current operation</div>
+              <div className="mt-1 text-fg">{currentActivity ?? 'No ACP activity observed yet'}</div>
+            </div>
+            {activity.length === 0 ? (
+              <div className="text-dim">Activity appears here as ACP events arrive. Background work is not reported unless Cowork can observe its run.</div>
+            ) : (
+              <ol className="space-y-2">
+                {activity.map((a, i) => (
+                  <li key={`${a.at}-${i}`} className="border-l-2 border-border pl-2">
+                    <div className="text-fg">{a.label}</div>
+                    {a.detail && <div className="text-dim">{a.detail}</div>}
+                    <div className="mt-0.5 text-[10px] text-dim">{new Date(a.at).toLocaleTimeString()}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
         {!remote && tab === 'files' && <FileBrowser />}
         {!remote && tab === 'changes' && <div className="overflow-y-auto"><ChangesTab onOpenFile={() => setTab('files')} /></div>}
         {remote && (

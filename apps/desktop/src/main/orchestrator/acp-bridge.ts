@@ -102,7 +102,10 @@ export class AcpBridge extends EventEmitter {
   /** Sessions mid-`session/load` → handle. Their replay frames arrive before
    * the load response binds them, so ownership must already hold. */
   private loading = new Map<string, string>();
-  private tokens = new TokenCoalescer((m) => this.emit('event', m));
+  /** Bounded semantic-event journal for renderer remounts/reconnects. */
+  private eventSeq = 0;
+  private readonly journal = new Map<string, AcpServerMessage[]>();
+  private tokens = new TokenCoalescer((m) => this.emitJournal(m));
 
   constructor(private readonly sup: AcpSupervisor) {
     super();
@@ -155,6 +158,13 @@ export class AcpBridge extends EventEmitter {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
     await this.sup.request(handle, 'session/set_mode', { sessionId, modeId }, CONTROL_TIMEOUT_MS);
+  }
+
+  /** Return and clear events emitted while the renderer was not mounted. */
+  drainEvents(sessionId: string): AcpServerMessage[] {
+    const events = this.journal.get(sessionId) ?? [];
+    this.journal.delete(sessionId);
+    return events;
   }
 
   /** Cached model state for a session, or null if we never saw session/new for it. */
@@ -333,11 +343,19 @@ export class AcpBridge extends EventEmitter {
     this.sup.shutdownAll();
   }
 
+  private emitJournal(msg: AcpServerMessage): void {
+    const event = { ...msg } as AcpServerMessage;
+    Object.defineProperty(event, 'eventId', { value: ++this.eventSeq, enumerable: false });
+    const recent = [...(this.journal.get(msg.sessionId) ?? []), event].slice(-200);
+    this.journal.set(msg.sessionId, recent);
+    this.emit('event', event);
+  }
+
   /** Emit to the renderer. Tokens are rate-limited; anything else flushes them first to keep order. */
   private out(msg: AcpServerMessage): void {
     if (msg.kind === 'token') return this.tokens.push(msg);
     this.tokens.flush(msg.sessionId);
-    this.emit('event', msg);
+    this.emitJournal(msg);
   }
 
   /** Expire a still-pending request by denying it once and informing the UI. */

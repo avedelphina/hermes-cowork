@@ -14,6 +14,7 @@ export const IpcChannel = {
   AcpSetModel: 'acp:set-model',
   AcpModels: 'acp:models',  // read cached available/current models for a session
   AcpStop: 'acp:stop',
+  AcpDrain: 'acp:drain',
   AcpEvent: 'acp:event',  // main → renderer push
 
   // dashboard REST proxy (so renderer never touches network)

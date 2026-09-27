@@ -76,7 +76,7 @@ export function Transcript() {
         <div className="rounded-md border-l-2 border-accent bg-surface2 px-3 py-2 text-[11px] text-accent">
           <div>⏸ Hermes stopped and is waiting on you — reply below to continue.</div>
           <div className="mt-1 text-dim">
-            No background processes are running — if the message above claims otherwise, treat that as unverified.
+            No background run is currently observed by Cowork. If the transcript mentions one, its status and result are unverified.
           </div>
         </div>
       )}

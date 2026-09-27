@@ -28,6 +28,7 @@ const api = {
     models: (sessionId: string): Promise<AcpModels | null> =>
       ipcRenderer.invoke(IpcChannel.AcpModels, sessionId),
     stop: (sessionId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.AcpStop, sessionId),
+    drain: (sessionId: string): Promise<AcpServerMessage[]> => ipcRenderer.invoke(IpcChannel.AcpDrain, sessionId),
     onEvent: (cb: (msg: AcpServerMessage) => void) => {
       const listener = (_e: unknown, msg: AcpServerMessage) => cb(msg);
       ipcRenderer.on(IpcChannel.AcpEvent, listener);
