@@ -150,7 +150,7 @@ export type AcpClientMessage =
   | { kind: 'prompt'; sessionId: string; text: string }
   | { kind: 'approve'; sessionId: string; toolCallId: string; allow: boolean };
 
-export type AcpServerMessage =
+export type AcpServerMessage = (
   // `role` defaults to 'agent'; 'user' appears when Hermes replays history
   // during session/load. `thought` marks reasoning text (ACP agent_thought_chunk)
   // as opposed to the reply itself.
@@ -166,7 +166,8 @@ export type AcpServerMessage =
   | { kind: 'approval-request'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'approval-expired'; sessionId: string; toolCallId: string; description: string }
   | { kind: 'session-error'; sessionId: string; message: string; fatal: boolean }
-  | { kind: 'done'; sessionId: string };
+  | { kind: 'done'; sessionId: string }
+) & { /** Main-process event identity used to recover missed renderer deliveries. */ eventId?: number };
 
 export type UpdateStatus =
   | { state: 'idle' }

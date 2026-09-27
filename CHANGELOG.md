@@ -7,12 +7,36 @@ minor versions may carry breaking changes.
 ## Unreleased
 
 ### Added
-- **Durable ACP runs (`cowork-pipe`).** Spike 0 of the cloud-hub design: a
-  Python daemon (standard library only) that runs an ACP agent under a
-  detached session, records everything it prints, and lets clients die and
-  re-attach at a byte offset — nothing lost, nothing twice, one agent per
-  run id ever. `attach`/`stop` only; not wired into the app yet. Scripted
-  and real-Hermes integration tests included. See `docs/cloud-hub.md`.
+- **Observed Cowork activity.** The right sidebar now shows the current
+  operation and recent ACP activity, including plans, approvals, tools, file
+  operations, and completion state. It reports observed events only; transcript
+  claims about untracked background workers remain explicitly unverified.
+- **Clearer runtime status.** The status bar now reports the Cowork dashboard
+  connection instead of presenting Hermes' topology-sensitive messaging-gateway
+  projection as the Cowork task state.
+- **Roadmap: macOS privacy/TCC attribution.** Documented the staged path from
+  clearer Cowork/Python attribution to a project-scoped filesystem boundary.
+
+### Fixed
+- **Background-result wording.** Cowork no longer says that no background
+  process exists as a fact when it only lacks an observable run record; it now
+  distinguishes an unverified transcript claim from observed execution.
+
+## [0.2.11] — 2026-09-27
+
+### Added
+- Observed Cowork activity in the right sidebar, with ACP event-backed current
+  and recent operations.
+- A bounded main-process ACP event journal and renderer drain path so events
+  produced while the task view is remounting can be recovered without duplicate
+  display.
+
+### Changed
+- The primary status bar now reports Cowork dashboard connectivity rather than
+  the topology-sensitive messaging-gateway ownership projection.
+- Transcript copy now distinguishes an unverified background-worker claim from
+  observed execution.
+- Documented the staged macOS TCC attribution/filesystem-boundary roadmap.
 
 ## [0.2.10] — 2026-09-25
 
