@@ -8,7 +8,7 @@ const STATUS_MARK: Record<string, string> = {
 };
 
 export function PlanTab() {
-  const { transcript, planEntries, planHistory, approved, status, sessionId, designApproved, verificationApproved } = useCoworkStore();
+  const { transcript, planEntries, planHistory, approved, status, sessionId, designApproved, verificationApproved, implementationApproved } = useCoworkStore();
   const approvePlan = useCoworkStore((s) => s.approvePlan);
   const approveVerification = useCoworkStore((s) => s.approveVerification);
   const markStopped = useCoworkStore((s) => s.markStopped);
@@ -147,7 +147,7 @@ export function PlanTab() {
             This design isn&apos;t final — keep chatting below to reshape it. Nothing runs until you approve the design.
           </p>
         </div>
-      ) : designApproved && !verificationApproved && isImplementationDone ? (
+      ) : designApproved && !implementationApproved && !verificationApproved && isImplementationDone ? (
         <div className="mt-2 rounded border border-border bg-surface2 p-2 text-[10px]">
           <p className="mb-2 text-muted">Implementation complete. Review the changes and approve verification when ready.</p>
           <button onClick={approveImplementationAndVerify} className="rounded bg-accent px-3 py-1.5 font-semibold text-bg">Approve implementation &amp; verify</button>

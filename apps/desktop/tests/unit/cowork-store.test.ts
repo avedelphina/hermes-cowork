@@ -165,6 +165,9 @@ describe('cowork store', () => {
       s.approvePlan();
       s.ingestAcp(todo({ merge: true, todos: [{ id: 'c', content: 'gamma' }] }, 'todo_list', 'c2'));
       expect(useCoworkStore.getState().approved).toBe(false);
+      expect(useCoworkStore.getState().designApproved).toBe(false);
+      expect(useCoworkStore.getState().implementationApproved).toBe(false);
+      expect(useCoworkStore.getState().verificationApproved).toBe(false);
 
       useCoworkStore.getState().beginReconnect(); // replaying
       useCoworkStore.getState().approvePlan();
