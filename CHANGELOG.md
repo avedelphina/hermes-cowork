@@ -6,18 +6,28 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.16] — 2026-09-27
+
 ### Added
+- **Durable local run reattachment.** Reopen a task after Cowork restarts and
+  reconnect to its existing local `cowork-pipe` run from the persisted byte
+  offset, without starting a duplicate agent. Explicit stop remains terminal;
+  ordinary desktop shutdown detaches instead.
+
+### Fixed
+- **Safe restart recovery.** Terminal, missing, remote, and already-owned runs
+  now fail closed during attachment rather than silently creating a new session.
+- **Packaged startup with the durable core.** Bundle `@hermes-cowork/core`
+  into Electron's main-process output instead of leaving its ESM-only workspace
+  package external in the ASAR. This prevents `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  on installed Cowork builds.
+
+### Changed
 - **Durable local Cowork runs.** Task sessions now start through the bundled
   `cowork-pipe` adapter, persist run identity and exact processed-byte offsets,
   reattach after a desktop restart without starting a second agent, and stop
   through the pipe's explicit stop command. Remote task piping remains
   deliberately deferred.
-
-### Fixed
-- **Packaged startup with the durable core.** Bundle `@hermes-cowork/core`
-  into Electron's main-process output instead of leaving its ESM-only workspace
-  package external in the ASAR. This prevents `ERR_PACKAGE_PATH_NOT_EXPORTED`
-  on installed Cowork builds.
 
 ## [0.2.15] — 2026-09-27
 
