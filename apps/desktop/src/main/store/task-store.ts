@@ -33,6 +33,7 @@ function toCoworkTask(task: WorkflowTask): CoworkTask {
     implementationApproved: task.implementationApproved,
     verificationApproved: task.verificationApproved,
     remote: task.remote as RemoteOrigin | null,
+    git: task.git,
     status: task.status,
     approved: task.approved,
     createdAt: task.createdAt,
@@ -84,6 +85,10 @@ export class TaskStore {
 
   create(input: CreateInput): CoworkTask {
     return toCoworkTask(this.workflow.create(input));
+  }
+
+  bindGitWorkspace(id: string, git: NonNullable<CoworkTask['git']>): CoworkTask | null {
+    return this.workflow.bindGitWorkspace(id, git) as CoworkTask | null;
   }
 
   start(id: string, acpSessionId: string): CoworkTask | null {

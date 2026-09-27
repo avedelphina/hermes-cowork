@@ -24,6 +24,8 @@ export type WorkflowTask = {
   implementationApproved: boolean;
   verificationApproved: boolean;
   remote: unknown | null;
+  /** Local Git isolation, null when the task deliberately uses its selected folder. */
+  git: { branch: string; worktreePath: string; baseRef: string } | null;
   status: TaskStatus;
   approved: boolean;
   createdAt: string;
@@ -41,6 +43,7 @@ export type CreateTaskInput = {
   projectId: string | null;
   parentTaskId?: string | null;
   remote?: unknown | null;
+  git?: { branch: string; worktreePath: string; baseRef: string } | null;
 };
 
 export type TaskWorkflowEvent = {

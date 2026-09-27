@@ -30,6 +30,7 @@ describe('TaskWorkflow', () => {
     expect(workflow.get('legacy')).toMatchObject({
       title: 'Old name', acpSessionId: null, parentTaskId: null,
       designApproved: false, implementationApproved: false, verificationApproved: false,
+      git: null,
       eventSequence: 0, activeRunId: null,
     });
   });

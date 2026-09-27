@@ -19,6 +19,7 @@ function normalise(snapshot: Partial<TaskWorkflowSnapshot>): TaskWorkflowSnapsho
       implementationApproved: task.implementationApproved === true,
       verificationApproved: task.verificationApproved === true,
       remote: task.remote ?? null,
+      git: task.git ?? null,
       eventSequence: task.eventSequence ?? 0,
       activeRunId: task.activeRunId ?? null,
     })),
@@ -66,6 +67,7 @@ export class TaskWorkflow {
       implementationApproved: false,
       verificationApproved: false,
       remote: input.remote ?? null,
+      git: input.git ?? null,
       status: 'draft',
       approved: false,
       createdAt: now,
@@ -75,6 +77,17 @@ export class TaskWorkflow {
     };
     this.snapshot.tasks.push(task);
     this.emit(task, 'task-created');
+    this.persist();
+    return clone(task);
+  }
+
+  bindGitWorkspace(id: string, git: NonNullable<WorkflowTask['git']>): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || task.status !== 'draft' || task.git) return null;
+    task.git = clone(git);
+    task.cwd = git.worktreePath;
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
     this.persist();
     return clone(task);
   }

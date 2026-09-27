@@ -115,6 +115,7 @@ export type CoworkTask = {
   /** Denormalized from the project at creation: where the agent actually
    * runs. Null = local. Kept on the task so resume survives project edits. */
   remote?: RemoteOrigin | null;
+  git?: { branch: string; worktreePath: string; baseRef: string } | null;
   status: TaskStatus;
   approved: boolean;
   createdAt: string;
