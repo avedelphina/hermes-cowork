@@ -6,6 +6,13 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.15] — 2026-09-27
+
+### Fixed
+- **CI package build ordering.** Build the workspace core package before
+  desktop typechecking so clean release runners resolve its generated
+  declarations.
+
 ## [0.2.14] — 2026-09-27
 
 ### Added
@@ -133,6 +140,7 @@ First signed + notarised build.
 - First packaged build. Chat + Cowork end to end against Hermes 0.20.6.
   macOS Apple Silicon, unsigned DMG.
 
+[0.2.15]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.15
 [0.2.14]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.14
 [0.2.13]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.13
 [0.2.12]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.12
