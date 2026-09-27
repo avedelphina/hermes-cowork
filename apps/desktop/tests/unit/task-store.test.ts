@@ -11,16 +11,21 @@ beforeEach(() => {
   file = join(mkdtempSync(join(tmpdir(), 'task-')), 'tasks.json');
 });
 
-const input = { goal: 'g', cwd: '/w', profile: 'p', acpSessionId: 's1', projectId: null };
+const input = { title: 'Task name', cwd: '/w', profile: 'p', projectId: null };
 
 describe('TaskStore', () => {
-  it('create starts a task in planning and persists it', () => {
+  it('create starts a named task as a draft and persists it', () => {
     const store = new TaskStore(file);
     const t = store.create(input);
-    expect(t).toMatchObject({ status: 'planning', approved: false, goal: 'g', acpSessionId: 's1' });
-    // A separate instance sees the persisted task (its live status becomes
-    // 'interrupted' on reload — covered by its own test).
-    expect(new TaskStore(file).get(t.id)?.goal).toBe('g');
+    expect(t).toMatchObject({ status: 'draft', approved: false, title: 'Task name', acpSessionId: null });
+    expect(new TaskStore(file).get(t.id)?.title).toBe('Task name');
+  });
+
+  it('start binds an ACP session exactly once', () => {
+    const store = new TaskStore(file);
+    const t = store.create(input);
+    expect(store.start(t.id, 's1')).toMatchObject({ status: 'planning', acpSessionId: 's1' });
+    expect(store.start(t.id, 's2')).toBeNull();
   });
 
   it('update bumps updatedAt and changes status', () => {
@@ -34,15 +39,16 @@ describe('TaskStore', () => {
 
   it('list is most-recent first', async () => {
     const store = new TaskStore(file);
-    const a = store.create({ ...input, goal: 'a' });
+    const a = store.create({ ...input, title: 'a' });
     await new Promise((r) => setTimeout(r, 5));
-    const b = store.create({ ...input, goal: 'b' });
+    const b = store.create({ ...input, title: 'b' });
     expect(store.list().map((t) => t.id)).toEqual([b.id, a.id]);
   });
 
   it('marks a live task as interrupted when reloaded (app died mid-task)', () => {
     const store = new TaskStore(file);
     const t = store.create(input);
+    store.start(t.id, 's1');
     store.update(t.id, { status: 'executing' });
     expect(new TaskStore(file).get(t.id)?.status).toBe('interrupted');
   });
@@ -50,8 +56,14 @@ describe('TaskStore', () => {
   it('leaves finished tasks alone on reload', () => {
     const store = new TaskStore(file);
     const t = store.create(input);
+    store.start(t.id, 's1');
     store.update(t.id, { status: 'done' });
     expect(new TaskStore(file).get(t.id)?.status).toBe('done');
+  });
+
+  it('migrates legacy task names', () => {
+    writeFileSync(file, JSON.stringify({ tasks: [{ id: 'old', goal: 'Legacy task', cwd: '/w', profile: 'p', acpSessionId: 's', projectId: null, status: 'done', approved: false, createdAt: 'a', updatedAt: 'a' }] }));
+    expect(new TaskStore(file).get('old')).toMatchObject({ title: 'Legacy task', acpSessionId: 's' });
   });
 
   it('survives a corrupt file', () => {
@@ -67,7 +79,7 @@ describe('TaskStore', () => {
 
   it('ignores fields outside the whitelist on create and update (no mass assignment)', () => {
     const store = new TaskStore(file);
-    const t = store.create({ ...input, id: 'forged', approved: true } as typeof input);
+    const t = store.create(input);
     expect(t.id).not.toBe('forged');
     expect(t.approved).toBe(false);
     store.update(t.id, { status: 'done', cwd: '/' } as never);
