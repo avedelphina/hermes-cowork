@@ -17,6 +17,14 @@ export type AcpSpawnOptions = AcpSession & {
   hermesHome: string;
   /** Reach the agent over SSH instead of spawning locally. */
   remote?: RemoteOrigin | null;
+  /** Attach this isolated child through the durable local cowork-pipe. */
+  pipe?: {
+    scriptPath: string;
+    runId: string;
+    offset: number;
+    onOffset?: (offset: number) => void;
+    onExit?: (code: number | null, expected: boolean) => void;
+  };
 };
 
 export type AcpEvent =
@@ -31,15 +39,21 @@ type PendingRequest = {
 };
 
 class AcpChild {
-  readonly decoder = new FrameDecoder();
+  readonly decoder: FrameDecoder;
   readonly pending = new Map<string | number, PendingRequest>();
   /** Set by shutdown() so the exit handler can mark the exit as expected. */
   stopping = false;
   /** Recent stderr. For an ssh child this is where "Permission denied" lives. */
   stderrTail = '';
-  constructor(public readonly proc: ChildProcess, public readonly session: AcpSession) {}
+  constructor(
+    public readonly proc: ChildProcess,
+    public readonly session: AcpSession,
+    public readonly onOffset?: (offset: number) => void,
+    initialOffset = 0,
+  ) {
+    this.decoder = new FrameDecoder(initialOffset);
+  }
 }
-
 /**
  * Hermes reports most failures as "-32603 Internal error" and puts the real
  * reason in `error.data.details` ("No LLM provider configured. Run `hermes
@@ -64,8 +78,13 @@ export class AcpSupervisor extends EventEmitter {
   private children = new Map<string, AcpChild>();
 
   spawn(opts: AcpSpawnOptions): void {
+    if (opts.pipe && opts.remote) throw new Error('cowork-pipe currently supports local task sessions only');
     const spec = buildSpawnSpec(opts);
-    const proc = spawn(spec.command, spec.args, {
+    const command = opts.pipe ? 'python3' : spec.command;
+    const args = opts.pipe
+      ? [opts.pipe.scriptPath, 'attach', opts.pipe.runId, String(opts.pipe.offset), '--', spec.command, ...spec.args]
+      : spec.args;
+    const proc = spawn(command, args, {
       // Remote spawns have no local cwd — the task folder is a remote path,
       // delivered to the agent via session/new.
       ...(spec.cwd ? { cwd: spec.cwd } : {}),
@@ -73,11 +92,13 @@ export class AcpSupervisor extends EventEmitter {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    const child = new AcpChild(proc, { id: opts.id, profile: opts.profile, cwd: opts.cwd });
+    const child = new AcpChild(proc, { id: opts.id, profile: opts.profile, cwd: opts.cwd }, opts.pipe?.onOffset, opts.pipe?.offset ?? 0);
     this.children.set(opts.id, child);
 
     proc.stdout?.on('data', (chunk: Buffer) => {
-      for (const msg of child.decoder.push(chunk)) {
+      const decoded = opts.pipe ? child.decoder.pushWithOffsets(chunk) : { messages: child.decoder.push(chunk), offsets: [] };
+      for (const offset of decoded.offsets) child.onOffset?.(offset);
+      for (const msg of decoded.messages) {
         this.routeIncoming(child, opts.id, msg);
       }
     });
@@ -110,6 +131,7 @@ export class AcpSupervisor extends EventEmitter {
         expected: child.stopping,
         ...(detail ? { detail } : {}),
       } satisfies AcpEvent);
+      opts.pipe?.onExit?.(code, child.stopping);
       this.children.delete(opts.id);
     });
   }

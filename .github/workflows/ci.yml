@@ -49,6 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-vite build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-builder --mac --arm64 --publish never
         env:
@@ -66,6 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-vite build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-builder --linux --x64 --publish never
       - uses: actions/upload-artifact@v7

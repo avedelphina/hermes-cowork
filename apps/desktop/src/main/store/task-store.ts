@@ -10,6 +10,7 @@ import {
   TaskWorkflow,
   type CreateTaskInput,
   type PendingApproval,
+  type TaskRun,
   type TaskWorkflowRepository,
   type TaskWorkflowSnapshot,
   type WorkflowPatch,
@@ -124,6 +125,42 @@ export class TaskStore {
   update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved' | 'designApproved' | 'implementationApproved' | 'verificationApproved'>>): CoworkTask | null {
     const task = this.workflow.patch(id, patch satisfies WorkflowPatch);
     return task ? toCoworkTask(task) : null;
+  }
+
+  createRun(taskId: string, acpSessionId: string | null): TaskRun | null {
+    return this.workflow.createRun(taskId, acpSessionId);
+  }
+
+  attachRun(id: string): TaskRun | null {
+    return this.workflow.attachRun(id);
+  }
+
+  advanceRunOffset(id: string, offset: number): TaskRun | null {
+    return this.workflow.advanceRunOffset(id, offset);
+  }
+
+  finishRun(id: string, status: 'finished' | 'stopped' | 'lost'): TaskRun | null {
+    return this.workflow.finishRun(id, status);
+  }
+
+  stopRun(id: string): TaskRun | null {
+    return this.workflow.stopRun(id);
+  }
+
+  getRun(id: string): TaskRun | null {
+    return this.workflow.getRun(id);
+  }
+
+  activeRun(taskId: string): TaskRun | null {
+    return this.workflow.activeRun(taskId);
+  }
+
+  /**
+   * Preserve a piped run's durable identity when ACP assigns its session id
+   * after the pipe has already been created.
+   */
+  bindRunSession(id: string, acpSessionId: string): TaskRun | null {
+    return this.workflow.bindRunSession(id, acpSessionId);
   }
 
   requestApproval(input: ApprovalInput): PendingApproval {

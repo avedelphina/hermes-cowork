@@ -173,11 +173,12 @@ cowork-pipe stop <run-id>
 
 ## The hub
 
-- **Core:** `packages/core` takes the main-process orchestrator and stores plus
-  the renderer's task state machine. The desktop app embeds it (local-first
-  stays the default, no hub needed); the hub container runs the same code.
-  It now also persists ACP approval records with first-answer-wins semantics;
-  live bridge response wiring remains the next adapter step.
+- **Local desktop adapter:** Task sessions now create a durable `TaskRun`, launch
+  `cowork-pipe attach` around the existing local ACP argv, persist complete-line
+  byte offsets, and use `cowork-pipe stop` for explicit termination. The pipe
+  script is copied into packaged app resources. This proves the local execution
+  boundary; transparent UI reattachment and remote SSH wrapping remain later
+  slices.
 - **API:** the existing `IpcChannel` contract, over two endpoints and plain
   `node:http`:
   ```

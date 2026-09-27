@@ -50,6 +50,36 @@ function makeSupervisor(remote?: { sshTarget: string }) {
 describe('AcpSupervisor', () => {
   beforeEach(() => vi.mocked(cp.spawn).mockReset());
 
+  it('spawns a local task through cowork-pipe and reports consumed offsets', async () => {
+    const proc = new MockProc();
+    vi.mocked(cp.spawn).mockReturnValue(proc as unknown as cp.ChildProcess);
+    const offsets: number[] = [];
+    const sup = new AcpSupervisor();
+    sup.spawn({
+      id: 'pipe-handle', profile: 'default', cwd: '/tmp',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+      pipe: { scriptPath: '/app/cowork-pipe.py', runId: 'task:1', offset: 4, onOffset: (n) => offsets.push(n) },
+    });
+    expect(vi.mocked(cp.spawn)).toHaveBeenLastCalledWith(
+      'python3',
+      ['/app/cowork-pipe.py', 'attach', 'task:1', '4', '--', '/usr/local/bin/hermes', 'acp'],
+      expect.objectContaining({ cwd: '/tmp', stdio: ['pipe', 'pipe', 'pipe'] }),
+    );
+    proc.stdout!.push(Buffer.from('{"id":1}\n'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(offsets).toEqual([13]);
+  });
+
+  it('refuses remote tasks through cowork-pipe', () => {
+    const sup = new AcpSupervisor();
+    expect(() => sup.spawn({
+      id: 'remote-pipe', profile: 'default', cwd: '/tmp',
+      binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+      remote: { sshTarget: 'box', hermesHome: null, binaryPath: null, port: null, identityFile: null, proxyJump: null, runAs: null, container: null, command: null },
+      pipe: { scriptPath: '/app/cowork-pipe.py', runId: 'task:1', offset: 0 },
+    })).toThrow('local task sessions only');
+  });
+
   it('emits message events when child writes JSON-RPC frames', async () => {
     const { proc, events } = makeSupervisor();
 
