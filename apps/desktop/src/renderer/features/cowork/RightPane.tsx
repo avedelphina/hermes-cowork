@@ -118,7 +118,7 @@ export function RightPane() {
               <ol className="space-y-2">
                 {activity.map((a, i) => (
                   <li key={`${a.at}-${i}`} className="border-l-2 border-border pl-2">
-                    <div className="text-fg">{a.label}</div>
+                    <div className="text-fg">{a.label}{a.count && a.count > 1 ? <span className="ml-1 text-dim">· {a.count} updates</span> : null}</div>
                     {a.detail && <div className="text-dim">{a.detail}</div>}
                     <div className="mt-0.5 text-[10px] text-dim">{new Date(a.at).toLocaleTimeString()}</div>
                   </li>

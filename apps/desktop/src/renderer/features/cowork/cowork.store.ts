@@ -5,6 +5,14 @@ import { todoWrites, applyTodoWrite, toPlanEntries, type TodoItem } from '@share
 
 type Approval = { toolCallId: string; description: string };
 
+type ActivityEntry = {
+  at: string;
+  label: string;
+  detail?: string;
+  count?: number;
+  firstAt?: string;
+};
+
 export type EvidenceState = 'verified' | 'observed' | 'claimed' | 'failed' | 'stale';
 export type EvidenceItem = {
   id: string;
@@ -67,7 +75,7 @@ const CLEARED = {
   editCalls: [] as string[],
   changeRev: 0,
   currentActivity: null as string | null,
-  activity: [] as Array<{ at: string; label: string; detail?: string }>,
+  activity: [] as ActivityEntry[],
   seenEventIds: [] as number[],
   evidence: [] as EvidenceItem[],
   advisor: { sessionId: null, modelId: null, status: 'idle' as const, transcript: [] as Array<{ role: 'agent' | 'user' | 'system'; text: string }> },
@@ -154,7 +162,7 @@ type CoworkStore = {
   /** Human-readable activity derived only from observed ACP events. */
   currentActivity: string | null;
   /** Recent observed operations, newest first. */
-  activity: Array<{ at: string; label: string; detail?: string }>;
+  activity: Array<{ at: string; label: string; detail?: string; count?: number; firstAt?: string }>;
   /** Main-process journal ids already applied, preventing replay duplication. */
   seenEventIds: number[];
   /** Bounded proof records derived from ACP events, not assistant prose. */
@@ -277,7 +285,17 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         await window.hermes.acp.setModel({ sessionId: result.sessionId, modelId: model.modelId });
         set({ advisor: { ...useCoworkStore.getState().advisor, modelId: model.modelId } });
       }
-      const prompt = `You are a read-only advisor reviewing a separate Hermes Cowork task. Do not edit files, run commands, or change the task. Review this task and its current transcript, then provide concise advice for the user.\n\nTask: ${s.goal}\n\nCurrent transcript:\n${s.transcript.map((m) => `${m.role}: ${m.text}`).join('\\n')}`;
+      const transcript = s.transcript.map((m) => `${m.role}: ${m.text}`).join('\n').slice(-12_000);
+      const prompt = [
+        'You are a read-only advisor reviewing a separate Hermes Cowork task.',
+        'Do not edit files, run commands, or change the task.',
+        'Review the task and current transcript, then provide concise advice for the user.',
+        '',
+        `Task: ${s.goal.trim() || '(no task goal recorded)'}`,
+        '',
+        'Current transcript:',
+        transcript || '(no transcript yet)',
+      ].join('\n');
       const off = window.hermes.acp.onEvent((msg) => {
         if (msg.sessionId !== result.sessionId) return;
         if (msg.kind === 'token') {
@@ -332,7 +350,13 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         ? [...s.seenEventIds, msg.eventId].slice(-500)
         : s.seenEventIds;
       const record = (label: string, detail?: string): Partial<CoworkStore> => {
-        const entry = { at: new Date().toISOString(), label, ...(detail ? { detail } : {}) };
+        const entry: ActivityEntry = { at: new Date().toISOString(), label, ...(detail ? { detail } : {}) };
+        const repetitive = label === 'Responding' || label === 'Waiting for you';
+        const last = s.activity[0];
+        if (repetitive && last?.label === label && !last.detail) {
+          const collapsed = { ...last, count: (last.count ?? 1) + 1, firstAt: last.firstAt ?? last.at, at: entry.at };
+          return { currentActivity: label, activity: [collapsed, ...s.activity.slice(1)], seenEventIds };
+        }
         return { currentActivity: label, activity: [entry, ...s.activity].slice(0, 20), seenEventIds };
       };
       const evidence = (state: EvidenceState, label: string, detail?: string, paths?: string[]): Partial<CoworkStore> => ({

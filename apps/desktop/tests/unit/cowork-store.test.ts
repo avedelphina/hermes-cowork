@@ -28,6 +28,25 @@ describe('cowork store', () => {
     ingestAcp({ kind: 'token', sessionId: 's', text: '7 steps.' });
     expect(useCoworkStore.getState().transcript[0]?.text).toBe('Plan: 7 steps.');
   });
+  it('collapses consecutive response and waiting activity while preserving boundaries', () => {
+    const ingest = useCoworkStore.getState().ingestAcp;
+    ingest({ kind: 'token', sessionId: 's', text: 'a' });
+    ingest({ kind: 'token', sessionId: 's', text: 'b' });
+    ingest({ kind: 'done', sessionId: 's' });
+    ingest({ kind: 'done', sessionId: 's' });
+    const activity = useCoworkStore.getState().activity;
+    expect(activity[0]).toMatchObject({ label: 'Waiting for you', count: 2 });
+    expect(activity[1]).toMatchObject({ label: 'Responding', count: 2 });
+  });
+
+  it('does not collapse a repetitive status across an interesting event', () => {
+    const ingest = useCoworkStore.getState().ingestAcp;
+    ingest({ kind: 'token', sessionId: 's', text: 'a' });
+    ingest({ kind: 'tool-call', sessionId: 's', toolCallId: 'tool', name: 'Read', op: 'read', paths: [], args: {} });
+    ingest({ kind: 'token', sessionId: 's', text: 'b' });
+    const activity = useCoworkStore.getState().activity;
+    expect(activity.map((item) => item.label)).toEqual(['Responding', 'Read', 'Responding']);
+  });
 
   describe('edit tracking', () => {
     const checkpoint = vi.fn();
