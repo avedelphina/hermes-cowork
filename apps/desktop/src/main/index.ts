@@ -26,6 +26,9 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

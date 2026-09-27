@@ -70,7 +70,7 @@ export function RightPane() {
   const toggleMode = () => setApprovalMode(approvalMode === 'ask' ? 'auto' : 'ask');
 
   return (
-    <aside style={{ width }} className="relative flex shrink-0 flex-col border-l border-border bg-surface">
+    <aside style={{ width }} className="relative flex shrink-0 flex-col border-l border-border bg-surface shadow-[-8px_0_24px_rgba(0,0,0,0.04)]">
       <div
         onPointerDown={startResize}
         role="separator"
@@ -78,15 +78,15 @@ export function RightPane() {
         aria-label="Resize side panel"
         className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent/30"
       />
-      <div className="flex border-b border-border text-[11px]">
+      <div className="flex border-b border-border bg-surface2/40 px-1 text-[11px]">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={
-              'px-3 py-2.5 ' +
+              'rounded-md px-3 py-2.5 ' +
               (tab === t.id
-                ? 'border-b-2 border-accent bg-bg text-accent'
+                ? 'bg-surface text-accent shadow-sm'
                 : 'text-muted hover:text-fg')
             }
           >

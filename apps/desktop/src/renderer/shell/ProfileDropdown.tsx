@@ -34,7 +34,7 @@ export function ProfileDropdown() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md bg-surface2 px-3 py-1 text-xs"
+        className="flex items-center gap-2 rounded-lg bg-surface2 px-3 py-1.5 text-xs"
         title={activePath}
         aria-label="Profile menu"
         aria-expanded={open}

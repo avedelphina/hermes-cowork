@@ -9,14 +9,14 @@ export function TitleBar() {
   const project = activeProject();
   return (
     <div
-      className="flex items-center gap-3 border-b border-border bg-bg px-3"
-      style={{ height: 38, WebkitAppRegion: 'drag' } as React.CSSProperties}
+      className="flex items-center gap-3 border-b border-border bg-surface px-3"
+      style={{ height: 52, WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} className="ml-16 flex items-center gap-2">
         <ProfileDropdown />
         <Link
           href="/cowork/projects"
-          className="rounded-md bg-surface2 px-3 py-1 text-xs text-muted hover:text-fg"
+          className="flex items-center gap-2 rounded-lg bg-surface2 px-3 py-1.5 text-xs text-muted hover:text-fg"
           title={project?.folderPath ?? undefined}
         >
           📁 {project?.name ?? 'No project'}

@@ -20,7 +20,7 @@ export function StatusBar() {
   }, [tick]);
 
   return (
-    <div className="relative flex items-center gap-3 border-t border-border bg-bg px-3 py-1.5 text-[11px] text-muted">
+    <div className="relative flex items-center gap-3 border-t border-border bg-surface px-4 py-2 text-[11px] text-muted">
       <DashboardDot stale={stale} />
       <button
         className="ml-auto hover:text-fg"

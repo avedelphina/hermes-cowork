@@ -21,9 +21,11 @@ const HERMES_ITEMS: Item[] = [
 export function Sidebar() {
   const [location] = useLocation();
   return (
-    <aside aria-label="Navigation" className="flex w-[200px] flex-col gap-4 border-r border-border bg-surface px-3 py-3 text-sm">
+    <aside aria-label="Navigation" className="flex w-[220px] flex-col border-r border-border bg-surface px-2 py-3 text-sm">
       <Section title="Cowork" items={COWORK_ITEMS} active={location} />
+      <div className="my-3 border-t border-border" />
       <Section title="Hermes" items={HERMES_ITEMS} active={location} />
+      <div className="mt-auto px-2 pt-4 text-[10px] text-dim">⌘1 Chat · ⌘2 Cowork</div>
     </aside>
   );
 }
@@ -31,7 +33,7 @@ export function Sidebar() {
 function Section({ title, items, active }: { title: string; items: Item[]; active: string }) {
   return (
     <div>
-      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-dim">{title}</div>
+      <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-dim">{title}</div>
       {items.map((it) => {
         const isActive = active === it.href;
         return (
@@ -39,11 +41,11 @@ function Section({ title, items, active }: { title: string; items: Item[]; activ
             key={it.href}
             href={it.href}
             className={
-              'flex items-center gap-2 rounded px-2 py-1.5 ' +
-              (isActive ? 'bg-surface2 text-fg' : 'text-muted hover:text-fg')
+              'flex items-center gap-2 rounded-lg px-2 py-1.5 ' +
+              (isActive ? 'bg-accent/10 font-medium text-accent' : 'text-muted hover:bg-surface2 hover:text-fg')
             }
           >
-            <span aria-hidden className="w-4 text-center">{it.icon}</span>
+            <span aria-hidden className="w-5 text-center text-[15px] leading-none opacity-80">{it.icon}</span>
             <span>{it.label}</span>
           </Link>
         );

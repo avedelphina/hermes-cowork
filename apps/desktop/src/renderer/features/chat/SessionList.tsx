@@ -24,9 +24,9 @@ export function SessionList({
     id ? (projects.find((p) => p.id === id)?.name ?? null) : null;
 
   return (
-    <div className="flex h-full w-[260px] flex-col border-r border-border bg-surface">
-      <div className="flex items-center justify-between px-3 py-3">
-        <span className="text-[11px] uppercase tracking-wide text-dim">Chats</span>
+    <div className="flex h-full w-[260px] flex-col border-r border-border bg-surface shadow-[8px_0_24px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between border-b border-border px-3 py-3">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-dim">Chats</span>
         <button
           onClick={onNew}
           className="rounded bg-surface2 px-2 py-0.5 text-[11px] text-fg hover:bg-border"
@@ -44,8 +44,8 @@ export function SessionList({
             key={c.id}
             onClick={() => onPick(c.id)}
             className={
-              'block w-full border-b border-border/50 px-3 py-2 text-left text-xs hover:bg-surface2 ' +
-              (c.id === activeId ? 'bg-surface2' : '')
+              'block w-full border-b border-border/50 px-3 py-2.5 text-left text-xs hover:bg-surface2 ' +
+              (c.id === activeId ? 'border-l-2 border-accent bg-accent/10 pl-[10px]' : '')
             }
           >
             <div className="truncate text-fg">{c.title ?? 'Untitled chat'}</div>

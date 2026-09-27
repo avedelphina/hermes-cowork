@@ -7,20 +7,21 @@ minor versions may carry breaking changes.
 ## Unreleased
 
 ### Added
-- **Observed Cowork activity.** The right sidebar now shows the current
-  operation and recent ACP activity, including plans, approvals, tools, file
-  operations, and completion state. It reports observed events only; transcript
-  claims about untracked background workers remain explicitly unverified.
-- **Clearer runtime status.** The status bar now reports the Cowork dashboard
-  connection instead of presenting Hermes' topology-sensitive messaging-gateway
-  projection as the Cowork task state.
 - **Roadmap: macOS privacy/TCC attribution.** Documented the staged path from
   clearer Cowork/Python attribution to a project-scoped filesystem boundary.
 
-### Fixed
-- **Background-result wording.** Cowork no longer says that no background
-  process exists as a fact when it only lacks an observable run record; it now
-  distinguishes an unverified transcript claim from observed execution.
+## [0.2.12] — 2026-09-27
+
+### Added
+- **Native macOS visual language.** The window now uses system semantic colors,
+  SF Pro system typography, explicit light/dark appearance tokens, and native
+  translucent materials.
+
+### Changed
+- **Native shell and sidebars.** Added an active macOS window material and
+  redesigned the title bar, mode switcher, source-list navigation, chat list,
+  and Cowork inspector with native selection, hierarchy, and separator
+  patterns while preserving existing interactions.
 
 ## [0.2.11] — 2026-09-27
 
