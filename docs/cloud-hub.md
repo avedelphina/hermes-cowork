@@ -258,9 +258,7 @@ Agent hosts run upstream Hermes, in its Docker image or natively.
 ## Phases
 
 0. **Spike `cowork-pipe`.** Done, see below.
-1. **Core.** Extract `packages/core`, move the plan gate and task state out of
-   the renderer, add re-attach to the bridge, run local tasks through the pipe.
-   This pays off even without a hub: tasks survive quitting the app.
+1. **Core.** **In progress.** `packages/core` now owns the first durable local task workflow boundary: named task creation, single-use ACP binding, constrained lifecycle updates, ordered per-task events, legacy-record normalisation and the existing interrupted-on-desktop-restart policy. The desktop JSON store is an adapter. The remaining work in this phase is to move plan/re-plan gates and ACP permission records into the same core before connecting `cowork-pipe`.
 2. **Hub.** Container with `POST /rpc` and `GET /events`, pairing, the web UI,
    the GHCR image and the compose profiles. `cowork-pipe --ssh` and the install
    script.

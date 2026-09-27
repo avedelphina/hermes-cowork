@@ -23,6 +23,7 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "@hermes-cowork/core": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

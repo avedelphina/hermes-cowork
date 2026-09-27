@@ -29,6 +29,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@hermes-cowork/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
@@ -108,6 +111,18 @@ importers:
       vite:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@20.19.40)(lightningcss@1.32.0)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.40)(happy-dom@15.11.7)(lightningcss@1.32.0)
+
+  packages/core:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.16.0
+        version: 20.19.40
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.40)(happy-dom@15.11.7)(lightningcss@1.32.0)
