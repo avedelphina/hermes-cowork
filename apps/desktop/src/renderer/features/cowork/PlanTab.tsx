@@ -8,8 +8,9 @@ const STATUS_MARK: Record<string, string> = {
 };
 
 export function PlanTab() {
-  const { transcript, planEntries, planHistory, approved, status, sessionId } = useCoworkStore();
+  const { transcript, planEntries, planHistory, approved, status, sessionId, designApproved, implementationApproved } = useCoworkStore();
   const approvePlan = useCoworkStore((s) => s.approvePlan);
+  const approveImplementation = useCoworkStore((s) => s.approveImplementation);
   const markStopped = useCoworkStore((s) => s.markStopped);
 
   // Fallback when the model wrote its plan as chat text instead of calling
@@ -17,20 +18,18 @@ export function PlanTab() {
   const textPlan = [...transcript].reverse().find((m) => m.role === 'agent')?.text ?? '';
   const hasProposal = planEntries.length > 0 || textPlan.trim().length > 0;
   const isDraft = !sessionId;
-
   const done = planEntries.filter((e) => e.status === 'completed').length;
+  const isImplementationDone = planEntries.length > 0 && done === planEntries.length;
 
-  const approve = () => {
+  const startImplementation = () => {
     approvePlan();
-    if (sessionId) {
-      void window.hermes.acp.send({
-        kind: 'prompt',
-        sessionId,
-        text: 'Approved. Proceed with the plan.',
-      });
-    }
+    if (sessionId) void window.hermes.acp.send({ kind: 'prompt', sessionId, text: 'Design approved. Begin implementing the approved plan.' });
   };
 
+  const approveImplementationAndVerify = () => {
+    approveImplementation();
+    if (sessionId) void window.hermes.acp.send({ kind: 'prompt', sessionId, text: 'Implementation approved. Run the verification steps and report concrete evidence.' });
+  };
   const decline = () => {
     if (sessionId) void window.hermes.acp.stop(sessionId);
     markStopped();
@@ -122,14 +121,14 @@ export function PlanTab() {
       {!hasProposal && (
         <p className="mt-2 text-[10px] text-dim">Describe the work in the composer below to start planning.</p>
       )}
-      {!isDraft && !approved ? (
+      {!isDraft && !designApproved && !approved ? (
         <div className="mt-2 flex flex-col gap-1.5">
           <div className="flex gap-2">
             <button
-              onClick={approve}
+              onClick={startImplementation}
               className="rounded bg-accent px-3 py-1.5 font-semibold text-bg"
             >
-              Approve &amp; run
+              Design approved — implement
             </button>
             <button
               onClick={regenerate}
@@ -145,8 +144,13 @@ export function PlanTab() {
             </button>
           </div>
           <p className="text-[10px] text-dim">
-            This plan isn&apos;t final — keep chatting below to reshape it. Nothing runs until you hit Approve.
+            This design isn&apos;t final — keep chatting below to reshape it. Nothing runs until you approve the design.
           </p>
+        </div>
+      ) : designApproved && !implementationApproved && isImplementationDone ? (
+        <div className="mt-2 rounded border border-border bg-surface2 p-2 text-[10px]">
+          <p className="mb-2 text-muted">Implementation complete. Review the changes and approve verification when ready.</p>
+          <button onClick={approveImplementationAndVerify} className="rounded bg-accent px-3 py-1.5 font-semibold text-bg">Approve implementation &amp; verify</button>
         </div>
       ) : isDraft ? (
         <p className="mt-2 text-[10px] text-dim">Describe the work in the composer below to start planning.</p>

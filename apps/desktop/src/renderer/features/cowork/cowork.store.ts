@@ -60,7 +60,7 @@ const CLEARED = {
   seenEventIds: [] as number[],
 };
 
-type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
+type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'designApproved' | 'implementationApproved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
 
 /**
  * Take a new step list. Hermes re-plans in place after a steering message and
@@ -83,9 +83,15 @@ function withPlan(s: PlanState, entries: Array<{ content: string; status: string
       transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
     };
   }
+  if (!s.replaying && s.designApproved && s.planEntries.length > 0 && entries.every((e) => e.status === 'completed') && !s.implementationApproved) {
+    return { planEntries: entries, status: 'idle' };
+  }
+  if (!s.replaying && s.implementationApproved && s.planEntries.length > 0 && entries.every((e) => e.status === 'completed')) {
+    persistTask(s.taskId, { status: 'done' });
+    return { planEntries: entries, status: 'idle' };
+  }
   return { planEntries: entries };
 }
-
 /** Fire-and-forget persistence of a task's lifecycle state. */
 function persistTask(id: string | null, patch: { status?: TaskStatus; approved?: boolean }): void {
   if (id) void window.hermes?.tasks?.update(id, patch);
@@ -150,8 +156,14 @@ type CoworkStore = {
   openInFiles: (rel: string) => void;
   clearFilesTarget: () => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
+  /** True after the design stage has been approved; implementation must not run before this. */
+  designApproved: boolean;
+  /** True after implementation is complete and the user approves verification. */
+  implementationApproved: boolean;
   /** User approved the proposed plan — execution may proceed. */
   approvePlan: () => void;
+  /** Approve the completed implementation and allow verification/finalisation. */
+  approveImplementation: () => void;
   /** Echo a steering/follow-up message into the transcript and mark the turn running. */
   pushUserText: (text: string) => void;
   /** User cancelled the ACP session — record it and go idle. */
@@ -176,6 +188,8 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   approved: false,
   pendingKickoff: null,
   filesTarget: null,
+  designApproved: false,
+  implementationApproved: false,
   ...CLEARED,
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, remote, kickoff }) =>
@@ -211,7 +225,12 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     set((s) => {
       persistTask(s.taskId, { approved: true, status: 'executing' });
       syncAgentMode({ ...s, approved: true });
-      return { approved: true, status: 'running' };
+      return { approved: true, designApproved: true, status: 'running' };
+    }),
+  approveImplementation: () =>
+    set((s) => {
+      persistTask(s.taskId, { status: 'executing' });
+      return { implementationApproved: true, status: 'running' };
     }),
 
   pushUserText: (text) =>
@@ -230,6 +249,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
 
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', remote: null, status: 'idle', approved: false,
+    designApproved: false, implementationApproved: false,
     pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: false,
   }),
 

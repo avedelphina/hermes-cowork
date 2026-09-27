@@ -77,7 +77,19 @@ Next slices are staged plan approval, evidence provenance, and read-only advisor
 consultation. These remain separate from the shipped activity-monitoring work
 so each can be verified and reverted independently.
 
-## Dedicated Code mode
+## Two-stage plan approval
+
+Cowork separates approval into two user-visible gates:
+
+1. Design approval: review the proposed plan before implementation begins.
+2. Implementation approval: after all plan steps are complete, review the
+   resulting changes and explicitly approve verification/finalisation.
+
+The first gate switches the agent from planning to implementation. Completion
+pauses at the second gate; only explicit approval permits the verification
+prompt, after which a completed verification plan can mark the task done.
+Gate state is currently held in the live Cowork store and will be persisted in a
+follow-up hardening slice.
 
 Removed 2026-09-03. It was `ChatSurface` + a read-only `FileBrowser` of the
 active project's folder, and overlapped almost entirely with "Chat + a
