@@ -55,6 +55,8 @@ type PermissionOption = {
 };
 
 type PendingPermission = {
+  approvalId: string;
+  taskId: string | null;
   sessionId: string;
   toolCallId: string;
   handle: string;
@@ -62,6 +64,18 @@ type PendingPermission = {
   options: PermissionOption[];
   description: string;
   timer: ReturnType<typeof setTimeout>;
+};
+
+type ApprovalStore = {
+  requestApproval(input: {
+    id: string;
+    taskId: string;
+    sessionId: string;
+    toolCallId: string;
+    description: string;
+  }): { state: 'pending' | 'resolved' | 'expired'; allow?: boolean };
+  resolveApproval(id: string, allow: boolean, resolvedBy?: string): { state: 'pending' | 'resolved' | 'expired'; allow?: boolean } | null;
+  expireApproval(id: string): { state: 'pending' | 'resolved' | 'expired'; allow?: boolean } | null;
 };
 
 type Conn = { handle: string; ready: Promise<void> };
@@ -92,9 +106,12 @@ function normalizeModels(raw: unknown): AcpModels | null {
 
 export class AcpBridge extends EventEmitter {
   private acpToHandle = new Map<string, string>();
+  /** Task ownership binds a live ACP permission to its durable core record. */
+  private taskBySession = new Map<string, string>();
   /** Model state as reported by session/new (and session/load when present). */
   private modelsBySession = new Map<string, AcpModels>();
   private pendingPermissions = new Map<string, PendingPermission>();
+  private approvalStore: ApprovalStore | null = null;
   /** One warm ACP connection per profile + home + remote identity (host, remote home, remote binary). */
   private conns = new Map<string, Conn>();
   /** Handles spawned for a single isolated session — safe to hard-kill. */
@@ -107,8 +124,9 @@ export class AcpBridge extends EventEmitter {
   private readonly journal = new Map<string, AcpServerMessage[]>();
   private tokens = new TokenCoalescer((m) => this.emitJournal(m));
 
-  constructor(private readonly sup: AcpSupervisor) {
+  constructor(private readonly sup: AcpSupervisor, approvalStore?: ApprovalStore) {
     super();
+    this.approvalStore = approvalStore ?? null;
     this.sup.on('event', this.onSupervisorEvent);
   }
 
@@ -295,6 +313,21 @@ export class AcpBridge extends EventEmitter {
     }
   }
 
+  setApprovalStore(store: ApprovalStore): void {
+    this.approvalStore = store;
+  }
+
+  /** Bind a Cowork task to its live ACP session; only task-bound sessions
+   * create durable permission records. */
+  bindTaskSession(taskId: string, sessionId: string): void {
+    this.taskBySession.set(sessionId, taskId);
+  }
+
+  /** Drop task ownership after a task stops; live ACP cleanup still happens. */
+  unbindTaskSession(sessionId: string): void {
+    this.taskBySession.delete(sessionId);
+  }
+
   /**
    * Reply to the pending session/request_permission for this session's tool
    * call. Quietly no-ops if there's no pending request (e.g. the user clicks
@@ -304,6 +337,14 @@ export class AcpBridge extends EventEmitter {
     const key = permKey(sessionId, toolCallId);
     const pending = this.pendingPermissions.get(key);
     if (!pending) return;
+    const durable = this.approvalStore?.resolveApproval(pending.approvalId, allow);
+    // A restart or a competing client may have already resolved/expired it.
+    // First durable answer wins; never send a conflicting answer to ACP.
+    if (durable && (durable.state !== 'resolved' || durable.allow !== allow)) {
+      this.pendingPermissions.delete(key);
+      clearTimeout(pending.timer);
+      return;
+    }
     this.pendingPermissions.delete(key);
     clearTimeout(pending.timer);
     // Only ever answer for a session this app opened, on the child serving it.
@@ -322,6 +363,7 @@ export class AcpBridge extends EventEmitter {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) return;
     this.acpToHandle.delete(sessionId);
+    this.taskBySession.delete(sessionId);
     this.modelsBySession.delete(sessionId);
     // Answer this session's open approvals so a pooled child is not left
     // waiting on them forever. Other sessions on the same child are untouched.
@@ -329,6 +371,7 @@ export class AcpBridge extends EventEmitter {
       if (p.sessionId !== sessionId) continue;
       this.pendingPermissions.delete(key);
       clearTimeout(p.timer);
+      this.approvalStore?.resolveApproval(p.approvalId, false, 'session-stopped');
       try {
         this.sup.send(p.handle, { jsonrpc: '2.0', id: p.requestId, result: { outcome: { outcome: 'cancelled' } } });
       } catch {
@@ -343,9 +386,13 @@ export class AcpBridge extends EventEmitter {
 
   /** Kill every connection — pooled and isolated (profile switch / app quit). */
   stopAll(): void {
+    for (const pending of this.pendingPermissions.values()) {
+      clearTimeout(pending.timer);
+      this.approvalStore?.resolveApproval(pending.approvalId, false, 'bridge-stopped');
+    }
     this.acpToHandle.clear();
+    this.taskBySession.clear();
     this.modelsBySession.clear();
-    for (const pending of this.pendingPermissions.values()) clearTimeout(pending.timer);
     this.pendingPermissions.clear();
     this.loading.clear();
     this.conns.clear();
@@ -372,6 +419,8 @@ export class AcpBridge extends EventEmitter {
   private expirePermission(key: string): void {
     const pending = this.pendingPermissions.get(key);
     if (!pending) return;
+    const durable = this.approvalStore?.expireApproval(pending.approvalId);
+    if (durable && durable.state !== 'expired') return;
     this.pendingPermissions.delete(key);
     if (!this.owns(pending.handle, pending.sessionId)) return;
     try {
@@ -427,8 +476,23 @@ export class AcpBridge extends EventEmitter {
           const existing = this.pendingPermissions.get(key);
           if (existing) clearTimeout(existing.timer);
           const description = typeof toolCall?.['title'] === 'string' ? toolCall['title'] : 'Permission requested';
+          const taskId = this.taskBySession.get(sid) ?? null;
+          const approvalId = taskId ? `${taskId}:${sid}:${toolCallId}` : key;
+          const durable = taskId && this.approvalStore
+            ? this.approvalStore.requestApproval({ id: approvalId, taskId, sessionId: sid, toolCallId, description })
+            : null;
+          // A duplicated request after a reconnect observes the durable first
+          // answer instead of reopening the permission decision.
+          if (durable && durable.state !== 'pending') {
+            this.sup.send(event.sessionId, {
+              jsonrpc: '2.0', id, result: permissionOutcome(options, durable.state === 'resolved' && durable.allow === true),
+            });
+            return;
+          }
           const timer = setTimeout(() => this.expirePermission(key), APPROVAL_TIMEOUT_MS);
           this.pendingPermissions.set(key, {
+            approvalId,
+            taskId,
             sessionId: sid,
             toolCallId,
             handle: event.sessionId,
