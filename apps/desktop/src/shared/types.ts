@@ -108,6 +108,10 @@ export type CoworkTask = {
   projectId: string | null;
   /** Set when this task is a worker under a coordinator task. */
   parentTaskId: string | null;
+  /** Approval gates are persisted so a remount cannot imply approval that was lost. */
+  designApproved: boolean;
+  implementationApproved: boolean;
+  verificationApproved: boolean;
   /** Denormalized from the project at creation: where the agent actually
    * runs. Null = local. Kept on the task so resume survives project edits. */
   remote?: RemoteOrigin | null;

@@ -4,6 +4,7 @@ import { ModelPicker } from '../../shell/ModelPicker';
 
 type SendKey = 'mod-enter' | 'enter';
 const SEND_KEY = 'hermes-send-key';
+const modifierLabel = '⌥';
 
 function loadSendKey(): SendKey {
   try {
@@ -61,7 +62,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   };
 
   const canSend = !!(sessionId || ensureSession);
-  const hint = sendKey === 'enter' ? '↵ to send' : '⌘↵ to send';
+  const hint = sendKey === 'enter' ? '↵ to send' : `${modifierLabel}↵ to send`;
 
   return (
     <div className="border-t border-border px-6 py-3">
@@ -70,10 +71,10 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
           type="button"
           onClick={() => setSendKey((k) => (k === 'enter' ? 'mod-enter' : 'enter'))}
           className="rounded-md bg-surface2 px-2 py-1 text-xs text-muted hover:text-fg"
-          title="Key that sends a message (⌘↵ always works)"
+          title={`Key that sends a message (${modifierLabel}↵ always works)`}
           aria-label="Toggle send key"
         >
-          Send: {sendKey === 'enter' ? '↵' : '⌘↵'}
+          Send: {sendKey === 'enter' ? '↵' : `${modifierLabel}↵`}
         </button>
         {sessionId && <ModelPicker key={sessionId} sessionId={sessionId} />}
       </div>
@@ -84,10 +85,10 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key !== 'Enter') return;
-          const mod = e.metaKey || e.ctrlKey;
+          const mod = e.metaKey || e.ctrlKey || e.altKey;
           if (mod || (sendKey === 'enter' && !e.shiftKey)) { e.preventDefault(); void send(); }
         }}
-        placeholder={placeholder ?? `Message Hermes... ${hint}`}
+        placeholder={placeholder ? `${placeholder} ${hint}` : `Message Hermes... ${hint}`}
         rows={3}
         className="w-full resize-none rounded-lg border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none disabled:opacity-50"
         disabled={busy || disabled || !canSend}

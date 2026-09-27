@@ -8,9 +8,9 @@ const STATUS_MARK: Record<string, string> = {
 };
 
 export function PlanTab() {
-  const { transcript, planEntries, planHistory, approved, status, sessionId, designApproved, implementationApproved } = useCoworkStore();
+  const { transcript, planEntries, planHistory, approved, status, sessionId, designApproved, verificationApproved } = useCoworkStore();
   const approvePlan = useCoworkStore((s) => s.approvePlan);
-  const approveImplementation = useCoworkStore((s) => s.approveImplementation);
+  const approveVerification = useCoworkStore((s) => s.approveVerification);
   const markStopped = useCoworkStore((s) => s.markStopped);
 
   // Fallback when the model wrote its plan as chat text instead of calling
@@ -27,8 +27,8 @@ export function PlanTab() {
   };
 
   const approveImplementationAndVerify = () => {
-    approveImplementation();
-    if (sessionId) void window.hermes.acp.send({ kind: 'prompt', sessionId, text: 'Implementation approved. Run the verification steps and report concrete evidence.' });
+    approveVerification();
+    if (sessionId) void window.hermes.acp.send({ kind: 'prompt', sessionId, text: 'Verification approved. Run the verification steps and report concrete evidence.' });
   };
   const decline = () => {
     if (sessionId) void window.hermes.acp.stop(sessionId);
@@ -147,7 +147,7 @@ export function PlanTab() {
             This design isn&apos;t final — keep chatting below to reshape it. Nothing runs until you approve the design.
           </p>
         </div>
-      ) : designApproved && !implementationApproved && isImplementationDone ? (
+      ) : designApproved && !verificationApproved && isImplementationDone ? (
         <div className="mt-2 rounded border border-border bg-surface2 p-2 text-[10px]">
           <p className="mb-2 text-muted">Implementation complete. Review the changes and approve verification when ready.</p>
           <button onClick={approveImplementationAndVerify} className="rounded bg-accent px-3 py-1.5 font-semibold text-bg">Approve implementation &amp; verify</button>

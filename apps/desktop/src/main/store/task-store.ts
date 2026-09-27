@@ -39,6 +39,9 @@ export class TaskStore {
         title: t.title ?? t.goal,
         acpSessionId: t.acpSessionId ?? null,
         parentTaskId: t.parentTaskId ?? null,
+        designApproved: t.designApproved === true,
+        implementationApproved: t.implementationApproved === true,
+        verificationApproved: t.verificationApproved === true,
         remote: t.remote ?? null,
       };
       return LIVE.includes(migrated.status)
@@ -71,6 +74,9 @@ export class TaskStore {
       acpSessionId: null,
       projectId: input.projectId,
       parentTaskId: input.parentTaskId ?? null,
+      designApproved: false,
+      implementationApproved: false,
+      verificationApproved: false,
       remote: input.remote ?? null,
       id: randomUUID(),
       status: 'draft',
@@ -91,10 +97,10 @@ export class TaskStore {
     return task;
   }
 
-  update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved'>>): CoworkTask | null {
+  update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved' | 'designApproved' | 'implementationApproved' | 'verificationApproved'>>): CoworkTask | null {
     const task = this.get(id);
     if (!task) return null;
-    Object.assign(task, pick(patch, ['status', 'approved'] as const), { updatedAt: new Date().toISOString() });
+    Object.assign(task, pick(patch, ['status', 'approved', 'designApproved', 'implementationApproved', 'verificationApproved'] as const), { updatedAt: new Date().toISOString() });
     this.write();
     return task;
   }

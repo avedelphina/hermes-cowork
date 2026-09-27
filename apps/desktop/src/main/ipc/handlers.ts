@@ -513,12 +513,15 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'task patch');
-    const patch: { status?: TaskStatus; approved?: boolean } = {};
+    const patch: { status?: TaskStatus; approved?: boolean; designApproved?: boolean; implementationApproved?: boolean; verificationApproved?: boolean } = {};
     if (o['status'] !== undefined) {
       if (!TASK_STATUSES.includes(o['status'] as TaskStatus)) throw new Error('invalid status');
       patch.status = o['status'] as TaskStatus;
     }
     if (o['approved'] !== undefined) patch.approved = o['approved'] === true;
+    for (const key of ['designApproved', 'implementationApproved', 'verificationApproved'] as const) {
+      if (o[key] !== undefined) patch[key] = o[key] === true;
+    }
     return tasks.update(str(id, 'id'), patch);
   });
   handle(IpcChannel.TaskRemove, (_e, id: unknown) => tasks.remove(str(id, 'id')));

@@ -91,6 +91,12 @@ used rather than inventing a model identifier. The initial implementation
 stops the isolated session after its response and keeps the advisor transcript
 in the current UI session only.
 
+## Composer send-key behavior
+
+- `⌥↵` always submits, regardless of the selected mode.
+- The toggle controls whether plain `↵` also submits; in that mode `Shift+↵`
+  inserts a newline.
+
 ## Evidence sidebar
 
 The Evidence tab is distinct from Activity: Activity is a recent live-event
