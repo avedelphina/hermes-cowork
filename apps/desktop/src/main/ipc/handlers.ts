@@ -12,6 +12,7 @@ import { profileHome, isValidProfileName } from '../orchestrator/hermes-home';
 import { isValidRemoteCwd, normalizeRemote, buildRemoteCommand } from '../orchestrator/spawn-spec';
 import { listRemoteProfiles } from '../orchestrator/remote-profiles';
 import { isExistingDir, resolveWithinRoot } from '../security/paths';
+import { createTaskWorktree } from '../git/task-worktree';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { TaskStore } from '../store/task-store';
@@ -493,6 +494,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (input.remote) assertRemoteCwd(input.cwd);
     else if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
     return tasks.create(input);
+  });
+  handle(IpcChannel.TaskGitPrepare, (_e, id: unknown) => {
+    const task = tasks.get(str(id, 'task id'));
+    if (!task || task.status !== 'draft' || task.acpSessionId || task.git) throw new Error('task is not eligible for an isolated Git worktree');
+    if (task.remote) throw new Error('remote tasks do not yet support Cowork-managed Git worktrees');
+    if (!isExistingDir(task.cwd)) throw new Error(`Cannot prepare worktree: "${task.cwd}" is not an existing directory.`);
+    const git = createTaskWorktree(task.cwd, task.id, task.title);
+    const prepared = tasks.bindGitWorkspace(task.id, git);
+    if (!prepared) throw new Error('could not persist the prepared Git worktree');
+    return prepared;
   });
   handle(IpcChannel.TaskStart, async (_e, id: unknown) => {
     const task = tasks.get(str(id, 'task id'));

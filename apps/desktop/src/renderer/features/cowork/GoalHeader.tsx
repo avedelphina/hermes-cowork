@@ -2,7 +2,7 @@ import { useCoworkStore, syncAgentMode, agentState } from './cowork.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
 export function GoalHeader() {
-  const { taskId, goal, cwd, profile, remote, planEntries, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
+  const { taskId, goal, cwd, profile, remote, git, planEntries, sessionId, status, approvals, markStopped, beginReconnect } = useCoworkStore();
   const state = agentState(status, approvals.length);
   const total = planEntries.length;
   const done = planEntries.filter((e) => e.status === 'completed').length;
@@ -52,6 +52,12 @@ export function GoalHeader() {
         <span>📁 {cwd}</span>
         <span>·</span>
         <span>👤 {profile}</span>
+        {git && (
+          <>
+            <span>·</span>
+            <span className="text-accent" title={git.worktreePath}>⑂ {git.branch}</span>
+          </>
+        )}
         {remote && (
           <>
             <span>·</span>

@@ -110,6 +110,7 @@ const api = {
     create: (input: {
       title: string; cwd: string; profile: string; projectId: string | null; parentTaskId?: string | null;
     }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
+    prepareGitWorkspace: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskGitPrepare, id),
     start: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskStart, id),
     update: (id: string, patch: { status?: TaskStatus; approved?: boolean; designApproved?: boolean; implementationApproved?: boolean; verificationApproved?: boolean }): Promise<CoworkTask | null> =>
       ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),

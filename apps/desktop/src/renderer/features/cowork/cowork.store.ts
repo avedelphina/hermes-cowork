@@ -95,13 +95,22 @@ function withPlan(s: PlanState, entries: Array<{ content: string; status: string
   // A history replay (restore / reconnect) re-plays old re-plans; those were
   // already approved, so they must not re-arm the gate.
   if (!s.replaying && s.approved && s.planEntries.length > 0 && next !== prev) {
-    persistTask(s.taskId, { approved: false, status: 'awaiting_approval' });
+    persistTask(s.taskId, {
+      approved: false,
+      designApproved: false,
+      implementationApproved: false,
+      verificationApproved: false,
+      status: 'awaiting_approval',
+    });
     syncAgentMode({ ...s, approved: false });
     if (s.goal) notify('New plan ready for approval', s.goal);
     return {
       planEntries: entries,
       planHistory: [...s.planHistory, s.planEntries],
       approved: false,
+      designApproved: false,
+      implementationApproved: false,
+      verificationApproved: false,
       transcript: [...s.transcript, { role: 'system', text: '📋 New plan proposed — review and approve.' }],
     };
   }
@@ -131,6 +140,7 @@ type CoworkStore = {
   profile: string;
   /** Where the agent runs. Set → SSH to another host (see docs/remote-connection.md). */
   remote: RemoteOrigin | null;
+  git: CoworkTask['git'];
   approvalMode: 'ask' | 'auto';
   /** 'running' while the agent owns the turn; 'idle' once it finishes/errors/stops. */
   status: 'idle' | 'running';
@@ -212,6 +222,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   cwd: '',
   profile: 'default',
   remote: null,
+  git: null,
   approvalMode: 'ask',
   status: 'idle',
   approved: false,
@@ -223,14 +234,14 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   ...CLEARED,
 
   startTask: ({ taskId, sessionId, goal, cwd, profile, remote, kickoff }) =>
-    set({ taskId, sessionId, goal, cwd, profile, remote: remote ?? null, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
+    set({ taskId, sessionId, goal, cwd, profile, remote: remote ?? null, git: null, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
 
   bindSession: (sessionId) => set({ sessionId, status: 'running', approved: false }),
 
   restoreTask: (t) =>
     set({
       taskId: t.id, sessionId: t.acpSessionId, goal: t.title || t.goal, cwd: t.cwd, profile: t.profile,
-      remote: t.remote ?? null,
+      remote: t.remote ?? null, git: t.git ?? null,
       approved: t.approved, designApproved: t.designApproved, implementationApproved: t.implementationApproved,
       verificationApproved: t.verificationApproved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: true,
@@ -335,7 +346,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   beginReconnect: () => set({ transcript: [], approvals: [], planEntries: [], planHistory: [], todoItems: [], nativePlan: false, replaying: true, status: 'running' }),
 
   reset: () => set({
-    taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', remote: null, status: 'idle', approved: false,
+    taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', remote: null, git: null, status: 'idle', approved: false,
     designApproved: false, implementationApproved: false, verificationApproved: false,
     pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: false,
   }),

@@ -51,6 +51,7 @@ export const IpcChannel = {
   // cowork tasks
   TaskList: 'task:list',
   TaskCreate: 'task:create',
+  TaskGitPrepare: 'task:git-prepare',
   TaskStart: 'task:start',
   TaskUpdate: 'task:update',
   TaskRemove: 'task:remove',

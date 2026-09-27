@@ -20,6 +20,7 @@ function Dialog() {
   const [cwd, setCwd] = useState(() => proj?.folderPath ?? '');
   const [profile, setProfile] = useState(() => proj?.profile ?? 'default');
   const [profiles, setProfiles] = useState<string[]>([]);
+  const [isolateGit, setIsolateGit] = useState(() => !remote);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, navigate] = useLocation();
@@ -47,10 +48,11 @@ function Dialog() {
     setBusy(true);
     setError(null);
     try {
-      const task = await window.hermes.tasks.create({
+      const created = await window.hermes.tasks.create({
         title, cwd, profile,
         projectId: activeProject()?.id ?? null,
       });
+      const task = isolateGit ? await window.hermes.tasks.prepareGitWorkspace(created.id) : created;
       useCoworkStore.getState().restoreTask(task);
       navigate('/cowork');
     } catch (e) {
@@ -89,10 +91,15 @@ function Dialog() {
         )}
       </div>
 
-      {remote && (
+      {remote ? (
         <p className="mb-4 -mt-2 text-[11px] text-accent">
-          ⇄ Remote task — the agent runs on {remote.sshTarget} over SSH. Set on the project.
+          ⇄ Remote task — the agent runs on {remote.sshTarget} over SSH. Remote Git worktrees are not managed yet.
         </p>
+      ) : (
+        <label className="mb-4 flex items-start gap-2 text-xs text-muted">
+          <input type="checkbox" checked={isolateGit} onChange={(e) => setIsolateGit(e.target.checked)} />
+          <span><strong className="font-medium text-fg">Create an isolated Git worktree</strong><br />Default for code work. Cowork creates a new <code>cowork/…</code> branch beside this repository and never removes it automatically.</span>
+        </label>
       )}
 
       <label className="mb-1 block text-xs text-muted">Profile</label>
