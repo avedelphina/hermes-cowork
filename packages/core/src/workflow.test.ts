@@ -113,6 +113,17 @@ describe('TaskWorkflow', () => {
     expect(workflow.listRuns()).toEqual([]);
   });
 
+  it('preserves attached runs during restart reconciliation', () => {
+    const first = setup();
+    const task = first.workflow.create(input);
+    const run = first.workflow.createRun(task.id, null)!;
+    first.workflow.bindRunSession(run.id, 'session-1');
+    first.workflow.attachRun(run.id);
+    first.workflow.start(task.id, 'session-1');
+    first.workflow.interruptLiveTasks();
+    expect(first.workflow.get(task.id)?.status).toBe('planning');
+    expect(first.workflow.getRun(run.id)?.status).toBe('attached');
+  });
   it('preserves the current desktop restart policy until pipe ownership exists', () => {
     const { workflow } = setup();
     const task = workflow.create(input);

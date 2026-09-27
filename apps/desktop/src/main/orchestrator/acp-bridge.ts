@@ -41,9 +41,16 @@ type StartSessionOpts = {
   hermesHome: string;
   /** Reach the agent over SSH instead of spawning locally. */
   remote?: RemoteOrigin | null;
-  /** Give this session its own ACP child (not the shared pool) so stopSession
-   * can hard-kill the running turn — Hermes 0.20.6 has no session/cancel. */
+  /** Give this session its own ACP child (not the shared pool). */
   isolate?: boolean;
+  /** Attach this isolated task session through cowork-pipe. */
+  pipe?: {
+    scriptPath: string;
+    runId: string;
+    offset: number;
+    onOffset?: (offset: number) => void;
+    onExit?: (code: number | null, expected: boolean) => void;
+  };
 };
 
 type PermissionOptionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
@@ -209,6 +216,7 @@ export class AcpBridge extends EventEmitter {
       binaryPath: opts.binaryPath,
       hermesHome: opts.hermesHome,
       remote: opts.remote ?? null,
+      ...(opts.pipe === undefined ? {} : { pipe: opts.pipe }),
     });
     try {
       await this.sup.request(handle, 'initialize', INITIALIZE_PARAMS, CONTROL_TIMEOUT_MS);

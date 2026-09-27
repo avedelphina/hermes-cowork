@@ -181,7 +181,7 @@ export class TaskWorkflow {
   interruptLiveTasks(): void {
     let changed = false;
     for (const task of this.snapshot.tasks) {
-      if (LIVE.includes(task.status)) {
+      if (LIVE.includes(task.status) && !task.activeRunId) {
         task.status = 'interrupted';
         task.updatedAt = this.clock.now();
         this.emit(task, 'task-updated');
@@ -265,6 +265,15 @@ export class TaskWorkflow {
     return run ? clone(run) : null;
   }
 
+  bindRunSession(id: string, acpSessionId: string): TaskRun | null {
+    const run = this.mutableRun(id);
+    if (!run || run.status !== 'created' || run.acpSessionId) return run ? clone(run) : null;
+    run.acpSessionId = acpSessionId;
+    run.updatedAt = this.clock.now();
+    this.persist();
+    return clone(run);
+  }
+
   listRuns(taskId?: string): TaskRun[] {
     return this.snapshot.runs
       .filter((run) => !taskId || run.taskId === taskId)
@@ -279,7 +288,7 @@ export class TaskWorkflow {
 
   attachRun(id: string): TaskRun | null {
     const run = this.mutableRun(id);
-    if (!run || run.status !== 'created') return run ? clone(run) : null;
+    if (!run || (run.status !== 'created' && run.status !== 'attached')) return run ? clone(run) : null;
     run.status = 'attached';
     run.updatedAt = this.clock.now();
     this.persist();
@@ -314,6 +323,10 @@ export class TaskWorkflow {
     }
     this.persist();
     return clone(run);
+  }
+
+  stopRun(id: string): TaskRun | null {
+    return this.finishRun(id, 'stopped');
   }
 
   private mutableRun(id: string): TaskRun | null {

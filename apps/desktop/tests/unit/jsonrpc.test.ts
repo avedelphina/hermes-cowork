@@ -35,6 +35,15 @@ describe('FrameDecoder', () => {
     expect(dec.push(Buffer.from('\nnot json\n{"id":3}\n'))).toEqual([{ id: 3 }]);
   });
 
+  it('reports monotonic byte offsets for complete lines, including skipped lines', () => {
+    const dec = new FrameDecoder();
+    const first = dec.pushWithOffsets(Buffer.from('\nnot json\n{"id":3}\n', 'utf8'));
+    expect(first.messages).toEqual([{ id: 3 }]);
+    expect(first.offsets).toEqual([1, 10, 19]);
+    expect(dec.pushWithOffsets(Buffer.from('{"id":4}', 'utf8'))).toEqual({ messages: [], offsets: [] });
+    expect(dec.pushWithOffsets(Buffer.from('\n', 'utf8'))).toEqual({ messages: [{ id: 4 }], offsets: [28] });
+  });
+
   it('buffers a partial trailing line until newline arrives', () => {
     const dec = new FrameDecoder();
     expect(dec.push(Buffer.from('{"id":4}'))).toEqual([]);

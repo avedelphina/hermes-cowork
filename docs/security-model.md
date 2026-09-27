@@ -132,11 +132,9 @@ Rules:
   than a generic status/boolean patch. The renderer still renders the plan and
   synchronises the live ACP mode, while `packages/core` persists the durable
   gate transition. _Core enforced; bridge enforcement pending._
-- **Run recovery metadata is durable but not yet an executor.** The core stores
-  each pipe attempt, its terminal state, and the monotonically advancing number
-  of complete output bytes consumed. This makes `attach <run> <offset>`
-  recoverable by a later hub adapter; it does not yet launch or attach the
-  desktop ACP bridge through `cowork-pipe`. _Core enforced; executor pending._
+- **Local task pipe adapter.** Cowork task sessions now use the durable local
+  pipe path, including exact replay offsets and explicit pipe stop semantics;
+  remote execution remains deferred. Packaged builds include the pipe script.
 - The app maps an "allow" to ACP `allow_once` — never `allow_always` on the
   user's behalf; if the agent offers no `allow_once`, the request is denied.
   A deny selects `reject_once` (turn continues), falling back to `cancelled`

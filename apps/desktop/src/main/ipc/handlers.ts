@@ -2,6 +2,7 @@
 import { app, ipcMain, BrowserWindow, dialog, Notification, type IpcMainInvokeEvent } from 'electron';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
@@ -512,13 +513,14 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   handle(IpcChannel.TaskStart, async (_e, id: unknown) => {
     const task = tasks.get(str(id, 'task id'));
     if (!task || task.status !== 'draft' || task.acpSessionId) throw new Error('task is not a startable draft');
-    if (task.remote) {
-      assertRemoteCwd(task.cwd);
-      if (task.profile !== 'default' && !isValidProfileName(task.profile)) throw new Error('invalid task profile');
-    } else {
-      if (!isExistingDir(task.cwd)) throw new Error(`Cannot start task: "${task.cwd}" is not an existing directory.`);
-      await assertKnownProfile(task.profile);
-    }
+    if (task.remote) throw new Error('remote Cowork tasks do not yet support durable cowork-pipe runs');
+    if (!isExistingDir(task.cwd)) throw new Error(`Cannot start task: "${task.cwd}" is not an existing directory.`);
+    await assertKnownProfile(task.profile);
+    const run = tasks.createRun(task.id, null);
+    if (!run) throw new Error('task already has an active run');
+    const scriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'cowork-pipe.py')
+      : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
     const { sessionId } = await bridge.startSession({
       profile: task.profile,
       cwd: task.cwd,
@@ -526,17 +528,53 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
       remote: task.remote ?? null,
+      ...(task.remote ? {} : {
+        pipe: {
+          scriptPath,
+          runId: run.id,
+          offset: run.offset,
+          onOffset: (offset: number) => { tasks.advanceRunOffset(run.id, offset); },
+          onExit: (code: number | null, expected: boolean) => {
+            tasks.finishRun(run.id, expected || code === 0 ? 'finished' : 'lost');
+          },
+        },
+      }),
     });
     try {
       await bridge.setMode(sessionId, 'default');
       const started = tasks.start(task.id, sessionId);
       if (!started) throw new Error('task was already started');
+      tasks.bindRunSession(run.id, sessionId);
+      tasks.attachRun(run.id);
       bridge.bindTaskSession(task.id, sessionId);
       return started;
     } catch (error) {
+      tasks.finishRun(run.id, 'lost');
       bridge.stopSession(sessionId);
       throw error;
     }
+  });
+
+  handle(IpcChannel.TaskStop, (_e, id: unknown) => {
+    const task = tasks.get(str(id, 'task id'));
+    if (!task) throw new Error('unknown task');
+    const run = tasks.activeRun(task.id);
+    if (!run) return;
+    // The first adapter slice only supports local piped runs. The pipe's stop
+    // command is what terminates the detached agent; closing this client would
+    // merely detach and leave work running.
+    if (task.remote) throw new Error('remote piped task stop is not yet supported');
+    const scriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'cowork-pipe.py')
+      : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
+    const stop = spawn('python3', [scriptPath, 'stop', run.id], { stdio: 'ignore' });
+    return new Promise<void>((resolve, reject) => {
+      stop.once('error', reject);
+      stop.once('exit', (code) => {
+        if (code !== 0) reject(new Error(`cowork-pipe stop failed (code=${code ?? 'null'})`));
+        else { tasks.stopRun(run.id); resolve(); }
+      });
+    });
   });
 
   handle(IpcChannel.TaskApproveDesign, (_e, id: unknown) => tasks.approveDesign(str(id, 'task id')));

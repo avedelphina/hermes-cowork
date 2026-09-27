@@ -11,6 +11,12 @@ directories:
 files:
   - out/**/*
 
+extraResources:
+  - from: ../pipe/cowork-pipe.py
+    to: cowork-pipe.py
+    filter:
+      - '**/*'
+
 # GitHub Releases. electron-builder generates latest-mac.yml + .blockmap here
 # — the feed electron-updater reads (see src/main/update/updater.ts).
 publish:

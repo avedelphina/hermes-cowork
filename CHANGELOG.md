@@ -6,6 +6,12 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+### Added
+- **Durable local Cowork runs.** Task sessions now start through the bundled
+  `cowork-pipe` adapter, persist run identity and exact processed-byte offsets,
+  and stop through the pipe's explicit stop command. Remote task piping remains
+  deliberately deferred.
+
 ### Fixed
 - **Packaged startup with the durable core.** Bundle `@hermes-cowork/core`
   into Electron's main-process output instead of leaving its ESM-only workspace
