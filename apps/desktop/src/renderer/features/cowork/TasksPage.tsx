@@ -26,20 +26,22 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 export function TasksPage() {
   const [tasks, setTasks] = useState<CoworkTask[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
-  const [projectFilter, setProjectFilter] = useState<'all' | string>('all');
+  const [projectFilter, setProjectFilter] = useState<'active' | 'all' | string>('active');
   const [, navigate] = useLocation();
   const restoreTask = useCoworkStore((s) => s.restoreTask);
   const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeId);
   const liveTaskId = useCoworkStore((s) => s.taskId);
   const liveBlocked = useCoworkStore((s) => agentState(s.status, s.approvals.length) === 'blocked');
 
   const load = () => window.hermes.tasks.list().then(setTasks).catch(() => setTasks([]));
   useEffect(() => { void load(); }, []);
 
+  const selectedProjectId = projectFilter === 'active' ? activeProjectId : projectFilter;
   const shown = tasks.filter(
     (t) =>
       (statusFilter === 'all' || t.status === statusFilter) &&
-      (projectFilter === 'all' || (t.projectId ?? '') === projectFilter),
+      (selectedProjectId === 'all' || (t.projectId ?? '') === (selectedProjectId ?? '')),
   );
   const statuses = [...new Set(tasks.map((t) => t.status))];
 
@@ -80,6 +82,7 @@ export function TasksPage() {
             onChange={(e) => setProjectFilter(e.target.value)}
             className="rounded border border-border bg-surface2 px-2 py-1"
           >
+            <option value="active">Active project</option>
             <option value="all">All projects</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>

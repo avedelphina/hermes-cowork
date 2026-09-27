@@ -47,6 +47,20 @@ second stage requires a security-model update and tests for protected-folder
 access, project-root escape attempts, denial, checkpoints, and local/remote
 parity.
 
+## Cowork UI workflow improvements
+
+Implemented in the current development cycle:
+
+- Task lists default to the active project; an explicit “All projects” option
+  remains available for cross-project review.
+- Chat mode hides the Cowork navigation sidebar so Chat can use its own session
+  navigation without competing chrome.
+
+Next slices are task creation (name first, prompt after opening), staged plan
+approval, evidence provenance, and read-only advisor consultation. These remain
+separate from the shipped activity-monitoring work so each can be verified and
+reverted independently.
+
 ## Dedicated Code mode
 
 Removed 2026-09-03. It was `ChatSurface` + a read-only `FileBrowser` of the

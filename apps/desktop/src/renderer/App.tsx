@@ -14,7 +14,7 @@ const MODE_KEYS: Record<string, string> = { '1': '/chat', '2': '/cowork' };
 
 export function App() {
   const [probe, setProbe] = useState<Probe | null>(null);
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const loadProjects = useProjectStore((s) => s.load);
   useEffect(() => {
     void window.hermes.runtime.probe().then(setProbe);
@@ -45,7 +45,7 @@ export function App() {
       <TitleBar />
       <ModeTabs />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        {!location.startsWith('/chat') && <Sidebar />}
         <main className="flex flex-1 flex-col overflow-hidden bg-bg">
           <Routes />
         </main>
