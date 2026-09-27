@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // The core workspace package must be bundled into the main process. If it
+    // is externalised, electron-builder leaves the workspace package in the
+    // ASAR and Node's CommonJS loader cannot resolve its ESM-only `exports`
+    // map (`ERR_PACKAGE_PATH_NOT_EXPORTED`).
+    plugins: [externalizeDepsPlugin({ exclude: ['@hermes-cowork/core'] })],
     build: {
       rollupOptions: { input: resolve(__dirname, 'src/main/index.ts') },
     },
