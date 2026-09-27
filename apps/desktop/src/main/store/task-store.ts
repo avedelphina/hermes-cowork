@@ -55,6 +55,7 @@ class JsonTaskRepository implements TaskWorkflowRepository {
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
       events: Array.isArray(parsed.events) ? parsed.events : [],
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
+      runs: Array.isArray(parsed.runs) ? parsed.runs : [],
     };
   }
 
@@ -97,6 +98,26 @@ export class TaskStore {
 
   start(id: string, acpSessionId: string): CoworkTask | null {
     const task = this.workflow.start(id, acpSessionId);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  approveDesign(id: string): CoworkTask | null {
+    const task = this.workflow.approveDesign(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  rearmForPlan(id: string): CoworkTask | null {
+    const task = this.workflow.rearmForPlan(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  approveVerification(id: string): CoworkTask | null {
+    const task = this.workflow.approveVerification(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  complete(id: string): CoworkTask | null {
+    const task = this.workflow.complete(id);
     return task ? toCoworkTask(task) : null;
   }
 

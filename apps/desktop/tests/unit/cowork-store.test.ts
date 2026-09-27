@@ -204,6 +204,24 @@ describe('cowork store', () => {
     expect(st.transcript.at(-1)).toEqual({ role: 'system', text: '📋 New plan proposed — review and approve.' });
   });
 
+  it('persists gate commands through the privileged main-process API', () => {
+    const tasks = {
+      approveDesign: vi.fn().mockResolvedValue(null),
+      rearmPlan: vi.fn().mockResolvedValue(null),
+      approveVerification: vi.fn().mockResolvedValue(null),
+      complete: vi.fn().mockResolvedValue(null),
+    };
+    (window as unknown as { hermes: unknown }).hermes = { tasks };
+    const s = useCoworkStore.getState();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'A', status: 'pending' }] });
+    s.approvePlan();
+    s.ingestAcp({ kind: 'plan', sessionId: 's', entries: [{ content: 'B', status: 'pending' }] });
+    s.approvePlan();
+    s.approveVerification();
+    expect(tasks.approveDesign).toHaveBeenCalledWith('t');
+    expect(tasks.rearmPlan).toHaveBeenCalledWith('t');
+    expect(tasks.approveVerification).toHaveBeenCalledWith('t');
+  });
   it('queues approvals', () => {
     useCoworkStore.getState().ingestAcp({
       kind: 'approval-request', sessionId: 's', toolCallId: 't1', description: 'drop production table?',

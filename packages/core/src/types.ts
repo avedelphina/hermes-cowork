@@ -25,6 +25,24 @@ export type PendingApproval = {
   allow?: boolean;
 };
 
+export type TaskRunStatus = 'created' | 'attached' | 'finished' | 'stopped' | 'lost';
+
+/**
+ * A durable cowork-pipe attempt. `offset` is the number of complete output
+ * bytes the control plane has processed, never a frame count.
+ */
+export type TaskRun = {
+  id: string;
+  taskId: string;
+  attempt: number;
+  acpSessionId: string | null;
+  status: TaskRunStatus;
+  offset: number;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+};
+
 /** Durable task metadata. `remote` deliberately remains transport-agnostic. */
 export type WorkflowTask = {
   id: string;
@@ -75,6 +93,7 @@ export type TaskWorkflowSnapshot = {
   events: TaskWorkflowEvent[];
   /** Durable ACP permission records. */
   approvals: PendingApproval[];
+  runs: TaskRun[];
 };
 
 export type WorkflowPatch = Partial<Pick<WorkflowTask,

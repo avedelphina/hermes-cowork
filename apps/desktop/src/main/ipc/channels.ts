@@ -53,6 +53,10 @@ export const IpcChannel = {
   TaskCreate: 'task:create',
   TaskGitPrepare: 'task:git-prepare',
   TaskStart: 'task:start',
+  TaskApproveDesign: 'task:approve-design',
+  TaskRearmPlan: 'task:rearm-plan',
+  TaskApproveVerification: 'task:approve-verification',
+  TaskComplete: 'task:complete',
   TaskUpdate: 'task:update',
   TaskRemove: 'task:remove',
 

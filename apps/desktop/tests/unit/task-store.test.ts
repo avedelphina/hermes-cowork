@@ -37,6 +37,17 @@ describe('TaskStore', () => {
     expect(u!.updatedAt >= before).toBe(true);
   });
 
+  it('uses explicit core gate commands instead of a generic lifecycle patch', () => {
+    const store = new TaskStore(file);
+    const task = store.create(input);
+    store.start(task.id, 's1');
+    expect(store.approveDesign(task.id)).toMatchObject({ designApproved: true, status: 'executing' });
+    expect(store.rearmForPlan(task.id)).toMatchObject({ approved: false, status: 'awaiting_approval' });
+    expect(store.approveDesign(task.id)).toMatchObject({ designApproved: true });
+    expect(store.approveVerification(task.id)).toMatchObject({ implementationApproved: true, verificationApproved: true });
+    expect(store.complete(task.id)).toMatchObject({ status: 'done' });
+    expect(store.rearmForPlan(task.id)).toBeNull();
+  });
   it('list is most-recent first', async () => {
     const store = new TaskStore(file);
     const a = store.create({ ...input, title: 'a' });

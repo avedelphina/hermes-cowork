@@ -112,6 +112,10 @@ const api = {
     }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
     prepareGitWorkspace: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskGitPrepare, id),
     start: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskStart, id),
+    approveDesign: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskApproveDesign, id),
+    rearmPlan: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskRearmPlan, id),
+    approveVerification: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskApproveVerification, id),
+    complete: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskComplete, id),
     update: (id: string, patch: { status?: TaskStatus; approved?: boolean; designApproved?: boolean; implementationApproved?: boolean; verificationApproved?: boolean }): Promise<CoworkTask | null> =>
       ipcRenderer.invoke(IpcChannel.TaskUpdate, id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.TaskRemove, id),

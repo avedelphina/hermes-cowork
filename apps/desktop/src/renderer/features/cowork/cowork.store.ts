@@ -95,13 +95,7 @@ function withPlan(s: PlanState, entries: Array<{ content: string; status: string
   // A history replay (restore / reconnect) re-plays old re-plans; those were
   // already approved, so they must not re-arm the gate.
   if (!s.replaying && s.approved && s.planEntries.length > 0 && next !== prev) {
-    persistTask(s.taskId, {
-      approved: false,
-      designApproved: false,
-      implementationApproved: false,
-      verificationApproved: false,
-      status: 'awaiting_approval',
-    });
+    if (s.taskId) void window.hermes?.tasks?.rearmPlan(s.taskId).catch(() => { /* task may have closed */ });
     syncAgentMode({ ...s, approved: false });
     if (s.goal) notify('New plan ready for approval', s.goal);
     return {
@@ -118,7 +112,7 @@ function withPlan(s: PlanState, entries: Array<{ content: string; status: string
     return { planEntries: entries, status: 'idle' };
   }
   if (!s.replaying && s.verificationApproved && s.planEntries.length > 0 && entries.every((e) => e.status === 'completed')) {
-    persistTask(s.taskId, { status: 'done' });
+    if (s.taskId) void window.hermes?.tasks?.complete(s.taskId).catch(() => { /* task may have closed */ });
     return { planEntries: entries, status: 'idle' };
   }
   return { planEntries: entries };
@@ -265,19 +259,19 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
     }),
   approvePlan: () =>
     set((s) => {
-      persistTask(s.taskId, { approved: true, designApproved: true, status: 'executing' });
+      if (s.taskId) void window.hermes?.tasks?.approveDesign(s.taskId).catch(() => { /* task may have closed */ });
       syncAgentMode({ ...s, approved: true });
       return { approved: true, designApproved: true, status: 'running' };
     }),
   approveImplementation: () =>
     set((s) => {
-      persistTask(s.taskId, { implementationApproved: true, status: 'executing' });
-      return { implementationApproved: true, status: 'running' };
+      if (s.taskId) void window.hermes?.tasks?.approveVerification(s.taskId).catch(() => { /* task may have closed */ });
+      return { implementationApproved: true, verificationApproved: true, status: 'running' };
     }),
 
   approveVerification: () =>
     set((s) => {
-      persistTask(s.taskId, { implementationApproved: true, verificationApproved: true, status: 'executing' });
+      if (s.taskId) void window.hermes?.tasks?.approveVerification(s.taskId).catch(() => { /* task may have closed */ });
       return { implementationApproved: true, verificationApproved: true, status: 'running' };
     }),
 

@@ -49,13 +49,13 @@ the ACP pipe itself durable: `cowork-pipe`, below.
 - **Main process:** stores, ACP bridge and supervisor. Only `index.ts`,
   `ipc/handlers.ts`, `orchestrator/kanban-ws.ts` and `update/updater.ts` import
   Electron; the rest is plain Node and can move as-is.
-- **Renderer:** the task state machine and the plan gate
-  (`agentModeFor`, `syncAgentMode`, `persistTask` in
-  [`cowork.store.ts`](../apps/desktop/src/renderer/features/cowork/cowork.store.ts)).
-  With one window this is fine. With
-  several clients it is a correctness and a security problem: two clients race
-  each other, and a client that does not reimplement `agentModeFor` skips the
-  plan gate. This logic moves to the server before a second client exists.
+- **Renderer:** plan display and ACP mode synchronisation remain in
+  [`cowork.store.ts`](../apps/desktop/src/renderer/features/cowork/cowork.store.ts).
+  Durable plan transitions now cross explicit privileged commands
+  (`approveDesign`, `rearmForPlan`, `approveVerification`, `complete`) into
+  `packages/core`; rendering and ACP transport still move later. This prevents
+  a second client from inventing its own persisted gate semantics while keeping
+  the existing desktop UX intact.
 
 ## Architecture
 
@@ -260,7 +260,7 @@ Agent hosts run upstream Hermes, in its Docker image or natively.
 ## Phases
 
 0. **Spike `cowork-pipe`.** Done, see below.
-1. **Core.** **In progress.** `packages/core` now owns the first durable local task workflow boundary: named task creation, single-use ACP binding, constrained lifecycle updates, ordered per-task events, legacy-record normalisation and the existing interrupted-on-desktop-restart policy. The desktop JSON store is an adapter. The remaining work in this phase is to move plan/re-plan gates and ACP permission records into the same core before connecting `cowork-pipe`.
+1. **Core.** **In progress.** `packages/core` now owns the first durable local task workflow boundary: named task creation, single-use ACP binding, constrained lifecycle updates, ordered per-task events, legacy-record normalisation, persisted approval records, and durable cowork-pipe attempt metadata. Each attempt has a stable `taskId:attempt` id and a monotonically advancing complete-byte offset; the desktop JSON store is still the adapter. The remaining work in this phase is to move plan/re-plan gates and live ACP permission responses into the same core before connecting `cowork-pipe`.
 2. **Hub.** Container with `POST /rpc` and `GET /events`, pairing, the web UI,
    the GHCR image and the compose profiles. `cowork-pipe --ssh` and the install
    script.

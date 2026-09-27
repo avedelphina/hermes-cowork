@@ -534,6 +534,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
   });
 
+  handle(IpcChannel.TaskApproveDesign, (_e, id: unknown) => tasks.approveDesign(str(id, 'task id')));
+  handle(IpcChannel.TaskRearmPlan, (_e, id: unknown) => tasks.rearmForPlan(str(id, 'task id')));
+  handle(IpcChannel.TaskApproveVerification, (_e, id: unknown) => tasks.approveVerification(str(id, 'task id')));
+  handle(IpcChannel.TaskComplete, (_e, id: unknown) => tasks.complete(str(id, 'task id')));
+
   handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'task patch');
     const patch: { status?: TaskStatus; approved?: boolean; designApproved?: boolean; implementationApproved?: boolean; verificationApproved?: boolean } = {};

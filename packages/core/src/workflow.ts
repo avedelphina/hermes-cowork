@@ -1,5 +1,5 @@
 import type { Clock, IdGenerator, TaskWorkflowRepository } from './repository';
-import type { CreateTaskInput, PendingApproval, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask } from './types';
+import type { CreateTaskInput, PendingApproval, TaskRun, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask } from './types';
 
 const LIVE: readonly TaskStatus[] = ['planning', 'awaiting_approval', 'executing'];
 
@@ -25,6 +25,7 @@ function normalise(snapshot: Partial<TaskWorkflowSnapshot>): TaskWorkflowSnapsho
     })),
     events: Array.isArray(snapshot.events) ? snapshot.events : [],
     approvals: Array.isArray(snapshot.approvals) ? snapshot.approvals : [],
+    runs: Array.isArray(snapshot.runs) ? snapshot.runs : [],
   };
 }
 
@@ -126,6 +127,56 @@ export class TaskWorkflow {
     return clone(task);
   }
 
+  approveDesign(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.approved = true;
+    task.designApproved = true;
+    task.implementationApproved = false;
+    task.verificationApproved = false;
+    task.status = 'executing';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  rearmForPlan(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.approved = false;
+    task.designApproved = false;
+    task.implementationApproved = false;
+    task.verificationApproved = false;
+    task.status = 'awaiting_approval';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  approveVerification(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || !task.designApproved || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.implementationApproved = true;
+    task.verificationApproved = true;
+    task.status = 'executing';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  complete(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || !task.verificationApproved || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.status = 'done';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
   /** Existing desktop restart policy until cowork-pipe owns live execution. */
   interruptLiveTasks(): void {
     let changed = false;
@@ -184,6 +235,89 @@ export class TaskWorkflow {
     return this.snapshot.approvals
       .filter((approval) => approval.state === 'pending' && (!taskId || approval.taskId === taskId))
       .map(clone);
+  }
+
+  createRun(taskId: string, acpSessionId: string | null): TaskRun | null {
+    const task = this.mutable(taskId);
+    if (!task || task.activeRunId) return null;
+    const attempt = this.snapshot.runs.filter((run) => run.taskId === taskId).length + 1;
+    const now = this.clock.now();
+    const run: TaskRun = {
+      id: `${taskId}:${attempt}`,
+      taskId,
+      attempt,
+      acpSessionId,
+      status: 'created',
+      offset: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.snapshot.runs.push(run);
+    task.activeRunId = run.id;
+    task.updatedAt = now;
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(run);
+  }
+
+  getRun(id: string): TaskRun | null {
+    const run = this.snapshot.runs.find((candidate) => candidate.id === id);
+    return run ? clone(run) : null;
+  }
+
+  listRuns(taskId?: string): TaskRun[] {
+    return this.snapshot.runs
+      .filter((run) => !taskId || run.taskId === taskId)
+      .sort((a, b) => a.attempt - b.attempt)
+      .map(clone);
+  }
+
+  activeRun(taskId: string): TaskRun | null {
+    const task = this.mutable(taskId);
+    return task?.activeRunId ? this.getRun(task.activeRunId) : null;
+  }
+
+  attachRun(id: string): TaskRun | null {
+    const run = this.mutableRun(id);
+    if (!run || run.status !== 'created') return run ? clone(run) : null;
+    run.status = 'attached';
+    run.updatedAt = this.clock.now();
+    this.persist();
+    return clone(run);
+  }
+
+  advanceRunOffset(id: string, offset: number): TaskRun | null {
+    if (!Number.isSafeInteger(offset) || offset < 0) return null;
+    const run = this.mutableRun(id);
+    if (!run || run.status === 'finished' || run.status === 'stopped' || run.status === 'lost' || offset < run.offset) return run ? clone(run) : null;
+    if (offset === run.offset) return clone(run);
+    run.offset = offset;
+    run.updatedAt = this.clock.now();
+    this.persist();
+    return clone(run);
+  }
+
+  finishRun(id: string, status: 'finished' | 'stopped' | 'lost'): TaskRun | null {
+    const run = this.mutableRun(id);
+    if (!run) return null;
+    if (run.status === status) return clone(run);
+    if (run.status === 'finished' || run.status === 'stopped' || run.status === 'lost') return clone(run);
+    const now = this.clock.now();
+    run.status = status;
+    run.updatedAt = now;
+    run.finishedAt = now;
+    const task = this.mutable(run.taskId);
+    if (task && task.activeRunId === run.id) {
+      task.activeRunId = null;
+      task.updatedAt = now;
+      this.emit(task, 'task-updated');
+    }
+    this.persist();
+    return clone(run);
+  }
+
+  private mutableRun(id: string): TaskRun | null {
+    return this.snapshot.runs.find((run) => run.id === id) ?? null;
   }
 
   private mutable(id: string): WorkflowTask | null {
