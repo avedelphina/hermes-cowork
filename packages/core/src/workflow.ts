@@ -127,6 +127,56 @@ export class TaskWorkflow {
     return clone(task);
   }
 
+  approveDesign(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.approved = true;
+    task.designApproved = true;
+    task.implementationApproved = false;
+    task.verificationApproved = false;
+    task.status = 'executing';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  rearmForPlan(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.approved = false;
+    task.designApproved = false;
+    task.implementationApproved = false;
+    task.verificationApproved = false;
+    task.status = 'awaiting_approval';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  approveVerification(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || !task.designApproved || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.implementationApproved = true;
+    task.verificationApproved = true;
+    task.status = 'executing';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
+  complete(id: string): WorkflowTask | null {
+    const task = this.mutable(id);
+    if (!task || !task.verificationApproved || task.status === 'done' || task.status === 'failed' || task.status === 'stopped') return null;
+    task.status = 'done';
+    task.updatedAt = this.clock.now();
+    this.emit(task, 'task-updated');
+    this.persist();
+    return clone(task);
+  }
+
   /** Existing desktop restart policy until cowork-pipe owns live execution. */
   interruptLiveTasks(): void {
     let changed = false;

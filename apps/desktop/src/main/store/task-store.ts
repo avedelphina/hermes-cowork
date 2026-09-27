@@ -101,6 +101,26 @@ export class TaskStore {
     return task ? toCoworkTask(task) : null;
   }
 
+  approveDesign(id: string): CoworkTask | null {
+    const task = this.workflow.approveDesign(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  rearmForPlan(id: string): CoworkTask | null {
+    const task = this.workflow.rearmForPlan(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  approveVerification(id: string): CoworkTask | null {
+    const task = this.workflow.approveVerification(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
+  complete(id: string): CoworkTask | null {
+    const task = this.workflow.complete(id);
+    return task ? toCoworkTask(task) : null;
+  }
+
   update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved' | 'designApproved' | 'implementationApproved' | 'verificationApproved'>>): CoworkTask | null {
     const task = this.workflow.patch(id, patch satisfies WorkflowPatch);
     return task ? toCoworkTask(task) : null;

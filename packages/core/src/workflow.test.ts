@@ -52,6 +52,19 @@ describe('TaskWorkflow', () => {
     expect(state().events.map((event) => event.kind)).toEqual(['task-created', 'task-started', 'task-updated']);
   });
 
+  it('owns the design, re-plan, verification, and completion gates', () => {
+    const { workflow } = setup();
+    const task = workflow.create(input);
+    workflow.start(task.id, 'session-1');
+    expect(workflow.approveDesign(task.id)).toMatchObject({ approved: true, designApproved: true, status: 'executing' });
+    expect(workflow.rearmForPlan(task.id)).toMatchObject({ approved: false, designApproved: false, implementationApproved: false, verificationApproved: false, status: 'awaiting_approval' });
+    expect(workflow.approveVerification(task.id)).toBeNull();
+    workflow.approveDesign(task.id);
+    expect(workflow.approveVerification(task.id)).toMatchObject({ implementationApproved: true, verificationApproved: true, status: 'executing' });
+    expect(workflow.complete(task.id)).toMatchObject({ status: 'done' });
+    expect(workflow.rearmForPlan(task.id)).toBeNull();
+  });
+
   it('persists approvals and applies first-answer-wins semantics', () => {
     const { workflow, state } = setup();
     const approval = workflow.requestApproval({ id: 'task-1:sess-1:call-1', taskId: 'task-1', sessionId: 'sess-1', toolCallId: 'call-1', description: 'run tests' });

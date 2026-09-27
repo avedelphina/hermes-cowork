@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
 
       - run: pnpm -r typecheck
       - run: pnpm -r lint
