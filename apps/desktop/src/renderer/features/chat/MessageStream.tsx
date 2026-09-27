@@ -12,7 +12,7 @@ export function MessageStream({ agentName = 'Hermes' }: { agentName?: string }) 
         </div>
       )}
       {messages.map((m, i) => (
-        <div key={i} className="mb-6">
+        <div key={i} className={`mb-6 ${i > 0 ? 'border-t border-border/70 pt-5' : ''}`}>
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
             {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : agentName}
           </div>

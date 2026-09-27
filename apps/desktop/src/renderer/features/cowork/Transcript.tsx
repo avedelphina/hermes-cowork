@@ -43,7 +43,7 @@ export function Transcript() {
           <div className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-3 text-muted">{m.text}</div>
         </details>
       ) : (
-        <div key={i} className="mb-4">
+        <div key={i} className={`mb-4 ${i > 0 ? 'border-t border-border/70 pt-4' : ''}`}>
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
             {m.role === 'user' ? 'You' : m.role === 'system' ? 'System' : 'Hermes'}
           </div>
