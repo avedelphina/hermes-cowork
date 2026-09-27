@@ -271,7 +271,19 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     const msg = obj(raw, 'acp:send message') as AcpClientMessage;
     const sessionId = str(msg.sessionId, 'sessionId');
     if (msg.kind === 'prompt') {
-      await bridge.sendPrompt(sessionId, str(msg.text, 'prompt'));
+      const text = str(msg.text, 'prompt');
+      const attachments = Array.isArray(msg.attachments) ? msg.attachments.map((attachment, index) => {
+        const a = obj(attachment, `prompt attachment ${index + 1}`);
+        const name = str(a.name, `prompt attachment ${index + 1} name`);
+        const mimeType = str(a.mimeType, `prompt attachment ${index + 1} mimeType`);
+        const data = str(a.data, `prompt attachment ${index + 1} data`);
+        if (name.length > 255 || data.length > 4_000_000 || (!mimeType.startsWith('image/') && !mimeType.startsWith('text/'))) {
+          throw new Error(`invalid prompt attachment: ${name}`);
+        }
+        return { name, mimeType, data };
+      }) : [];
+      if (attachments.length > 10) throw new Error('too many prompt attachments');
+      await bridge.sendPrompt(sessionId, text, attachments);
     } else if (msg.kind === 'approve') {
       bridge.respondToPermission(sessionId, str(msg.toolCallId, 'toolCallId'), msg.allow === true);
     } else {

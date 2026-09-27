@@ -18,7 +18,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { AcpSupervisor, AcpEvent } from './acp-supervisor';
-import type { AcpServerMessage, AcpModels, AcpModelInfo, RemoteOrigin } from '../../shared/types';
+import type { AcpServerMessage, AcpModels, AcpModelInfo, AcpPromptAttachment, RemoteOrigin } from '../../shared/types';
 import { translateAcpEvent } from './acp-translator';
 import { TokenCoalescer } from './token-coalescer';
 
@@ -271,14 +271,24 @@ export class AcpBridge extends EventEmitter {
    * error to the renderer. `'done'` is emitted in either case so the UI can
    * stop showing a loading indicator.
    */
-  async sendPrompt(sessionId: string, text: string): Promise<void> {
+  async sendPrompt(sessionId: string, text: string, attachments: AcpPromptAttachment[] = []): Promise<void> {
     const handle = this.acpToHandle.get(sessionId);
     if (!handle) throw new Error(`unknown ACP session ${sessionId}`);
+    const cleanText = text.trim();
+    if (!cleanText && attachments.length === 0) throw new Error('prompt must contain text or an attachment');
 
     try {
+      const prompt: Array<Record<string, string>> = cleanText ? [{ type: 'text', text: cleanText }] : [];
+      for (const attachment of attachments) {
+        if (attachment.mimeType.startsWith('image/')) {
+          prompt.push({ type: 'image', data: attachment.data, mimeType: attachment.mimeType });
+        } else {
+          prompt.push({ type: 'text', text: `Attached file: ${attachment.name}\n${attachment.data}` });
+        }
+      }
       await this.sup.request(handle, 'session/prompt', {
         sessionId,
-        prompt: [{ type: 'text', text }],
+        prompt,
       });
     } finally {
       this.out({ kind: 'done', sessionId });

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { AcpPromptAttachment } from '@shared/types';
 import { useChatStore } from './chat.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
@@ -30,8 +31,11 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   const chatSessionId = useChatStore((s) => s.sessionId);
   const sessionId = sessionIdProp !== undefined ? sessionIdProp : chatSessionId;
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<AcpPromptAttachment[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendKey, setSendKey] = useState<SendKey>(loadSendKey);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -41,9 +45,36 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
     }
   }, [sendKey]);
 
+  const addFiles = async (files: FileList | File[]) => {
+    const next: AcpPromptAttachment[] = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/') && !file.type.startsWith('text/')) {
+        setError(`${file.name}: only images and text files can be attached`);
+        continue;
+      }
+      if (file.size > 3_000_000) {
+        setError(`${file.name}: attachment is larger than 3 MB`);
+        continue;
+      }
+      const data = file.type.startsWith('image/')
+        ? await file.arrayBuffer().then((buffer) => {
+          let binary = '';
+          for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);
+          return btoa(binary);
+        })
+        : await file.text();
+      next.push({ name: file.name, mimeType: file.type || 'text/plain', data });
+    }
+    if (next.length) {
+      setAttachments((current) => [...current, ...next].slice(0, 10));
+      setError(null);
+    }
+  };
+
   const send = async () => {
-    if (!text.trim() || busy || disabled) return;
+    if ((!text.trim() && attachments.length === 0) || busy || disabled) return;
     setBusy(true);
+    setError(null);
     try {
       const prepared = sessionId ?? (ensureSession ? await ensureSession(text) : null);
       const sid = typeof prepared === 'string' ? prepared : prepared?.sessionId ?? null;
@@ -55,8 +86,11 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
           messages: [...s.messages, { role: 'user', text, toolCalls: [] }],
         }));
       }
-      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: wireText });
+      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: wireText, attachments });
       setText('');
+      setAttachments([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -79,11 +113,26 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
         </button>
         {sessionId && <ModelPicker key={sessionId} sessionId={sessionId} />}
       </div>
+      {attachments.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Attached files">
+          {attachments.map((file, index) => (
+            <span key={`${file.name}-${index}`} className="inline-flex items-center gap-1 rounded-md border border-border bg-surface2 px-2 py-1 text-xs text-muted">
+              <span className="max-w-48 truncate">{file.name}</span>
+              <button type="button" className="text-dim hover:text-danger" aria-label={`Remove ${file.name}`} onClick={() => setAttachments((current) => current.filter((_, i) => i !== index))}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      {error && <p role="alert" className="mb-2 text-xs text-danger">{error}</p>}
       <textarea
         id="composer-input"
         value={text}
         aria-label="Message input"
         onChange={(e) => setText(e.target.value)}
+        onPaste={(e) => {
+          const files = Array.from(e.clipboardData.files);
+          if (files.length) { e.preventDefault(); void addFiles(files); }
+        }}
         onKeyDown={(e) => {
           if (e.key !== 'Enter') return;
           const mod = isMac ? e.metaKey : e.ctrlKey;
@@ -94,6 +143,14 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
         className="w-full resize-none rounded-lg border border-border bg-surface2 px-3 py-2 text-sm focus:border-accent focus:outline-none disabled:opacity-50"
         disabled={busy || disabled || !canSend}
       />
+      <div className="mt-2 flex items-center justify-between text-xs text-dim">
+        <div className="flex items-center gap-2">
+          <button type="button" className="rounded-md bg-surface2 px-2 py-1 text-muted hover:text-fg" onClick={() => fileInputRef.current?.click()} disabled={busy || disabled}>Attach</button>
+          <input ref={fileInputRef} type="file" multiple accept="image/*,text/*" className="hidden" onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.currentTarget.value = ''; }} />
+          <span>Paste files or images here</span>
+        </div>
+        <span>{hint}</span>
+      </div>
     </div>
   );
 }

@@ -153,8 +153,14 @@ export function defaultPolicy(root: string): PermissionPolicy {
 export type AcpModelInfo = { modelId: string; name: string; description?: string };
 export type AcpModels = { currentModelId: string | null; availableModels: AcpModelInfo[] };
 
+export type AcpPromptAttachment = {
+  name: string;
+  mimeType: string;
+  data: string;
+};
+
 export type AcpClientMessage =
-  | { kind: 'prompt'; sessionId: string; text: string }
+  | { kind: 'prompt'; sessionId: string; text: string; attachments?: AcpPromptAttachment[] }
   | { kind: 'approve'; sessionId: string; toolCallId: string; allow: boolean };
 
 export type AcpServerMessage = (
