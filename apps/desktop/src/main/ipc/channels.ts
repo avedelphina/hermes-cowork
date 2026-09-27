@@ -53,6 +53,8 @@ export const IpcChannel = {
   TaskCreate: 'task:create',
   TaskGitPrepare: 'task:git-prepare',
   TaskStart: 'task:start',
+  /** Attach this desktop main process to an existing durable local task run. */
+  TaskAttach: 'task:attach',
   TaskStop: 'task:stop',
   TaskApproveDesign: 'task:approve-design',
   TaskRearmPlan: 'task:rearm-plan',

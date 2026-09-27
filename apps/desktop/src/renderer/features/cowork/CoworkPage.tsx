@@ -41,7 +41,10 @@ export function CoworkPage() {
       void window.hermes.acp.send({ kind: 'prompt', sessionId: s.sessionId, text: s.pendingKickoff });
     } else if (s.taskId && s.sessionId && s.transcript.length === 0) {
       const sessionId = s.sessionId;
-      void window.hermes.acp.load({ sessionId, profile: s.profile, cwd: s.cwd, isolate: true, taskId: s.taskId })
+      const restore = s.status === 'running'
+        ? window.hermes.tasks.attach(s.taskId)
+        : window.hermes.acp.load({ sessionId, profile: s.profile, cwd: s.cwd, isolate: true, taskId: s.taskId });
+      void restore
         .then(() => syncAgentMode(useCoworkStore.getState()))
         .catch((e) => ingestAcp({ kind: 'session-error', sessionId, message: String(e), fatal: true }))
         .finally(() => useCoworkStore.getState().endReplay());

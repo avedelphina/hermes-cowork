@@ -112,6 +112,7 @@ const api = {
     }): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskCreate, input),
     prepareGitWorkspace: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskGitPrepare, id),
     start: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskStart, id),
+    attach: (id: string): Promise<CoworkTask> => ipcRenderer.invoke(IpcChannel.TaskAttach, id),
     stop: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.TaskStop, id),
     approveDesign: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskApproveDesign, id),
     rearmPlan: (id: string): Promise<CoworkTask | null> => ipcRenderer.invoke(IpcChannel.TaskRearmPlan, id),
