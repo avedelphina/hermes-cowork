@@ -88,6 +88,7 @@ export type ChatSession = {
 };
 
 export type TaskStatus =
+  | 'draft'             // named task, waiting for its first prompt
   | 'planning'          // kickoff sent, agent drafting the plan
   | 'awaiting_approval' // plan proposed, waiting for the user
   | 'executing'         // plan approved, agent working
@@ -98,10 +99,12 @@ export type TaskStatus =
 
 export type CoworkTask = {
   id: string;
+  /** Human-readable task name, chosen before the first prompt. */
+  title: string;
   goal: string;
   cwd: string;
   profile: string;
-  acpSessionId: string;
+  acpSessionId: string | null;
   projectId: string | null;
   /** Set when this task is a worker under a coordinator task. */
   parentTaskId: string | null;

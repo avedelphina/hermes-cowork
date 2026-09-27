@@ -16,6 +16,7 @@ export function PlanTab() {
   // the todo tool: its latest reply (reasoning is kept out of it).
   const textPlan = [...transcript].reverse().find((m) => m.role === 'agent')?.text ?? '';
   const hasProposal = planEntries.length > 0 || textPlan.trim().length > 0;
+  const isDraft = !sessionId;
 
   const done = planEntries.filter((e) => e.status === 'completed').length;
 
@@ -42,7 +43,9 @@ export function PlanTab() {
   if (!hasProposal) {
     return (
       <div className="p-4 text-xs text-muted">
-        {status === 'running' ? 'Hermes is drafting a plan…' : 'The plan will appear here.'}
+        {isDraft
+          ? 'Describe the work in the composer below to start planning.'
+          : status === 'running' ? 'Hermes is drafting a plan…' : 'The plan will appear here.'}
       </div>
     );
   }
@@ -116,7 +119,10 @@ export function PlanTab() {
         </>
       )}
 
-      {!approved ? (
+      {!hasProposal && (
+        <p className="mt-2 text-[10px] text-dim">Describe the work in the composer below to start planning.</p>
+      )}
+      {!isDraft && !approved ? (
         <div className="mt-2 flex flex-col gap-1.5">
           <div className="flex gap-2">
             <button
@@ -142,6 +148,8 @@ export function PlanTab() {
             This plan isn&apos;t final — keep chatting below to reshape it. Nothing runs until you hit Approve.
           </p>
         </div>
+      ) : isDraft ? (
+        <p className="mt-2 text-[10px] text-dim">Describe the work in the composer below to start planning.</p>
       ) : (
         <p className="mt-2 text-[10px] text-success">
           {planEntries.length > 0 && done === planEntries.length ? '✓ All steps done.' : '✓ Plan approved — executing.'}

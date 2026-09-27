@@ -19,8 +19,20 @@ Precedence and merging are Hermes' own behaviour; when both files exist Hermes
 sees both. To give a project instructions, add an `AGENTS.md` (or `.hermes.md`)
 at its root. The Projects page shows which of these files each project has.
 
+The Cowork kickoff is sent with the user's first composer prompt. Draft task
+creation persists the task context first and starts ACP lazily through the main
+process; it does not create a Hermes transcript or background process before
+that first prompt.
+## Draft operations
+
+A draft has a title and validated execution context but no ACP session or
+transcript. It is not an interrupted run and cannot be resumed with
+`session/load`. The first composer prompt uses `task:start`; only after that
+binding exists do stop, reconnect, model selection, approvals, and transcript
+replay become available.
 ## What Cowork adds on top
 
-The Cowork kickoff prompt (sent once, after the folder is set) asks the agent
-to propose a numbered plan and stop for approval. That is task-flow scaffolding,
-not project identity — it does not override anything in `AGENTS.md`.
+The Cowork kickoff prompt (sent once, with the first user prompt after lazy ACP
+startup) asks the agent to propose a numbered plan and stop for approval. That
+is task-flow scaffolding, not project identity — it does not override anything
+in `AGENTS.md`.

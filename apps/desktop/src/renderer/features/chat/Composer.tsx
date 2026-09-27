@@ -17,7 +17,7 @@ type Props = {
   /** Active ACP session to send to. Omit to use the chat store's session. */
   sessionId?: string | null;
   /** Called when there is no session yet; must return one (or null to abort). */
-  ensureSession?: () => Promise<string | null>;
+  ensureSession?: (text: string) => Promise<string | { sessionId: string; text: string } | null>;
   /** Echo the sent text somewhere. Omit to append to the chat store's messages. */
   onEcho?: (text: string) => void;
   placeholder?: string;
@@ -43,7 +43,9 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
     if (!text.trim() || busy || disabled) return;
     setBusy(true);
     try {
-      const sid = sessionId ?? (ensureSession ? await ensureSession() : null);
+      const prepared = sessionId ?? (ensureSession ? await ensureSession(text) : null);
+      const sid = typeof prepared === 'string' ? prepared : prepared?.sessionId ?? null;
+      const wireText = typeof prepared === 'string' || !prepared ? text : prepared.text;
       if (!sid) return;
       if (onEcho) onEcho(text);
       else {
@@ -51,7 +53,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
           messages: [...s.messages, { role: 'user', text, toolCalls: [] }],
         }));
       }
-      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text });
+      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: wireText });
       setText('');
     } finally {
       setBusy(false);

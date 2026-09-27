@@ -5,6 +5,7 @@ import { useCoworkStore, agentState } from './cowork.store';
 import { useProjectStore } from '../projects/project.store';
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
+  draft: 'text-muted',
   planning: 'text-accent',
   awaiting_approval: 'text-warn',
   executing: 'text-accent',
@@ -14,6 +15,7 @@ const STATUS_STYLE: Record<TaskStatus, string> = {
   interrupted: 'text-warn',
 };
 const STATUS_LABEL: Record<TaskStatus, string> = {
+  draft: 'draft — add your first prompt',
   planning: 'planning',
   awaiting_approval: 'needs approval',
   executing: 'running',
@@ -102,7 +104,7 @@ export function TasksPage() {
             return (
               <li key={t.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
                 <button className="min-w-0 text-left" onClick={() => open(t)}>
-                  <div className="truncate text-sm text-fg">{t.goal}</div>
+                  <div className="truncate text-sm text-fg">{t.title || t.goal}</div>
                   <div className="mt-0.5 flex gap-2 text-[11px]">
                     <span className={blocked ? 'text-warn' : STATUS_STYLE[t.status]}>● {blocked ? 'blocked — needs approval' : STATUS_LABEL[t.status]}</span>
                     {t.remote && <span className="text-accent">⇄ {t.remote.sshTarget}</span>}

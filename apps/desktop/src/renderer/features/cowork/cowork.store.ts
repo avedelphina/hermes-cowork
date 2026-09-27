@@ -139,6 +139,7 @@ type CoworkStore = {
   seenEventIds: number[];
 
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; remote?: RemoteOrigin | null; kickoff: string }) => void;
+  bindSession: (sessionId: string) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
   restoreTask: (task: CoworkTask) => void;
   /** The acp.load history replay has finished; live events gate re-plans again. */
@@ -180,9 +181,11 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   startTask: ({ taskId, sessionId, goal, cwd, profile, remote, kickoff }) =>
     set({ taskId, sessionId, goal, cwd, profile, remote: remote ?? null, status: 'running', approved: false, pendingKickoff: kickoff, ...CLEARED, replaying: false }),
 
+  bindSession: (sessionId) => set({ sessionId, status: 'running', approved: false }),
+
   restoreTask: (t) =>
     set({
-      taskId: t.id, sessionId: t.acpSessionId, goal: t.goal, cwd: t.cwd, profile: t.profile,
+      taskId: t.id, sessionId: t.acpSessionId, goal: t.title || t.goal, cwd: t.cwd, profile: t.profile,
       remote: t.remote ?? null,
       approved: t.approved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
       pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: true,

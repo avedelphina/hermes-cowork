@@ -75,6 +75,12 @@ _(not yet enforced)_ so the gap is visible rather than implied.
   coordinator task's `cwd`; its checkpoints resolve through the worker's own
   persisted task record. Cross-profile memory isolation is Hermes' own.
 
+- **Draft task startup**: `task:start` accepts only a persisted task id. Main
+  reloads the stored, validated folder/profile/remote origin, starts an isolated
+  ACP child, sets its initial mode, and binds the session id atomically to the
+  task. Renderer-supplied execution context is not accepted by this boundary.
+  If mode setup or persistence fails, the child is stopped and the task remains
+  a draft. Folder and profile validation is repeated at start. _Enforced._
 ## Approval lifecycle
 
 An approval is raised when Hermes calls `session/request_permission` (surfaced

@@ -47,7 +47,22 @@ second stage requires a security-model update and tests for protected-folder
 access, project-root escape attempts, denial, checkpoints, and local/remote
 parity.
 
-## Cowork UI workflow improvements
+## Name-first Cowork task creation
+
+A new Cowork task is first a persisted draft: the dialog records only its name,
+working folder, profile, project, and remote origin. No ACP child or Hermes
+transcript is created at this stage.
+
+The task opens immediately in Cowork. The first composer submission starts ACP
+through the main-process `task:start` boundary using the stored, validated task
+context, then sends the normal Cowork plan-gate prompt plus the user's request.
+Later prompts use the existing session unchanged.
+
+Drafts survive app restarts without becoming interrupted runs. Failed session
+startup leaves the draft intact and does not leave an orphan ACP child. Folder
+scope and profile validation are repeated at first start because the folder or
+profile may have changed since draft creation.
+
 
 Implemented in the current development cycle:
 
@@ -55,11 +70,12 @@ Implemented in the current development cycle:
   remains available for cross-project review.
 - Chat mode hides the Cowork navigation sidebar so Chat can use its own session
   navigation without competing chrome.
+- New task creation records a named draft and starts ACP only on the first
+  prompt.
 
-Next slices are task creation (name first, prompt after opening), staged plan
-approval, evidence provenance, and read-only advisor consultation. These remain
-separate from the shipped activity-monitoring work so each can be verified and
-reverted independently.
+Next slices are staged plan approval, evidence provenance, and read-only advisor
+consultation. These remain separate from the shipped activity-monitoring work
+so each can be verified and reverted independently.
 
 ## Dedicated Code mode
 

@@ -28,7 +28,7 @@ export function GoalHeader() {
     <div className="border-b border-border px-6 py-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[10px] uppercase tracking-wide text-dim">Goal</div>
+          <div className="text-[10px] uppercase tracking-wide text-dim">Task</div>
           <div className="mt-1 text-base text-fg">{goal}</div>
         </div>
         {sessionId && (status === 'running' ? (

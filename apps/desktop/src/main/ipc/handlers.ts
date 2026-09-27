@@ -466,10 +466,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   handle(IpcChannel.TaskCreate, (_e, raw: unknown) => {
     const o = obj(raw, 'task');
     const input = {
-      goal: str(o['goal'], 'goal'),
+      title: str(o['title'], 'title'),
       cwd: str(o['cwd'], 'cwd'),
       profile: str(o['profile'], 'profile'),
-      acpSessionId: str(o['acpSessionId'], 'acpSessionId'),
       projectId: strOrNull(o['projectId'], 'projectId'),
       parentTaskId: strOrNull(o['parentTaskId'], 'parentTaskId'),
       // Denormalised from the project so resume survives later project edits.
@@ -483,6 +482,35 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     else if (!isExistingDir(input.cwd)) throw new Error(`Refusing to record a task in "${input.cwd}" — not an existing directory.`);
     return tasks.create(input);
   });
+  handle(IpcChannel.TaskStart, async (_e, id: unknown) => {
+    const task = tasks.get(str(id, 'task id'));
+    if (!task || task.status !== 'draft' || task.acpSessionId) throw new Error('task is not a startable draft');
+    if (task.remote) {
+      assertRemoteCwd(task.cwd);
+      if (task.profile !== 'default' && !isValidProfileName(task.profile)) throw new Error('invalid task profile');
+    } else {
+      if (!isExistingDir(task.cwd)) throw new Error(`Cannot start task: "${task.cwd}" is not an existing directory.`);
+      await assertKnownProfile(task.profile);
+    }
+    const { sessionId } = await bridge.startSession({
+      profile: task.profile,
+      cwd: task.cwd,
+      isolate: true,
+      binaryPath: ctx.hermesBinary,
+      hermesHome: profileHome(ctx.globalHermesHome, task.profile),
+      remote: task.remote ?? null,
+    });
+    try {
+      await bridge.setMode(sessionId, 'default');
+      const started = tasks.start(task.id, sessionId);
+      if (!started) throw new Error('task was already started');
+      return started;
+    } catch (error) {
+      bridge.stopSession(sessionId);
+      throw error;
+    }
+  });
+
   handle(IpcChannel.TaskUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'task patch');
     const patch: { status?: TaskStatus; approved?: boolean } = {};

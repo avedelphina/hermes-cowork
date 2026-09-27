@@ -12,10 +12,9 @@ export type { CoworkTask, TaskStatus };
 
 type Data = { tasks: CoworkTask[] };
 type CreateInput = {
-  goal: string;
+  title: string;
   cwd: string;
   profile: string;
-  acpSessionId: string;
   projectId: string | null;
   parentTaskId?: string | null;
   remote?: RemoteOrigin | null;
@@ -35,8 +34,16 @@ export class TaskStore {
   private read(): Data {
     const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
     const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : []).map((t) => {
-      const migrated = { ...t, parentTaskId: t.parentTaskId ?? null, remote: t.remote ?? null };
-      return LIVE.includes(migrated.status) ? { ...migrated, status: 'interrupted' as const } : migrated;
+      const migrated = {
+        ...t,
+        title: t.title ?? t.goal,
+        acpSessionId: t.acpSessionId ?? null,
+        parentTaskId: t.parentTaskId ?? null,
+        remote: t.remote ?? null,
+      };
+      return LIVE.includes(migrated.status)
+        ? { ...migrated, status: 'interrupted' as const }
+        : migrated;
     });
     return { tasks };
   }
@@ -57,20 +64,29 @@ export class TaskStore {
   create(input: CreateInput): CoworkTask {
     const now = new Date().toISOString();
     const task: CoworkTask = {
-      goal: input.goal,
+      title: input.title,
+      goal: '',
       cwd: input.cwd,
       profile: input.profile,
-      acpSessionId: input.acpSessionId,
+      acpSessionId: null,
       projectId: input.projectId,
       parentTaskId: input.parentTaskId ?? null,
       remote: input.remote ?? null,
       id: randomUUID(),
-      status: 'planning',
+      status: 'draft',
       approved: false,
       createdAt: now,
       updatedAt: now,
     };
     this.data.tasks.push(task);
+    this.write();
+    return task;
+  }
+
+  start(id: string, acpSessionId: string): CoworkTask | null {
+    const task = this.get(id);
+    if (!task || task.status !== 'draft' || task.acpSessionId) return null;
+    Object.assign(task, { acpSessionId, status: 'planning' as const, updatedAt: new Date().toISOString() });
     this.write();
     return task;
   }
