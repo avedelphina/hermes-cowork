@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TaskWorkflow, type TaskWorkflowSnapshot } from './index';
 
 function setup(initial: Partial<TaskWorkflowSnapshot> = {}) {
-  let state: TaskWorkflowSnapshot = { version: 1, tasks: [], events: [], approvals: [], ...initial };
+  let state: TaskWorkflowSnapshot = { version: 1, tasks: [], events: [], approvals: [], runs: [], ...initial };
   let tick = 0;
   const workflow = new TaskWorkflow(
     { read: () => state, write: (next) => { state = next; } },
@@ -68,6 +68,36 @@ describe('TaskWorkflow', () => {
     const approval = workflow.requestApproval({ id: 'a', taskId: 'task-1', sessionId: 's', toolCallId: 'c', description: 'write file' });
     expect(workflow.expireApproval(approval.id)).toMatchObject({ state: 'expired', allow: false });
     expect(workflow.resolveApproval(approval.id, true)?.state).toBe('expired');
+  });
+
+  it('creates one active run at a time and increments attempts after it finishes', () => {
+    const { workflow, state } = setup();
+    const task = workflow.create(input);
+    const first = workflow.createRun(task.id, 'session-1');
+    expect(first).toMatchObject({ id: 'task-1:1', attempt: 1, status: 'created', offset: 0, acpSessionId: 'session-1' });
+    expect(workflow.createRun(task.id, 'session-2')).toBeNull();
+    expect(workflow.attachRun(first!.id)).toMatchObject({ status: 'attached' });
+    expect(workflow.finishRun(first!.id, 'finished')).toMatchObject({ status: 'finished' });
+    expect(workflow.get(task.id)?.activeRunId).toBeNull();
+    expect(workflow.createRun(task.id, 'session-2')).toMatchObject({ id: 'task-1:2', attempt: 2 });
+    expect(state().runs).toHaveLength(2);
+  });
+
+  it('only advances a live run offset monotonically at complete byte boundaries', () => {
+    const { workflow } = setup();
+    const task = workflow.create(input);
+    const run = workflow.createRun(task.id, 'session-1')!;
+    workflow.attachRun(run.id);
+    expect(workflow.advanceRunOffset(run.id, 128)).toMatchObject({ offset: 128 });
+    expect(workflow.advanceRunOffset(run.id, 64)).toMatchObject({ offset: 128 });
+    expect(workflow.advanceRunOffset(run.id, -1)).toBeNull();
+    expect(workflow.finishRun(run.id, 'lost')).toMatchObject({ status: 'lost', offset: 128 });
+    expect(workflow.advanceRunOffset(run.id, 256)).toMatchObject({ offset: 128 });
+  });
+
+  it('normalises legacy snapshots without a run list', () => {
+    const { workflow } = setup({ runs: undefined as never });
+    expect(workflow.listRuns()).toEqual([]);
   });
 
   it('preserves the current desktop restart policy until pipe ownership exists', () => {

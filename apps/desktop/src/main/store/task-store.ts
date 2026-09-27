@@ -55,6 +55,7 @@ class JsonTaskRepository implements TaskWorkflowRepository {
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
       events: Array.isArray(parsed.events) ? parsed.events : [],
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
+      runs: Array.isArray(parsed.runs) ? parsed.runs : [],
     };
   }
 
