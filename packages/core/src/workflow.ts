@@ -1,5 +1,5 @@
 import type { Clock, IdGenerator, TaskWorkflowRepository } from './repository';
-import type { CreateTaskInput, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask } from './types';
+import type { CreateTaskInput, PendingApproval, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask } from './types';
 
 const LIVE: readonly TaskStatus[] = ['planning', 'awaiting_approval', 'executing'];
 
@@ -24,6 +24,7 @@ function normalise(snapshot: Partial<TaskWorkflowSnapshot>): TaskWorkflowSnapsho
       activeRunId: task.activeRunId ?? null,
     })),
     events: Array.isArray(snapshot.events) ? snapshot.events : [],
+    approvals: Array.isArray(snapshot.approvals) ? snapshot.approvals : [],
   };
 }
 
@@ -147,6 +148,42 @@ export class TaskWorkflow {
 
   eventsAfter(taskId: string, sequence: number): TaskWorkflowEvent[] {
     return this.snapshot.events.filter((event) => event.taskId === taskId && event.sequence > sequence).map(clone);
+  }
+
+  requestApproval(input: Omit<PendingApproval, 'state' | 'createdAt'> & { createdAt?: string }): PendingApproval {
+    const existing = this.snapshot.approvals.find((approval) => approval.id === input.id);
+    if (existing) return clone(existing);
+    const approval: PendingApproval = { ...input, state: 'pending', createdAt: input.createdAt ?? this.clock.now() };
+    this.snapshot.approvals.push(approval);
+    this.persist();
+    return clone(approval);
+  }
+
+  resolveApproval(id: string, allow: boolean, resolvedBy = 'local-user'): PendingApproval | null {
+    const approval = this.snapshot.approvals.find((candidate) => candidate.id === id);
+    if (!approval || approval.state !== 'pending') return approval ? clone(approval) : null;
+    approval.state = 'resolved';
+    approval.allow = allow;
+    approval.resolvedBy = resolvedBy;
+    approval.resolvedAt = this.clock.now();
+    this.persist();
+    return clone(approval);
+  }
+
+  expireApproval(id: string): PendingApproval | null {
+    const approval = this.snapshot.approvals.find((candidate) => candidate.id === id);
+    if (!approval || approval.state !== 'pending') return approval ? clone(approval) : null;
+    approval.state = 'expired';
+    approval.allow = false;
+    approval.resolvedAt = this.clock.now();
+    this.persist();
+    return clone(approval);
+  }
+
+  pendingApprovals(taskId?: string): PendingApproval[] {
+    return this.snapshot.approvals
+      .filter((approval) => approval.state === 'pending' && (!taskId || approval.taskId === taskId))
+      .map(clone);
   }
 
   private mutable(id: string): WorkflowTask | null {

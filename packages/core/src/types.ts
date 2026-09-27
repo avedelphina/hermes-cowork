@@ -10,6 +10,21 @@ export type TaskStatus =
 
 export type Gate = 'design' | 'implementation' | 'verification';
 
+export type ApprovalState = 'pending' | 'resolved' | 'expired';
+
+export type PendingApproval = {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  toolCallId: string;
+  description: string;
+  state: ApprovalState;
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  allow?: boolean;
+};
+
 /** Durable task metadata. `remote` deliberately remains transport-agnostic. */
 export type WorkflowTask = {
   id: string;
@@ -58,6 +73,8 @@ export type TaskWorkflowSnapshot = {
   version: 1;
   tasks: WorkflowTask[];
   events: TaskWorkflowEvent[];
+  /** Durable ACP permission records. */
+  approvals: PendingApproval[];
 };
 
 export type WorkflowPatch = Partial<Pick<WorkflowTask,

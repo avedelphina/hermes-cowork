@@ -114,6 +114,11 @@ Rules:
   it to `accept_edits`. A re-plan drops it back to `default`
   (`cowork.store.agentModeFor`). _Enforced._ Workers run in `accept_edits`
   (dispatching one is the approval) — _known gap_.
+- **ACP approvals now have a durable core record.** The local desktop adapter
+  persists pending, resolved, and expired permission records in `tasks.json`;
+  repeated requests are idempotent by approval id and the first resolution
+  wins. The ACP bridge still owns the live JSON-RPC timer/response until the
+  hub adapter is wired. _Core enforced; bridge integration pending._
 - The app maps an "allow" to ACP `allow_once` — never `allow_always` on the
   user's behalf; if the agent offers no `allow_once`, the request is denied.
   A deny selects `reject_once` (turn continues), falling back to `cancelled`

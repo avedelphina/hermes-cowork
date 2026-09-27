@@ -173,6 +173,8 @@ cowork-pipe stop <run-id>
 - **Core:** `packages/core` takes the main-process orchestrator and stores plus
   the renderer's task state machine. The desktop app embeds it (local-first
   stays the default, no hub needed); the hub container runs the same code.
+  It now also persists ACP approval records with first-answer-wins semantics;
+  live bridge response wiring remains the next adapter step.
 - **API:** the existing `IpcChannel` contract, over two endpoints and plain
   `node:http`:
   ```

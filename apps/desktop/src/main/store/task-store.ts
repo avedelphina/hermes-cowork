@@ -9,6 +9,7 @@ import { readJson, writeJsonAtomic } from './json-file';
 import {
   TaskWorkflow,
   type CreateTaskInput,
+  type PendingApproval,
   type TaskWorkflowRepository,
   type TaskWorkflowSnapshot,
   type WorkflowPatch,
@@ -18,6 +19,8 @@ import type { CoworkTask, TaskStatus, RemoteOrigin } from '../../shared/types';
 export type { CoworkTask, TaskStatus };
 
 type CreateInput = Omit<CreateTaskInput, 'remote'> & { remote?: RemoteOrigin | null };
+
+type ApprovalInput = Omit<PendingApproval, 'state' | 'createdAt'> & { createdAt?: string };
 
 function toCoworkTask(task: WorkflowTask): CoworkTask {
   return {
@@ -51,6 +54,7 @@ class JsonTaskRepository implements TaskWorkflowRepository {
       version: 1,
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
       events: Array.isArray(parsed.events) ? parsed.events : [],
+      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
     };
   }
 
@@ -99,6 +103,18 @@ export class TaskStore {
   update(id: string, patch: Partial<Pick<CoworkTask, 'status' | 'approved' | 'designApproved' | 'implementationApproved' | 'verificationApproved'>>): CoworkTask | null {
     const task = this.workflow.patch(id, patch satisfies WorkflowPatch);
     return task ? toCoworkTask(task) : null;
+  }
+
+  requestApproval(input: ApprovalInput): PendingApproval {
+    return this.workflow.requestApproval(input);
+  }
+
+  resolveApproval(id: string, allow: boolean, resolvedBy?: string): PendingApproval | null {
+    return this.workflow.resolveApproval(id, allow, resolvedBy);
+  }
+
+  expireApproval(id: string): PendingApproval | null {
+    return this.workflow.expireApproval(id);
   }
 
   remove(id: string): void {
