@@ -146,8 +146,9 @@ Cowork separates approval into two user-visible gates:
 The first gate switches the agent from planning to implementation. Completion
 pauses at the second gate; only explicit approval permits the verification
 prompt, after which a completed verification plan can mark the task done.
-Gate state is currently held in the live Cowork store and will be persisted in a
-follow-up hardening slice.
+Gate state is persisted with the task, with safe defaults for existing task
+records. A material re-plan re-arms every approval stage before the agent can
+continue.
 
 Removed 2026-09-03. It was `ChatSurface` + a read-only `FileBrowser` of the
 active project's folder, and overlapped almost entirely with "Chat + a

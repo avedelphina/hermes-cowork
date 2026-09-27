@@ -6,7 +6,34 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.14] — 2026-09-27
+
 ### Added
+- **Prompt attachments.** Attach files or paste images directly into the
+  Cowork composer; attachments are validated at the main-process boundary
+  before being sent to ACP.
+- **Per-task Git worktrees.** New local tasks default to an isolated
+  `cowork/<task>` branch and sibling worktree, with an explicit opt-out and
+  fail-closed handling for dirty source repositories.
+- **Durable ACP approval records.** The core workflow persists pending,
+  resolved, and expired approval records with idempotent creation and
+  first-answer-wins resolution.
+
+### Changed
+- **Clearer task progress.** Consecutive low-signal activity updates are
+  collapsed, while distinct task events remain visible.
+- **Clearer conversation turns.** Chat and Cowork transcripts now visibly
+  separate adjacent messages.
+- **Durable plan gates.** Design, implementation, and verification approval
+  state is persisted with each task.
+
+### Fixed
+- **Advisor prompt delivery.** Advisor requests now use a valid ACP prompt
+  payload rather than failing with `invalid prompt`.
+- **Subsequent plans always require review.** Every material re-plan resets all
+  approval stages and restores the matching approval action in the Plan pane.
+
+### Docs
 - **Roadmap: macOS privacy/TCC attribution.** Documented the staged path from
   clearer Cowork/Python attribution to a project-scoped filesystem boundary.
 
@@ -106,6 +133,7 @@ First signed + notarised build.
 - First packaged build. Chat + Cowork end to end against Hermes 0.20.6.
   macOS Apple Silicon, unsigned DMG.
 
+[0.2.14]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.14
 [0.2.13]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.13
 [0.2.12]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.12
 [0.1.1]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.1.1
