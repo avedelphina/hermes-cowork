@@ -45,6 +45,7 @@ jobs:
           done
 
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
       - run: pnpm -r typecheck
       - run: pnpm -r lint
       - run: pnpm -r test
