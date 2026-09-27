@@ -10,6 +10,14 @@ minor versions may carry breaking changes.
 - **Roadmap: macOS privacy/TCC attribution.** Documented the staged path from
   clearer Cowork/Python attribution to a project-scoped filesystem boundary.
 
+## [0.2.13] — 2026-09-27
+
+### Changed
+- **Platform-correct composer shortcuts.** macOS uses `⌥↵`; Linux and Windows
+  use `Ctrl+↵`. Alt and AltGr are not treated as send modifiers.
+- Composer placeholder, tooltip, and toggle copy now update together when the
+  send-key preference changes.
+
 ## [0.2.12] — 2026-09-27
 
 ### Added
@@ -98,6 +106,7 @@ First signed + notarised build.
 - First packaged build. Chat + Cowork end to end against Hermes 0.20.6.
   macOS Apple Silicon, unsigned DMG.
 
-[0.2.0]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.0
+[0.2.13]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.13
+[0.2.12]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.2.12
 [0.1.1]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.1.1
 [0.1.0]: https://github.com/avedelphina/hermes-cowork/releases/tag/v0.1.0
