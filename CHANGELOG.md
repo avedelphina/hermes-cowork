@@ -6,6 +6,12 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+### Fixed
+- **Packaged startup with the durable core.** Bundle `@hermes-cowork/core`
+  into Electron's main-process output instead of leaving its ESM-only workspace
+  package external in the ASAR. This prevents `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  on installed Cowork builds.
+
 ## [0.2.15] — 2026-09-27
 
 ### Fixed
