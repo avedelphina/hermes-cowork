@@ -70,6 +70,8 @@ const CLEARED = {
   activity: [] as Array<{ at: string; label: string; detail?: string }>,
   seenEventIds: [] as number[],
   evidence: [] as EvidenceItem[],
+  advisor: { sessionId: null, modelId: null, status: 'idle' as const, transcript: [] as Array<{ role: 'agent' | 'user' | 'system'; text: string }> },
+  advisorError: null as string | null,
 };
 
 type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'designApproved' | 'implementationApproved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
@@ -157,7 +159,10 @@ type CoworkStore = {
   seenEventIds: number[];
   /** Bounded proof records derived from ACP events, not assistant prose. */
   evidence: EvidenceItem[];
-
+  /** Read-only external consultation, never merged into the task transcript. */
+  advisor: { sessionId: string | null; modelId: string | null; status: 'idle' | 'running' | 'done' | 'failed'; transcript: Array<{ role: 'agent' | 'user' | 'system'; text: string }> };
+  advisorError: string | null;
+  askAdvisor: () => Promise<void>;
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; remote?: RemoteOrigin | null; kickoff: string }) => void;
   bindSession: (sessionId: string) => void;
   /** Rehydrate from a persisted task; caller then calls acp.load to replay it. */
@@ -246,6 +251,46 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       persistTask(s.taskId, { status: 'executing' });
       return { implementationApproved: true, status: 'running' };
     }),
+
+  askAdvisor: async () => {
+    const s = useCoworkStore.getState();
+    if (!s.sessionId || s.status !== 'idle' || s.advisor.status === 'running') return;
+    const advisor = { sessionId: null as string | null, modelId: null as string | null, status: 'running' as const, transcript: [] as Array<{ role: 'agent' | 'user' | 'system'; text: string }> };
+    set({ advisor, advisorError: null });
+    try {
+      const result = await window.hermes.acp.start({ profile: s.profile, cwd: s.cwd, isolate: true });
+      advisor.sessionId = result.sessionId;
+      set({ advisor: { ...advisor, sessionId: result.sessionId } });
+      const models = await window.hermes.acp.models(result.sessionId);
+      const model = models?.availableModels.find((m) => /claude|sonnet|opus|reason|strong/i.test(`${m.modelId} ${m.name}`));
+      if (model) {
+        await window.hermes.acp.setModel({ sessionId: result.sessionId, modelId: model.modelId });
+        set({ advisor: { ...useCoworkStore.getState().advisor, modelId: model.modelId } });
+      }
+      const prompt = `You are a read-only advisor reviewing a separate Hermes Cowork task. Do not edit files, run commands, or change the task. Review this task and its current transcript, then provide concise advice for the user.\n\nTask: ${s.goal}\n\nCurrent transcript:\n${s.transcript.map((m) => `${m.role}: ${m.text}`).join('\\n')}`;
+      const off = window.hermes.acp.onEvent((msg) => {
+        if (msg.sessionId !== result.sessionId) return;
+        if (msg.kind === 'token') {
+          const current = useCoworkStore.getState().advisor;
+          const last = current.transcript.at(-1);
+          const transcript = last?.role === 'agent'
+            ? [...current.transcript.slice(0, -1), { role: 'agent' as const, text: last.text + msg.text }]
+            : [...current.transcript, { role: 'agent' as const, text: msg.text }];
+          set({ advisor: { ...current, transcript } });
+        } else if (msg.kind === 'done') {
+          off();
+          set({ advisor: { ...useCoworkStore.getState().advisor, status: 'done' } });
+          void window.hermes.acp.stop(result.sessionId);
+        } else if (msg.kind === 'session-error') {
+          off();
+          set({ advisor: { ...useCoworkStore.getState().advisor, status: 'failed' }, advisorError: msg.message });
+        }
+      });
+      await window.hermes.acp.send({ kind: 'prompt', sessionId: result.sessionId, text: prompt });
+    } catch (err) {
+      set({ advisor: { ...advisor, status: 'failed' }, advisorError: String(err) });
+    }
+  },
 
   pushUserText: (text) =>
     set((s) => {

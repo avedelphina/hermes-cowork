@@ -77,6 +77,20 @@ Next slices are evidence provenance and read-only advisor consultation. These re
 separate from the shipped activity-monitoring work so each can be verified and
 reverted independently.
 
+## Read-only Advisor
+
+Advisor is an explicitly separate consultation, exposed as a Cowork sidebar tab
+when the task is waiting. It starts an isolated ACP session, prefers an
+available stronger model, and returns a labelled review card. The advisor
+prompt is read-only: it must not edit files, run commands, change the task
+plan, or merge its response into the task transcript.
+
+Advisor output is consultation, not evidence. It is not persisted as task
+state, and if no stronger model is available the session's configured model is
+used rather than inventing a model identifier. The initial implementation
+stops the isolated session after its response and keeps the advisor transcript
+in the current UI session only.
+
 ## Evidence sidebar
 
 The Evidence tab is distinct from Activity: Activity is a recent live-event

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PlanTab } from './PlanTab';
 import { ChangesTab } from './ChangesTab';
 import { FileBrowser } from '../files/FileBrowser';
+import { AdvisorTab } from './AdvisorTab';
 import { EvidenceTab } from './EvidenceTab';
 import { useCoworkStore } from './cowork.store';
 
@@ -9,6 +10,7 @@ const TABS = [
   { id: 'plan', label: 'Plan' },
   { id: 'activity', label: 'Activity' },
   { id: 'evidence', label: 'Evidence' },
+  { id: 'advisor', label: 'Advisor' },
   { id: 'files', label: 'Files' },
   { id: 'changes', label: 'Changes' },
 ] as const;
@@ -35,6 +37,7 @@ export function RightPane() {
   const planEntries = useCoworkStore((s) => s.planEntries);
   const activity = useCoworkStore((s) => s.activity);
   const evidence = useCoworkStore((s) => s.evidence);
+  const advisor = useCoworkStore((s) => s.advisor);
   const currentActivity = useCoworkStore((s) => s.currentActivity);
   const remote = useCoworkStore((s) => s.remote);
   // A remote task's files live on the other machine — the local file browser
@@ -45,6 +48,7 @@ export function RightPane() {
     plan: planEntries.length ? `${planDone}/${planEntries.length}` : '',
     activity: activity.length ? String(activity.length) : '',
     evidence: evidence.length ? String(evidence.length) : '',
+    advisor: advisor.status === 'done' ? 'ready' : advisor.status === 'running' ? '…' : '',
     changes: changed ? String(changed) : '',
   };
 
@@ -123,6 +127,7 @@ export function RightPane() {
             )}
           </div>
         )}
+        {!remote && tab === 'advisor' && <div className="overflow-y-auto"><AdvisorTab /></div>}
         {!remote && tab === 'evidence' && <div className="overflow-y-auto"><EvidenceTab /></div>}
         {!remote && tab === 'files' && <FileBrowser />}
         {!remote && tab === 'changes' && <div className="overflow-y-auto"><ChangesTab onOpenFile={() => setTab('files')} /></div>}
