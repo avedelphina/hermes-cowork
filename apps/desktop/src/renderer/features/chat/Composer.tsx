@@ -4,7 +4,8 @@ import { ModelPicker } from '../../shell/ModelPicker';
 
 type SendKey = 'mod-enter' | 'enter';
 const SEND_KEY = 'hermes-send-key';
-const modifierLabel = '⌥';
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const modifierLabel = isMac ? '⌥' : 'Ctrl+';
 
 function loadSendKey(): SendKey {
   try {
@@ -85,7 +86,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key !== 'Enter') return;
-          const mod = e.metaKey || e.ctrlKey || e.altKey;
+          const mod = isMac ? e.metaKey : e.ctrlKey;
           if (mod || (sendKey === 'enter' && !e.shiftKey)) { e.preventDefault(); void send(); }
         }}
         placeholder={placeholder ? `${placeholder} ${hint}` : `Message Hermes... ${hint}`}

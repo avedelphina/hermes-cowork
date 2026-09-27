@@ -97,6 +97,25 @@ in the current UI session only.
 - The toggle controls whether plain `↵` also submits; in that mode `Shift+↵`
   inserts a newline.
 
+- macOS displays `⌥↵` for the modifier shortcut.
+- Linux and Windows display `Ctrl+↵`; Alt/AltGr are not used as submit keys,
+  because AltGr is a text-input modifier on many keyboard layouts.
+- The composer placeholder and toggle label are derived from the same setting,
+  so changing the toggle updates both descriptions immediately.
+
+## Linux distribution
+
+`AppImage` is the initial Linux distribution format because it is portable,
+requires no root installation, and works across many mainstream distributions.
+It remains a good download format for technically comfortable end-users, but it
+is not the ideal only format: desktop integration, sandboxing, trust/update
+metadata, and package-manager discovery are weaker than native packages.
+
+For a broader Linux release, keep AppImage as the direct-download fallback and
+add a `.deb` target first (Ubuntu/Debian/Linux Mint), then consider Flatpak for
+sandboxed Flathub distribution. Do not replace AppImage until the native target
+has matching ACP/Hermes runtime behavior and update documentation.
+
 ## Evidence sidebar
 
 The Evidence tab is distinct from Activity: Activity is a recent live-event
