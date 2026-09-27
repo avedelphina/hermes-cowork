@@ -105,6 +105,19 @@ describe('AcpBridge.startSession', () => {
     await expect(loadPromise).resolves.toEqual({ sessionId: 'past-sess-9' });
   });
 
+  it('reports whether this process already owns a session for idempotent task attachment', async () => {
+    const { bridge, proc } = makeBridge();
+    const start = bridge.startSession({
+      profile: 'default', cwd: '/tmp', binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes', isolate: true,
+    });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'attached-session' } }));
+    await start;
+    expect(bridge.hasSession('attached-session')).toBe(true);
+    expect(bridge.hasSession('foreign-session')).toBe(false);
+  });
   it('reuses one warm connection for a second session of the same profile', async () => {
     const { bridge, proc } = makeBridge();
     const common = {

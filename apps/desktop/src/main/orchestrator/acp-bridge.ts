@@ -185,6 +185,11 @@ export class AcpBridge extends EventEmitter {
     await this.sup.request(handle, 'session/set_mode', { sessionId, modeId }, CONTROL_TIMEOUT_MS);
   }
 
+  /** Whether this desktop process is already attached to an ACP session. */
+  hasSession(sessionId: string): boolean {
+    return this.acpToHandle.has(sessionId);
+  }
+
   /** Return and clear events emitted while the renderer was not mounted. */
   drainEvents(sessionId: string): AcpServerMessage[] {
     const events = this.journal.get(sessionId) ?? [];

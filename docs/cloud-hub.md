@@ -141,10 +141,11 @@ cowork-pipe stop <run-id>
   ("no orphaned remote Hermes"). With the pipe, killing ssh only detaches. The
   Stop button must call `cowork-pipe stop` over its own ssh command, and
   [remote-connection.md](remote-connection.md) must be updated to say so.
-- **Local tasks** use the same pipe. Quitting the desktop app then leaves the
-  task running instead of marking it `interrupted`, which is the "continue in
-  the background" choice from the background-runs quit dialog, without the Runs
-  API.
+- **Local tasks** use the same pipe. Quitting the desktop app leaves the task
+  running instead of marking it `interrupted`: on reopening Cowork now restores
+  the task's stored session through `cowork-pipe attach <run> <offset>`, replays
+  only the unconsumed frames, and resumes live event delivery. Finished, stopped,
+  lost, and remote runs fail closed rather than pretending to reattach.
 - **Housekeeping:** the hub lists and reconciles runs on each host at start-up,
   and removes finished runs after a while. Not built yet.
 

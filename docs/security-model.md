@@ -132,9 +132,10 @@ Rules:
   than a generic status/boolean patch. The renderer still renders the plan and
   synchronises the live ACP mode, while `packages/core` persists the durable
   gate transition. _Core enforced; bridge enforcement pending._
-- **Local task pipe adapter.** Cowork task sessions now use the durable local
-  pipe path, including exact replay offsets and explicit pipe stop semantics;
-  remote execution remains deferred. Packaged builds include the pipe script.
+- **Local task pipe reattachment.** A desktop restart preserves a local run's
+  durable identity. Reopening its task reattaches through the stored run and
+  byte offset before replaying ACP history; the IPC handler rejects terminal,
+  remote, and missing runs rather than silently creating another agent.
 - The app maps an "allow" to ACP `allow_once` — never `allow_always` on the
   user's behalf; if the agent offers no `allow_once`, the request is denied.
   A deny selects `reject_once` (turn continues), falling back to `cancelled`

@@ -461,6 +461,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
+  /** Pipe runs explicitly stopped by this client; ordinary client shutdown only detaches. */
+  const stoppingPipeRuns = new Set<string>();
   bridge.setApprovalStore(tasks);
   const remoteAgents = new RemoteAgentStore(join(userData, 'remote-agents.json'));
   // Hoisted: the acp:* handlers above resolve a remote origin through these.
@@ -535,7 +537,10 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
           offset: run.offset,
           onOffset: (offset: number) => { tasks.advanceRunOffset(run.id, offset); },
           onExit: (code: number | null, expected: boolean) => {
-            tasks.finishRun(run.id, expected || code === 0 ? 'finished' : 'lost');
+            // Closing Cowork only detaches its pipe client; the durable daemon
+            // keeps the agent alive. A deliberate pipe stop is terminal.
+            if (stoppingPipeRuns.delete(run.id)) tasks.stopRun(run.id);
+            else if (!expected) tasks.finishRun(run.id, code === 0 ? 'finished' : 'lost');
           },
         },
       }),
@@ -555,6 +560,48 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
   });
 
+  handle(IpcChannel.TaskAttach, async (_e, id: unknown) => {
+    const task = tasks.get(str(id, 'task id'));
+    if (!task?.acpSessionId) throw new Error('task has no resumable ACP session');
+    if (task.remote) throw new Error('remote Cowork task attachment is not yet supported');
+    const run = tasks.activeRun(task.id);
+    if (!run || run.status === 'finished' || run.status === 'stopped' || run.status === 'lost') {
+      throw new Error('task has no attachable durable run');
+    }
+    if (!isExistingDir(task.cwd)) throw new Error(`Cannot attach task: "${task.cwd}" is not an existing directory.`);
+    await assertKnownProfile(task.profile);
+    if (bridge.hasSession(task.acpSessionId)) {
+      tasks.attachRun(run.id);
+      bridge.bindTaskSession(task.id, task.acpSessionId);
+      return task;
+    }
+    const scriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'cowork-pipe.py')
+      : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
+    await bridge.loadSession({
+      sessionId: task.acpSessionId,
+      profile: task.profile,
+      cwd: task.cwd,
+      isolate: true,
+      binaryPath: ctx.hermesBinary,
+      hermesHome: profileHome(ctx.globalHermesHome, task.profile),
+      pipe: {
+        scriptPath,
+        runId: run.id,
+        offset: run.offset,
+        onOffset: (offset: number) => { tasks.advanceRunOffset(run.id, offset); },
+        onExit: (code: number | null, expected: boolean) => {
+          // A renderer/main-process detach is expected; only the pipe daemon's
+          // observed exit is terminal unless this client deliberately stopped it.
+          if (stoppingPipeRuns.delete(run.id)) tasks.stopRun(run.id);
+          else if (!expected) tasks.finishRun(run.id, code === 0 ? 'finished' : 'lost');
+        },
+      },
+    });
+    tasks.attachRun(run.id);
+    bridge.bindTaskSession(task.id, task.acpSessionId);
+    return tasks.get(task.id)!;
+  });
   handle(IpcChannel.TaskStop, (_e, id: unknown) => {
     const task = tasks.get(str(id, 'task id'));
     if (!task) throw new Error('unknown task');
@@ -568,11 +615,17 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       ? join(process.resourcesPath, 'cowork-pipe.py')
       : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
     const stop = spawn('python3', [scriptPath, 'stop', run.id], { stdio: 'ignore' });
+    stoppingPipeRuns.add(run.id);
     return new Promise<void>((resolve, reject) => {
-      stop.once('error', reject);
+      stop.once('error', (error) => { stoppingPipeRuns.delete(run.id); reject(error); });
       stop.once('exit', (code) => {
-        if (code !== 0) reject(new Error(`cowork-pipe stop failed (code=${code ?? 'null'})`));
-        else { tasks.stopRun(run.id); resolve(); }
+        if (code !== 0) {
+          stoppingPipeRuns.delete(run.id);
+          reject(new Error(`cowork-pipe stop failed (code=${code ?? 'null'})`));
+        } else {
+          tasks.stopRun(run.id);
+          resolve();
+        }
       });
     });
   });

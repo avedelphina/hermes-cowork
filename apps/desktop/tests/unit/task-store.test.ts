@@ -64,6 +64,19 @@ describe('TaskStore', () => {
     expect(new TaskStore(file).get(t.id)?.status).toBe('interrupted');
   });
 
+  it('keeps a live task attachable across a desktop restart when it has a durable run', () => {
+    const first = new TaskStore(file);
+    const task = first.create(input);
+    const run = first.createRun(task.id, null)!;
+    first.start(task.id, 's1');
+    first.bindRunSession(run.id, 's1');
+    first.attachRun(run.id);
+    first.update(task.id, { status: 'executing' });
+
+    const second = new TaskStore(file);
+    expect(second.get(task.id)).toMatchObject({ status: 'executing', acpSessionId: 's1' });
+    expect(second.activeRun(task.id)).toMatchObject({ id: run.id, status: 'attached', acpSessionId: 's1' });
+  });
   it('leaves finished tasks alone on reload', () => {
     const store = new TaskStore(file);
     const t = store.create(input);

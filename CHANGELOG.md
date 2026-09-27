@@ -9,7 +9,8 @@ minor versions may carry breaking changes.
 ### Added
 - **Durable local Cowork runs.** Task sessions now start through the bundled
   `cowork-pipe` adapter, persist run identity and exact processed-byte offsets,
-  and stop through the pipe's explicit stop command. Remote task piping remains
+  reattach after a desktop restart without starting a second agent, and stop
+  through the pipe's explicit stop command. Remote task piping remains
   deliberately deferred.
 
 ### Fixed
