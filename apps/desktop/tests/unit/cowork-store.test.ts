@@ -60,6 +60,26 @@ describe('cowork store', () => {
       expect(checkpoint).not.toHaveBeenCalled();
     });
 
+    it('records observed and verified evidence for an edit completion', () => {
+      const { ingestAcp } = useCoworkStore.getState();
+      ingestAcp(edit());
+      expect(useCoworkStore.getState().evidence).toMatchObject([
+        { state: 'observed', label: 'File change requested', paths: ['draft.md'] },
+      ]);
+      ingestAcp({ kind: 'tool-result', sessionId: 's', toolCallId: 't1', result: null });
+      expect(useCoworkStore.getState().evidence).toMatchObject([
+        { state: 'verified', label: 'File change completed' },
+        { state: 'observed', label: 'File change requested' },
+      ]);
+    });
+
+    it('records a failed session as failed evidence', () => {
+      useCoworkStore.getState().ingestAcp({ kind: 'session-error', sessionId: 's', message: 'agent exited', fatal: true });
+      expect(useCoworkStore.getState().evidence).toMatchObject([
+        { state: 'failed', label: 'Session failed', detail: 'agent exited' },
+      ]);
+    });
+
     it('bumps changeRev when an edit finishes and when the turn ends', () => {
       const { ingestAcp } = useCoworkStore.getState();
       ingestAcp(edit());

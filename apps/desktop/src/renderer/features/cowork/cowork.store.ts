@@ -5,6 +5,17 @@ import { todoWrites, applyTodoWrite, toPlanEntries, type TodoItem } from '@share
 
 type Approval = { toolCallId: string; description: string };
 
+export type EvidenceState = 'verified' | 'observed' | 'claimed' | 'failed' | 'stale';
+export type EvidenceItem = {
+  id: string;
+  at: string;
+  state: EvidenceState;
+  label: string;
+  detail?: string;
+  /** Paths are only task-relative, so Evidence never expands filesystem scope. */
+  paths?: string[];
+};
+
 /** Cowork approval mode → ACP session mode id. */
 export const MODE_FOR = { ask: 'default', auto: 'accept_edits' } as const;
 
@@ -58,6 +69,7 @@ const CLEARED = {
   currentActivity: null as string | null,
   activity: [] as Array<{ at: string; label: string; detail?: string }>,
   seenEventIds: [] as number[],
+  evidence: [] as EvidenceItem[],
 };
 
 type PlanState = Pick<CoworkStore, 'replaying' | 'planEntries' | 'planHistory' | 'approved' | 'designApproved' | 'implementationApproved' | 'taskId' | 'goal' | 'sessionId' | 'approvalMode' | 'transcript'>;
@@ -143,6 +155,8 @@ type CoworkStore = {
   activity: Array<{ at: string; label: string; detail?: string }>;
   /** Main-process journal ids already applied, preventing replay duplication. */
   seenEventIds: number[];
+  /** Bounded proof records derived from ACP events, not assistant prose. */
+  evidence: EvidenceItem[];
 
   startTask: (input: { taskId: string; sessionId: string; goal: string; cwd: string; profile: string; remote?: RemoteOrigin | null; kickoff: string }) => void;
   bindSession: (sessionId: string) => void;
@@ -266,6 +280,9 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
         const entry = { at: new Date().toISOString(), label, ...(detail ? { detail } : {}) };
         return { currentActivity: label, activity: [entry, ...s.activity].slice(0, 20), seenEventIds };
       };
+      const evidence = (state: EvidenceState, label: string, detail?: string, paths?: string[]): Partial<CoworkStore> => ({
+        evidence: [{ id: `${msg.eventId ?? `${msg.kind}:${Date.now()}`}`, at: new Date().toISOString(), state, label, ...(detail ? { detail } : {}), ...(paths?.length ? { paths } : {}) }, ...s.evidence].slice(0, 100),
+      });
       switch (msg.kind) {
         case 'token': {
           const role = msg.thought ? 'thought' : 'agent';
@@ -297,7 +314,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
               .then((before) => useCoworkStore.getState().addCheckpoint(rel, before))
               .catch(() => { /* ignore */ });
           }
-          return { editCalls: [...s.editCalls, msg.toolCallId], ...record(msg.name, `${msg.op}${path ? ` · ${path}` : ''}`) };
+          return { editCalls: [...s.editCalls, msg.toolCallId], ...record(msg.name, `${msg.op}${path ? ` · ${path}` : ''}`), ...evidence('observed', 'File change requested', msg.name, [rel]) };
         }
         case 'plan':
           return { nativePlan: true, ...withPlan(s, msg.entries), ...record('Plan updated') };
@@ -316,6 +333,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
             status: 'idle',
             transcript: [...s.transcript, { role: 'system', text: `⚠️ ${msg.message}` }],
             ...record('Failed', msg.message),
+            ...evidence('failed', 'Session failed', msg.message),
           };
         case 'done':
           persistTask(s.taskId, { status: s.approved ? 'done' : 'awaiting_approval' });
@@ -330,7 +348,12 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
           return { status: 'idle', changeRev: s.changeRev + 1, ...record('Waiting for you') };
         case 'tool-result':
           return s.editCalls.includes(msg.toolCallId)
-            ? { changeRev: s.changeRev + 1, ...record('Tool finished') }
+            ? {
+                changeRev: s.changeRev + 1,
+                editCalls: s.editCalls.filter((id) => id !== msg.toolCallId),
+                ...record('Tool finished'),
+                ...evidence('verified', 'File change completed', `Tool ${msg.toolCallId}`),
+              }
             : { ...s, ...record('Tool finished') };
         default:
           // Unknown kind: never replace state with undefined — that nukes the

@@ -73,9 +73,28 @@ Implemented in the current development cycle:
 - New task creation records a named draft and starts ACP only on the first
   prompt.
 
-Next slices are staged plan approval, evidence provenance, and read-only advisor
-consultation. These remain separate from the shipped activity-monitoring work
-so each can be verified and reverted independently.
+Next slices are evidence provenance and read-only advisor consultation. These remain
+separate from the shipped activity-monitoring work so each can be verified and
+reverted independently.
+
+## Evidence sidebar
+
+The Evidence tab is distinct from Activity: Activity is a recent live-event
+feed, while Evidence is the durable-in-view proof trail for a task. Evidence
+must come from observable ACP events or Cowork-owned artifacts, never merely
+from assistant text.
+
+The initial slice records bounded task-local evidence:
+
+- **Observed** when ACP reports a file-changing tool call, with only a
+  task-relative path;
+- **Verified** when Cowork receives the matching tool-completion event;
+- **Failed** when the owned ACP session reports a failure.
+
+The tab deliberately labels its confidence. It does not yet infer test/build
+success from terminal prose, inspect arbitrary tool output, promise that a file
+has the desired semantic content, or persist evidence across an app restart.
+Those require structured result capture and revision-aware artifact storage.
 
 ## Two-stage plan approval
 
