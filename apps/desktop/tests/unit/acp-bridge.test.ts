@@ -244,6 +244,33 @@ describe('AcpBridge.respondToPermission', () => {
     });
   });
 
+  it('persists a task-bound permission and enforces its durable first answer', async () => {
+    const approvals = {
+      requestApproval: vi.fn().mockReturnValue({ state: 'pending' }),
+      resolveApproval: vi.fn().mockReturnValue({ state: 'resolved', allow: false }),
+      expireApproval: vi.fn(),
+    };
+    const proc = new MockProc();
+    vi.mocked(cp.spawn).mockReturnValue(proc as unknown as cp.ChildProcess);
+    const bridge = new AcpBridge(new AcpSupervisor(), approvals);
+    const start = bridge.startSession({ profile: 'default', cwd: '/tmp', binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes' });
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+    await flush();
+    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 'sess-1' } }));
+    await start;
+    bridge.bindTaskSession('task-1', 'sess-1');
+    proc.stdout!.push(permReq('p-durable', 'sess-1', 'tc-durable'));
+    await flush();
+
+    expect(approvals.requestApproval).toHaveBeenCalledWith({
+      id: 'task-1:sess-1:tc-durable', taskId: 'task-1', sessionId: 'sess-1', toolCallId: 'tc-durable', description: 'rm x',
+    });
+    proc.written.length = 0;
+    bridge.respondToPermission('sess-1', 'tc-durable', true);
+    expect(approvals.resolveApproval).toHaveBeenCalledWith('task-1:sess-1:tc-durable', true);
+    expect(proc.written).toEqual([]);
+  });
   it('expires a pending approval by denying it once and notifying the renderer', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {

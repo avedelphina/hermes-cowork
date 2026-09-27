@@ -256,7 +256,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         await assertKnownProfile(profile);
       }
       const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
-      return bridge.loadSession({
+      const result = await bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
         cwd,
@@ -265,6 +265,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         hermesHome: profileHome(ctx.globalHermesHome, profile),
         remote: opts.remote,
       });
+      const taskId = strOrNull(o['taskId'], 'taskId');
+      if (taskId) bridge.bindTaskSession(taskId, result.sessionId);
+      return result;
     },
   );
 
@@ -457,6 +460,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
+  bridge.setApprovalStore(tasks);
   const remoteAgents = new RemoteAgentStore(join(userData, 'remote-agents.json'));
   // Hoisted: the acp:* handlers above resolve a remote origin through these.
   function projectRemote(projectId: string | null): RemoteOrigin | null {
@@ -527,6 +531,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       await bridge.setMode(sessionId, 'default');
       const started = tasks.start(task.id, sessionId);
       if (!started) throw new Error('task was already started');
+      bridge.bindTaskSession(task.id, sessionId);
       return started;
     } catch (error) {
       bridge.stopSession(sessionId);

@@ -48,7 +48,10 @@ the ACP pipe itself durable: `cowork-pipe`, below.
 
 - **Main process:** stores, ACP bridge and supervisor. Only `index.ts`,
   `ipc/handlers.ts`, `orchestrator/kanban-ws.ts` and `update/updater.ts` import
-  Electron; the rest is plain Node and can move as-is.
+  Electron; the rest is plain Node and can move as-is. Task-bound ACP permission
+  requests now create and resolve the durable core record through the desktop
+  adapter; the bridge still owns the live JSON-RPC request until pipe attach is
+  introduced.
 - **Renderer:** plan display and ACP mode synchronisation remain in
   [`cowork.store.ts`](../apps/desktop/src/renderer/features/cowork/cowork.store.ts).
   Durable plan transitions now cross explicit privileged commands

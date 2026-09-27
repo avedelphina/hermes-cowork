@@ -119,6 +119,14 @@ Rules:
   repeated requests are idempotent by approval id and the first resolution
   wins. The ACP bridge still owns the live JSON-RPC timer/response until the
   hub adapter is wired. _Core enforced; bridge integration pending._
+- **ACP permission records bind to live task sessions.** When a Cowork task's
+  ACP session requests a permission, the bridge persists the record before it
+  reaches the renderer. The reply, expiry, session stop, and bridge shutdown
+  resolve that same record with first-answer-wins semantics. Non-task sessions
+  retain the existing in-memory behaviour. A full app restart cannot yet resume
+  an in-flight ACP request because Hermes owns that live request; its durable
+  record remains audit state rather than an invented reattachment. _Partially
+  enforced; hub/pipe reconnection pending._
 - **Plan lifecycle authority is now explicit in core.** Desktop callers use
   `approveDesign`, `rearmForPlan`, `approveVerification`, and `complete` rather
   than a generic status/boolean patch. The renderer still renders the plan and
