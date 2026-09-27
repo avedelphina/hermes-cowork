@@ -68,6 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-vite build
 
       - name: Sign, notarise, upload
@@ -95,6 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - run: pnpm --filter @hermes-cowork/core build
       - run: pnpm --filter @hermes-cowork/desktop exec electron-vite build
       - name: Build + upload AppImage
         working-directory: apps/desktop
