@@ -80,6 +80,15 @@ describe('ProjectStore', () => {
     expect(new ProjectStore(file).get('1')?.archived).toBe(false);
   });
 
+  it('migrates context and funding fields on legacy projects', () => {
+    const { writeFileSync } = require('node:fs');
+    writeFileSync(file, JSON.stringify({
+      projects: [{ id: '1', name: 'Old', folderPath: '/o', profile: 'x', createdAt: 't', lastOpenedAt: 't' }],
+      activeId: '1',
+    }));
+    expect(new ProjectStore(file).get('1')).toMatchObject({ contextId: null, fundingRef: null });
+  });
+
   it('survives a corrupt file', () => {
     const { writeFileSync } = require('node:fs');
     writeFileSync(file, '{not json');

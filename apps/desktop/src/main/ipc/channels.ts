@@ -48,6 +48,12 @@ export const IpcChannel = {
   ProjectRemove: 'project:remove',
   ProjectContextFiles: 'project:context-files', // which context files exist in a folder
 
+  // contexts (durable groups of related projects)
+  ContextList: 'context:list',
+  ContextCreate: 'context:create',
+  ContextUpdate: 'context:update',
+  ContextArchive: 'context:archive',
+
   // cowork tasks
   TaskList: 'task:list',
   TaskCreate: 'task:create',
