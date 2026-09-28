@@ -82,10 +82,12 @@ export function translateAcpEvent(event: AcpEvent): AcpServerMessage[] {
  *
  *   "user_message_chunk"    → token with role 'user' (only during a
  *                             session/load history replay)
+ *   "usage_update"          → usage (current context pressure only; not
+ *                             billable/provider usage)
  *
  * Variants we deliberately drop:
- *   available_commands_update, current_mode_update,
- *   config_option_update, session_info_update, usage_update.
+ *   available_commands_update, current_mode_update, config_option_update,
+ *   session_info_update.
  */
 function translateSessionUpdate(
   sessionId: string,
@@ -110,6 +112,14 @@ function translateSessionUpdate(
       // Only seen while Hermes replays history during session/load.
       const text = extractTextFromContentBlock(u['content']);
       return text ? [{ kind: 'token', sessionId, text, role: 'user' }] : [];
+    }
+    case 'usage_update': {
+      const contextWindowTokens = u['size'];
+      const usedTokens = u['used'];
+      return typeof contextWindowTokens === 'number' && Number.isSafeInteger(contextWindowTokens) && contextWindowTokens >= 0 &&
+        typeof usedTokens === 'number' && Number.isSafeInteger(usedTokens) && usedTokens >= 0
+        ? [{ kind: 'usage', sessionId, contextWindowTokens, usedTokens }]
+        : [];
     }
     case 'tool_call': {
       const toolCallId = typeof u['toolCallId'] === 'string' ? u['toolCallId'] : '';

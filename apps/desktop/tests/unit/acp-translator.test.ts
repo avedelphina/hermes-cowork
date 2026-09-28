@@ -27,8 +27,26 @@ describe('translateAcpEvent — session/update (Hermes 0.20.6 wire shapes)', () 
     expect(out).toEqual([{ kind: 'token', sessionId: 's1', text: 'hi', role: 'user' }]);
   });
 
-  it('drops usage_update / available_commands_update / session_info_update', () => {
-    for (const v of ['usage_update', 'available_commands_update', 'session_info_update']) {
+  it('maps usage_update to a context-pressure snapshot, never a billed-usage claim', () => {
+    expect(translateAcpEvent(msg({
+      sessionUpdate: 'usage_update', size: 200_000, used: 25_000,
+      cost: { amount: 999, currency: 'USD' }, _meta: { provider: 'ignored' },
+    }))).toEqual([{ kind: 'usage', sessionId: 's1', contextWindowTokens: 200_000, usedTokens: 25_000 }]);
+    expect(translateAcpEvent(msg({ sessionUpdate: 'usage_update', size: 0, used: 0 })))
+      .toEqual([{ kind: 'usage', sessionId: 's1', contextWindowTokens: 0, usedTokens: 0 }]);
+  });
+
+  it('drops malformed context-pressure updates safely', () => {
+    for (const update of [
+      { sessionUpdate: 'usage_update', size: 1 },
+      { sessionUpdate: 'usage_update', size: '200', used: 1 },
+      { sessionUpdate: 'usage_update', size: 200, used: -1 },
+      { sessionUpdate: 'usage_update', size: 1.5, used: 1 },
+    ]) expect(translateAcpEvent(msg(update))).toEqual([]);
+  });
+
+  it('drops unrelated session updates', () => {
+    for (const v of ['available_commands_update', 'session_info_update']) {
       expect(translateAcpEvent(msg({ sessionUpdate: v }))).toEqual([]);
     }
   });

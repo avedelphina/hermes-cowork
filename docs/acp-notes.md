@@ -73,8 +73,11 @@ For a trivial prompt: `agent_message_chunk`, `usage_update`,
 
 - `agent_message_chunk`: `update.content = { "type": "text", "text": "…" }` —
   matches `acp-translator.extractTextFromContentBlock`. ✅
-- `usage_update`, `available_commands_update`, `session_info_update`: dropped by
-  the translator. ✅
+- `usage_update`: now mapped to the `usage` semantic event with `size` as the
+  context-window capacity and `used` as current estimated context pressure.
+  It is a snapshot, not provider billing or a token delta; it must never be
+  summed for accounting. `available_commands_update` and `session_info_update`
+  remain dropped.
 - `plan` (seen 2026-09-04): `update.entries[] = { content, priority, status }`,
   `status` ∈ `pending | in_progress | completed`. Emitted as a live checklist
   during execution and **re-emitted whole when the agent re-plans** (e.g. after
@@ -103,8 +106,11 @@ Resolves with:
              "cachedReadTokens": 0, "totalTokens": 15944 } }
 ```
 
-We currently discard this and just emit `done`. `stopReason` (`end_turn`,
-`max_tokens`, `refusal`, `cancelled`, …) and `usage` are worth surfacing later.
+Cowork now emits `turn-usage` from this reply after validating its non-negative
+integer fields. These are provider-reported per-turn counts, retained distinctly
+from `usage_update` context pressure; neither signal is a Purser ledger entry
+until the future authenticated outbox establishes idempotency and funding
+semantics.
 
 ## Shutdown
 

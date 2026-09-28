@@ -190,12 +190,15 @@ describe('AcpBridge.sendPrompt', () => {
       prompt: [{ type: 'text', text: 'hello world' }],
     });
 
-    // Reply with a stop reason — turn ends.
+    // Reply with provider-reported token usage — separate from the asynchronous
+    // ACP context-pressure update and never a Purser ledger entry by itself.
     proc.stdout!.push(encodeFrame({
-      jsonrpc: '2.0', id: promptReq['id'] as string, result: { stopReason: 'end_turn' },
+      jsonrpc: '2.0', id: promptReq['id'] as string,
+      result: { stopReason: 'end_turn', usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18, thoughtTokens: 2, cachedReadTokens: 3 } },
     }));
     await promptDone;
 
+    expect(semanticEvents).toContainEqual({ kind: 'turn-usage', sessionId: 'sess-1', inputTokens: 11, outputTokens: 7, totalTokens: 18, reasoningTokens: 2, cachedReadTokens: 3 });
     expect(semanticEvents).toContainEqual({ kind: 'done', sessionId: 'sess-1' });
   });
 });

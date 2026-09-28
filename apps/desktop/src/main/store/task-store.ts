@@ -11,6 +11,7 @@ import {
   type CreateTaskInput,
   type PendingApproval,
   type TaskRun,
+  type AttributionSnapshot,
   type TaskWorkflowRepository,
   type TaskWorkflowSnapshot,
   type WorkflowPatch,
@@ -127,8 +128,8 @@ export class TaskStore {
     return task ? toCoworkTask(task) : null;
   }
 
-  createRun(taskId: string, acpSessionId: string | null): TaskRun | null {
-    return this.workflow.createRun(taskId, acpSessionId);
+  createRun(taskId: string, acpSessionId: string | null, attribution?: AttributionSnapshot): TaskRun | null {
+    return this.workflow.createRun(taskId, acpSessionId, attribution);
   }
 
   attachRun(id: string): TaskRun | null {
