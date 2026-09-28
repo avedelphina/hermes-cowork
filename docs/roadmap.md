@@ -90,10 +90,13 @@ OpenAI-compatible gateway. In that route Purser owns request IDs, holds,
 settlement, ledger idempotency, balances, and 402/429 denials. Direct Hermes
 provider traffic remains usage evidence, not a Purser charge.
 
-These slices still deliberately do **not** contact Purser, show balances,
-reserve funds, export an outbox, or enforce budgets. Purser remains authoritative
-for credentials, reservations, balances, idempotent ledger entries, and any
-refusal to execute.
+The gateway-routing slice now also has a Settings flow for configuring a Purser
+endpoint and inference key. The renderer sends the key only over the protected
+IPC call; main validates it, writes it to the selected Hermes profile `.env`
+with mode 0600, and uses Hermes' own config writer for the named `purser`
+provider. Cowork stores only a boolean configured status, never the key.
+
+
 
 Chat tracking will be an explicit opt-in product setting, disabled by default
 for new installs even when a default funding reference exists. This preserves
