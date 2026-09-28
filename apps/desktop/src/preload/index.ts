@@ -71,6 +71,8 @@ const api = {
   settings: {
     get: (): Promise<CoworkSettings> => ipcRenderer.invoke(IpcChannel.SettingsGet),
     update: (patch: Partial<CoworkSettings>): Promise<CoworkSettings> => ipcRenderer.invoke(IpcChannel.SettingsUpdate, patch),
+    configurePurser: (input: { endpoint: string; apiKey: string; profile?: string }): Promise<CoworkSettings> =>
+      ipcRenderer.invoke(IpcChannel.SettingsConfigurePurser, input),
   },
   contexts: {
     list: (): Promise<ContextSnapshot> => ipcRenderer.invoke(IpcChannel.ContextList),

@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { CoworkSettings } from '@shared/types';
 
-const DEFAULTS: CoworkSettings = { defaultFundingRef: null, trackChatsByDefault: false };
+const DEFAULTS: CoworkSettings = { defaultFundingRef: null, trackChatsByDefault: false, purserGatewayConfigured: false };
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<CoworkSettings>(DEFAULTS);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [purserEndpoint, setPurserEndpoint] = useState('http://127.0.0.1:8000');
+  const [purserKey, setPurserKey] = useState('');
+  const [purserProfile, setPurserProfile] = useState('default');
 
   useEffect(() => {
     void window.hermes.settings.get().then(setSettings).catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -17,6 +20,19 @@ export function SettingsPage() {
     try {
       const next = await window.hermes.settings.update(settings);
       setSettings(next);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const configurePurser = async () => {
+    setError(null);
+    try {
+      const next = await window.hermes.settings.configurePurser({ endpoint: purserEndpoint, apiKey: purserKey, profile: purserProfile });
+      setSettings(next);
+      setPurserKey('');
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1500);
     } catch (e) {
@@ -53,7 +69,17 @@ export function SettingsPage() {
           </span>
         </label>
 
-        {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+      <section className="mt-4 rounded-lg border border-border bg-surface p-4">
+        <h3 className="mb-1 text-sm font-medium">Purser gateway</h3>
+        <p className="mb-3 text-[11px] text-dim">The key is written to the selected Hermes profile secret file and is never persisted by Cowork.</p>
+        <input value={purserEndpoint} onChange={(e) => setPurserEndpoint(e.target.value)} placeholder="http://127.0.0.1:8000" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
+        <input value={purserProfile} onChange={(e) => setPurserProfile(e.target.value)} placeholder="Hermes profile" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
+        <input type="password" value={purserKey} onChange={(e) => setPurserKey(e.target.value)} placeholder="Purser inference API key" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
+        <button onClick={() => void configurePurser()} disabled={!purserKey.trim()} className="rounded bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">Configure Purser gateway</button>
+        <p className="mt-2 text-[11px] text-dim">{settings.purserGatewayConfigured ? 'A Purser gateway is configured for at least one profile.' : 'No Purser gateway is configured.'}</p>
+      </section>
+
+      {error && <p className="mt-3 text-xs text-danger">{error}</p>}
         <div className="mt-4 flex items-center gap-3">
           <button onClick={() => void save()} className="rounded bg-accent px-4 py-2 text-sm font-semibold text-bg">Save settings</button>
           {saved && <span className="text-xs text-muted">Saved</span>}

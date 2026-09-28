@@ -57,6 +57,7 @@ export const IpcChannel = {
   // local app settings
   SettingsGet: 'settings:get',
   SettingsUpdate: 'settings:update',
+  SettingsConfigurePurser: 'settings:configure-purser',
 
   // cowork tasks
   TaskList: 'task:list',

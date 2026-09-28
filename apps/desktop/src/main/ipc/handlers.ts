@@ -2,8 +2,9 @@
 import { app, ipcMain, BrowserWindow, dialog, Notification, type IpcMainInvokeEvent } from 'electron';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { spawn, execFile as execFileCb } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { promisify } from 'node:util';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
@@ -25,6 +26,22 @@ import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { UpdaterController } from '../update/updater';
 import type { TaskStatus, RemoteOrigin, RemoteAgent } from '../../shared/types';
+
+const execFile = promisify(execFileCb);
+function readTextFileSafe(path: string): string {
+  try { return readFileSync(path, 'utf8'); } catch { return ''; }
+}
+function setEnvValue(raw: string, key: string, value: string): string {
+  const lines = raw.split(/\r?\n/).filter((line) => !line.startsWith(`${key}=`));
+  return `${lines.filter(Boolean).join('\n')}\n${key}=${value}\n`;
+}
+function writeSecretFile(path: string, value: string): void {
+  writeFileSync(path, value, { mode: 0o600 });
+  chmodSync(path, 0o600);
+}
+async function runHermesConfig(binary: string, home: string, args: string[]): Promise<void> {
+  await execFile(binary, ['config', 'set', ...args], { env: { ...process.env, HERMES_HOME: home } });
+}
 
 type Context = {
   hermesBinary: string;
@@ -413,7 +430,25 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const contexts = new ContextStore(join(userData, 'contexts.json'));
   const settings = new SettingsStore(join(userData, 'settings.json'));
 
-  handle(IpcChannel.SettingsGet, () => settings.snapshot());
+  handle(IpcChannel.SettingsConfigurePurser, async (_e, raw: unknown) => {
+    const patch = obj(raw, 'Purser configuration');
+    const endpoint = str(patch['endpoint'], 'endpoint').trim().replace(/\/$/, '').replace(/\/v1$/, '');
+    const apiKey = str(patch['apiKey'], 'apiKey').trim();
+    if (!/^https?:\/\/[^\s]+$/i.test(endpoint)) throw new Error('Purser endpoint must be an HTTP(S) URL');
+    if (!apiKey || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) throw new Error('invalid Purser API key');
+    const profile = str(patch['profile'] ?? 'default', 'profile');
+    if (profile !== 'default' && !isValidProfileName(profile)) throw new Error('invalid profile');
+    const home = profileHome(ctx.globalHermesHome, profile);
+    const envPath = join(home, '.env');
+    const currentEnv = readTextFileSafe(envPath);
+    const nextEnv = setEnvValue(currentEnv, 'PURSER_COWORK_API_KEY', apiKey);
+    writeSecretFile(envPath, nextEnv);
+    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.api', `${endpoint}/v1`]);
+    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.key_env', 'PURSER_COWORK_API_KEY']);
+    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.catalog_provider', 'openrouter']);
+    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.transport', 'chat_completions']);
+    return settings.markPurserConfigured();
+  });
   handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {
     const patch = obj(raw, 'settings patch');
     const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean } = {};
