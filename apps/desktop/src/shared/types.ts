@@ -108,14 +108,15 @@ export type FundingAttribution = {
  */
 export type ChatSession = {
   id: string;
-  acpSessionId: string;
   title: string | null;
   projectId: string | null;
   /** Hermes profile the chat was created under — a session only exists in
    * that profile's HERMES_HOME, so resume must use it. Null on legacy rows. */
   profile: string | null;
-  /** Set when the chat runs on a remote agent; resume reconnects to it. */
+  /** Set when this chat runs on a remote agent; resume reconnects to it. */
   remoteId: string | null;
+  /** A durable chat record may be allocated before its first ACP session. */
+  acpSessionId: string | null;
   /** Immutable decision captured when this chat was opened; null only for legacy rows. */
   attribution: FundingAttribution | null;
   createdAt: string;

@@ -76,6 +76,7 @@ export const IpcChannel = {
   // chat sessions (plain chatbot conversations, folderless)
   ChatList: 'chat:list',
   ChatCreate: 'chat:create',
+  ChatBind: 'chat:bind',
   ChatUpdate: 'chat:update',
   ChatRemove: 'chat:remove',
 

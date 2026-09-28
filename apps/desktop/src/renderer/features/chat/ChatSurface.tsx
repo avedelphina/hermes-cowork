@@ -39,36 +39,39 @@ export function useChatSurface() {
     if (remoteId && !agent) throw new Error('That remote agent no longer exists.');
     const proj = agent ? null : activeProject();
     const chatProfile = agent?.profile ?? proj?.profile ?? (await profileReady.current);
-    const { sessionId: id } = await window.hermes.acp.start({
+    const chat = await window.hermes.chats.create({
+      projectId: proj?.id ?? null,
+      title: null,
       profile: chatProfile,
-      ...(agent ? { remoteId: agent.id } : {}),
-      ...(proj?.folderPath ? { cwd: proj.folderPath } : {}),
+      remoteId: agent?.id ?? null,
     });
-    startSession(id);
     try {
-      const chat = await window.hermes.chats.create({
-        acpSessionId: id,
-        projectId: proj?.id ?? null,
-        title: null,
+      const { sessionId: id } = await window.hermes.acp.start({
         profile: chatProfile,
-        remoteId: agent?.id ?? null,
+        chatId: chat.id,
+        ...(agent ? { remoteId: agent.id } : {}),
+        ...(proj?.folderPath ? { cwd: proj.folderPath } : {}),
       });
+      startSession(id);
+      await window.hermes.chats.bind(chat.id, id);
       setChatId(chat.id);
       void useChatsStore.getState().reload();
-    } catch {
-      /* the ACP session still works; it just won't persist */
+      return id;
+    } catch (error) {
+      await window.hermes.chats.remove(chat.id);
+      throw error;
     }
-    return id;
   };
 
   // Resume a persisted chat by its row id (replays history via session/load).
   const pick = async (chatId: string) => {
     if (useChatStore.getState().chatId === chatId) return;
     const chat = useChatsStore.getState().chats.find((c) => c.id === chatId);
-    if (!chat) return;
+    if (!chat || !chat.acpSessionId) return;
+    const sessionId = chat.acpSessionId;
     const current = useChatStore.getState().sessionId;
     if (current) void window.hermes.acp.stop(current);
-    startSession(chat.acpSessionId);
+    startSession(sessionId);
     setChatId(chat.id);
     // Show which agent this chat belongs to (and keep it for the next new chat).
     setRemoteId(chat.remoteId);
@@ -77,7 +80,7 @@ export function useChatSurface() {
       : null;
     try {
       await window.hermes.acp.load({
-        sessionId: chat.acpSessionId,
+        sessionId,
         // Main reconnects to the chat's remote agent, if it has one.
         chatId: chat.id,
         // The profile it was created under — a different one is a different
