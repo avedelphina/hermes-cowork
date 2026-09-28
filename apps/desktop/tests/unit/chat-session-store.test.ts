@@ -10,7 +10,10 @@ beforeEach(() => {
   file = join(mkdtempSync(join(tmpdir(), 'chat-')), 'chats.json');
 });
 
-const input = { acpSessionId: 's1', projectId: null, title: null, profile: 'work' };
+const input = {
+  acpSessionId: 's1', projectId: null, title: null, profile: 'work',
+  attribution: { schemaVersion: 1 as const, fundingRef: null, source: 'none' as const, tracked: false, capturedAt: '2026-09-28T00:00:00.000Z', projectId: null, contextId: null },
+};
 
 describe('ChatSessionStore', () => {
   it('create persists a chat another instance can read', () => {
@@ -27,6 +30,7 @@ describe('ChatSessionStore', () => {
     expect(store.create(input).remoteId).toBeNull();
     writeFileSync(file, JSON.stringify({ chats: [{ id: 'old', acpSessionId: 's', createdAt: 'a', updatedAt: 'a' }] }));
     expect(new ChatSessionStore(file).get('old')?.remoteId).toBeNull();
+    expect(new ChatSessionStore(file).get('old')?.attribution).toBeNull();
   });
 
   it('update sets the title and bumps updatedAt', async () => {

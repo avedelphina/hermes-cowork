@@ -27,6 +27,18 @@ export type PendingApproval = {
 
 export type TaskRunStatus = 'created' | 'attached' | 'finished' | 'stopped' | 'lost';
 
+/** Immutable funding decision captured at an execution boundary. The reference
+ * is an opaque selector only: it is never a credential or authorisation claim. */
+export type AttributionSnapshot = {
+  schemaVersion: 1;
+  fundingRef: string | null;
+  source: 'project' | 'context' | 'settings' | 'none';
+  tracked: boolean;
+  capturedAt: string;
+  projectId: string | null;
+  contextId: string | null;
+};
+
 /**
  * A durable cowork-pipe attempt. `offset` is the number of complete output
  * bytes the control plane has processed, never a frame count.
@@ -38,6 +50,8 @@ export type TaskRun = {
   acpSessionId: string | null;
   status: TaskRunStatus;
   offset: number;
+  /** Immutable: project/settings changes must never rewrite an existing run. */
+  attribution: AttributionSnapshot;
   createdAt: string;
   updatedAt: string;
   finishedAt?: string;

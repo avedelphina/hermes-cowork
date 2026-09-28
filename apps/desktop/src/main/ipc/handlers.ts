@@ -18,6 +18,7 @@ import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { ContextStore } from '../store/context-store';
 import { SettingsStore } from '../store/settings-store';
+import { resolveAttribution } from '../store/attribution';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
@@ -424,6 +425,18 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return id;
   };
 
+  /** Resolve only stored records. A non-null broken project/context reference
+   * is an error, never a quiet fallback to the Settings default. */
+  const taskAttribution = (projectId: string | null) => resolveFunding(projectId, true);
+  const chatAttribution = (projectId: string | null) => resolveFunding(projectId, settings.snapshot().trackChatsByDefault);
+  function resolveFunding(projectId: string | null, tracked: boolean) {
+    const project = projectId ? projects.get(projectId) : null;
+    if (projectId && !project) throw new Error(`unknown project ${projectId}`);
+    const context = project?.contextId ? contexts.get(project.contextId) : null;
+    if (project?.contextId && !context) throw new Error(`project ${project.id} references an unknown context`);
+    return resolveAttribution({ project, context, settings: settings.snapshot(), tracked });
+  }
+
   handle(IpcChannel.ProjectList, () => projects.snapshot());
 
   handle(
@@ -569,7 +582,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (task.remote) throw new Error('remote Cowork tasks do not yet support durable cowork-pipe runs');
     if (!isExistingDir(task.cwd)) throw new Error(`Cannot start task: "${task.cwd}" is not an existing directory.`);
     await assertKnownProfile(task.profile);
-    const run = tasks.createRun(task.id, null);
+    const run = tasks.createRun(task.id, null, taskAttribution(task.projectId));
     if (!run) throw new Error('task already has an active run');
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'cowork-pipe.py')
@@ -714,6 +727,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         title: strOrNull(o['title'], 'title'),
         profile: strOrNull(o['profile'], 'profile'),
         remoteId: remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'))?.id ?? null,
+        // The renderer may choose a project, never a funding reference. This
+        // snapshot preserves an explicit chat opt-in/out decision forever.
+        attribution: chatAttribution(strOrNull(o['projectId'], 'projectId')),
       });
     },
   );

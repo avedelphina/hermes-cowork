@@ -7,11 +7,11 @@
 
 import { readJson, writeJsonAtomic, pick } from './json-file';
 import { randomUUID } from 'node:crypto';
-import type { ChatSession } from '../../shared/types';
+import type { ChatSession, FundingAttribution } from '../../shared/types';
 export type { ChatSession };
 
 type Data = { chats: ChatSession[] };
-type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null };
+type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null; attribution: FundingAttribution };
 
 export class ChatSessionStore {
   private data: Data = { chats: [] };
@@ -28,6 +28,7 @@ export class ChatSessionStore {
       projectId: c.projectId ?? null,
       profile: c.profile ?? null,
       remoteId: c.remoteId ?? null, // migrate pre-remote records
+      attribution: c.attribution ?? null, // legacy chats must never inherit current settings
     }));
     return { chats };
   }
@@ -54,6 +55,7 @@ export class ChatSessionStore {
       projectId: input.projectId,
       profile: input.profile,
       remoteId: input.remoteId ?? null,
+      attribution: structuredClone(input.attribution),
       createdAt: now,
       updatedAt: now,
     };

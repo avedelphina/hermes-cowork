@@ -91,6 +91,16 @@ export type Project = {
 };
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
 
+export type FundingAttribution = {
+  schemaVersion: 1;
+  fundingRef: string | null;
+  source: 'project' | 'context' | 'settings' | 'none';
+  tracked: boolean;
+  capturedAt: string;
+  projectId: string | null;
+  contextId: string | null;
+};
+
 /**
  * A persisted Chat conversation. Like CoworkTask, this is only the metadata
  * around one ACP session — the conversation itself lives in Hermes and is
@@ -106,6 +116,8 @@ export type ChatSession = {
   profile: string | null;
   /** Set when the chat runs on a remote agent; resume reconnects to it. */
   remoteId: string | null;
+  /** Immutable decision captured when this chat was opened; null only for legacy rows. */
+  attribution: FundingAttribution | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -197,6 +209,11 @@ export type AcpServerMessage = (
   // the files the tool touches (from ACP `locations`).
   | { kind: 'tool-call'; sessionId: string; toolCallId: string; name: string; op: string; paths: string[]; args: unknown }
   | { kind: 'tool-result'; sessionId: string; toolCallId: string; result: unknown }
+  /** Current estimated context pressure. This is a snapshot, never billable usage. */
+  | { kind: 'usage'; sessionId: string; contextWindowTokens: number; usedTokens: number }
+  /** Provider-reported token counts for one completed prompt. They are not yet
+   * Purser ledger entries and must not be accumulated as context pressure. */
+  | { kind: 'turn-usage'; sessionId: string; inputTokens: number; outputTokens: number; totalTokens: number; reasoningTokens?: number; cachedReadTokens?: number }
   // ACP `plan` update: the agent's current step list. Emitted as a live
   // checklist during execution and re-emitted whole when the agent re-plans.
   | { kind: 'plan'; sessionId: string; entries: Array<{ content: string; status: string }> }

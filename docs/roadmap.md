@@ -64,10 +64,21 @@ The initial Context and Settings slices persist Contexts, project membership/ref
 fields, a default funding reference, and an explicit chat-tracking preference.
 They validate Context ids and Settings updates in the main IPC boundary and
 expose Context creation/selection on the Projects page plus the default in
-Settings. They deliberately do **not** contact Purser, measure usage, show
-balances, snapshot attribution onto executions, or enforce budgets. Purser
-remains authoritative for credentials, reservations, balances, and any refusal
-to execute.
+Settings.
+
+The accounting-foundation slice now snapshots that resolved decision onto every
+new durable task run and new chat. Task runs are always eligible for attribution;
+chat snapshots follow the explicit `trackChatsByDefault` setting. Legacy rows
+remain untracked/unknown rather than inheriting today's Settings. Cowork also
+captures two deliberately distinct Hermes signals: provider-reported per-prompt
+token counts from `session/prompt`, and `usage_update` context pressure. The
+latter is only an estimated context-window snapshot and is never summed or
+presented as spend.
+
+These slices still deliberately do **not** contact Purser, show balances,
+reserve funds, export an outbox, or enforce budgets. Purser remains authoritative
+for credentials, reservations, balances, idempotent ledger entries, and any
+refusal to execute.
 
 Chat tracking will be an explicit opt-in product setting, disabled by default
 for new installs even when a default funding reference exists. This preserves

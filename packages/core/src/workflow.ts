@@ -1,10 +1,22 @@
 import type { Clock, IdGenerator, TaskWorkflowRepository } from './repository';
-import type { CreateTaskInput, PendingApproval, TaskRun, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask } from './types';
+import type { CreateTaskInput, PendingApproval, TaskRun, TaskStatus, TaskWorkflowEvent, TaskWorkflowSnapshot, WorkflowPatch, WorkflowTask, AttributionSnapshot } from './types';
 
 const LIVE: readonly TaskStatus[] = ['planning', 'awaiting_approval', 'executing'];
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function legacyAttribution(capturedAt: string): AttributionSnapshot {
+  return {
+    schemaVersion: 1,
+    fundingRef: null,
+    source: 'none',
+    tracked: false,
+    capturedAt,
+    projectId: null,
+    contextId: null,
+  };
 }
 
 function normalise(snapshot: Partial<TaskWorkflowSnapshot>): TaskWorkflowSnapshot {
@@ -25,7 +37,10 @@ function normalise(snapshot: Partial<TaskWorkflowSnapshot>): TaskWorkflowSnapsho
     })),
     events: Array.isArray(snapshot.events) ? snapshot.events : [],
     approvals: Array.isArray(snapshot.approvals) ? snapshot.approvals : [],
-    runs: Array.isArray(snapshot.runs) ? snapshot.runs : [],
+    runs: (Array.isArray(snapshot.runs) ? snapshot.runs : []).map((run) => ({
+      ...run,
+      attribution: run.attribution ?? legacyAttribution(run.createdAt),
+    })),
   };
 }
 
@@ -237,7 +252,7 @@ export class TaskWorkflow {
       .map(clone);
   }
 
-  createRun(taskId: string, acpSessionId: string | null): TaskRun | null {
+  createRun(taskId: string, acpSessionId: string | null, attribution?: AttributionSnapshot): TaskRun | null {
     const task = this.mutable(taskId);
     if (!task || task.activeRunId) return null;
     const attempt = this.snapshot.runs.filter((run) => run.taskId === taskId).length + 1;
@@ -249,6 +264,7 @@ export class TaskWorkflow {
       acpSessionId,
       status: 'created',
       offset: 0,
+      attribution: clone(attribution ?? legacyAttribution(now)),
       createdAt: now,
       updatedAt: now,
     };

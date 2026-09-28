@@ -111,6 +111,30 @@ function normalizeModels(raw: unknown): AcpModels | null {
   };
 }
 
+function optionalUsageToken(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function parseTurnUsage(raw: unknown): Omit<Extract<AcpServerMessage, { kind: 'turn-usage' }>, 'kind' | 'sessionId'> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const usage = raw as Record<string, unknown>;
+  const inputTokens = usage['inputTokens'];
+  const outputTokens = usage['outputTokens'];
+  const totalTokens = usage['totalTokens'];
+  if (typeof inputTokens !== 'number' || !Number.isSafeInteger(inputTokens) || inputTokens < 0 ||
+    typeof outputTokens !== 'number' || !Number.isSafeInteger(outputTokens) || outputTokens < 0 ||
+    typeof totalTokens !== 'number' || !Number.isSafeInteger(totalTokens) || totalTokens < 0) return null;
+  const reasoningTokens = optionalUsageToken(usage['thoughtTokens']);
+  const cachedReadTokens = optionalUsageToken(usage['cachedReadTokens']);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
+    ...(cachedReadTokens === undefined ? {} : { cachedReadTokens }),
+  };
+}
+
 export class AcpBridge extends EventEmitter {
   private acpToHandle = new Map<string, string>();
   /** Task ownership binds a live ACP permission to its durable core record. */
@@ -317,10 +341,12 @@ export class AcpBridge extends EventEmitter {
           prompt.push({ type: 'text', text: `Attached file: ${attachment.name}\n${attachment.data}` });
         }
       }
-      await this.sup.request(handle, 'session/prompt', {
+      const result = (await this.sup.request(handle, 'session/prompt', {
         sessionId,
         prompt,
-      });
+      })) as { usage?: unknown } | null;
+      const usage = parseTurnUsage(result?.usage);
+      if (usage) this.out({ kind: 'turn-usage', sessionId, ...usage });
     } finally {
       this.out({ kind: 'done', sessionId });
     }
