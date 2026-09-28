@@ -33,7 +33,7 @@ try:
     env = {**os.environ, 'PURSER_COWORK_E2E_KEY': key}
     subprocess.run(
         ['pnpm', '--filter', '@hermes-cowork/desktop', 'exec', 'playwright', 'test',
-         'tests/e2e/purser-config.spec.ts', 'tests/e2e/purser-task-live.spec.ts', '--reporter=line'],
+         'tests/e2e/purser-config.spec.ts', 'tests/e2e/purser-task-live.spec.ts', '--workers=1', '--reporter=line'],
         cwd='/Users/avedelphina/Hermes-Cowork', env=env, check=True)
 finally:
     for name in ('.env', 'config.yaml'):
