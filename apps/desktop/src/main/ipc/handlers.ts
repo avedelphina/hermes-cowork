@@ -436,6 +436,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     const apiKey = str(patch['apiKey'], 'apiKey').trim();
     if (!/^https?:\/\/[^\s]+$/i.test(endpoint)) throw new Error('Purser endpoint must be an HTTP(S) URL');
     if (!apiKey || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) throw new Error('invalid Purser API key');
+    const model = str(patch['model'] ?? 'qwen/qwen3-coder', 'model').trim();
+    if (!model || model.length > 256) throw new Error('invalid Purser model');
     const profile = str(patch['profile'] ?? 'default', 'profile');
     if (profile !== 'default' && !isValidProfileName(profile)) throw new Error('invalid profile');
     const home = profileHome(ctx.globalHermesHome, profile);
@@ -447,6 +449,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.key_env', 'PURSER_COWORK_API_KEY']);
     await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.catalog_provider', 'openrouter']);
     await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.transport', 'chat_completions']);
+    await runHermesConfig(ctx.hermesBinary, home, ['model.provider', 'custom:purser']);
+    await runHermesConfig(ctx.hermesBinary, home, ['model.default', model]);
     return settings.markPurserConfigured();
   });
   handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {

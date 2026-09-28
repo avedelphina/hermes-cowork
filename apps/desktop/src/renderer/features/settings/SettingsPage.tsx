@@ -10,6 +10,7 @@ export function SettingsPage() {
   const [purserEndpoint, setPurserEndpoint] = useState('http://127.0.0.1:8000');
   const [purserKey, setPurserKey] = useState('');
   const [purserProfile, setPurserProfile] = useState('default');
+  const [purserModel, setPurserModel] = useState('qwen/qwen3-coder');
 
   useEffect(() => {
     void window.hermes.settings.get().then(setSettings).catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -30,7 +31,7 @@ export function SettingsPage() {
   const configurePurser = async () => {
     setError(null);
     try {
-      const next = await window.hermes.settings.configurePurser({ endpoint: purserEndpoint, apiKey: purserKey, profile: purserProfile });
+      const next = await window.hermes.settings.configurePurser({ endpoint: purserEndpoint, apiKey: purserKey, profile: purserProfile, model: purserModel });
       setSettings(next);
       setPurserKey('');
       setSaved(true);
@@ -74,6 +75,7 @@ export function SettingsPage() {
         <p className="mb-3 text-[11px] text-dim">The key is written to the selected Hermes profile secret file and is never persisted by Cowork.</p>
         <input value={purserEndpoint} onChange={(e) => setPurserEndpoint(e.target.value)} placeholder="http://127.0.0.1:8000" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
         <input value={purserProfile} onChange={(e) => setPurserProfile(e.target.value)} placeholder="Hermes profile" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
+        <input value={purserModel} onChange={(e) => setPurserModel(e.target.value)} placeholder="Purser model id" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
         <input type="password" value={purserKey} onChange={(e) => setPurserKey(e.target.value)} placeholder="Purser inference API key" className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm" />
         <button onClick={() => void configurePurser()} disabled={!purserKey.trim()} className="rounded bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">Configure Purser gateway</button>
         <p className="mt-2 text-[11px] text-dim">{settings.purserGatewayConfigured ? 'A Purser gateway is configured for at least one profile.' : 'No Purser gateway is configured.'}</p>
