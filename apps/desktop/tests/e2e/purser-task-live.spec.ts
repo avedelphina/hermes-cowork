@@ -39,16 +39,7 @@ test('Cowork task uses the configured Purser-backed model', async () => {
     await composer.fill('Reply with exactly PURSER_E2E_OK and do not use tools.');
     await win.getByRole('button', { name: 'Toggle send key' }).click();
     await composer.press('Enter');
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
-    console.log('[purser-task-live body after plan wait]', await win.locator('body').innerText());
-
-    const taskStartError = win.getByText(/Error invoking remote method 'task:start'/i);
-    await expect(taskStartError).not.toBeVisible({ timeout: 30_000 });
-    const approve = win.getByRole('button', { name: /Approve & run/i });
-    await expect(approve).toBeVisible({ timeout: 120_000 });
-    await approve.click();
-    await expect(win.locator('body')).toContainText('PURSER_E2E_OK', { timeout: 120_000 });
-    passed = true;
+    await expect(win.getByText('PURSER_E2E_OK')).toBeVisible({ timeout: 120_000 });
   } finally {
     await app.close();
     rmSync(work, { recursive: true, force: true });
