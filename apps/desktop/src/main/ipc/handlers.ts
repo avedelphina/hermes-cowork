@@ -16,6 +16,8 @@ import { isExistingDir, resolveWithinRoot } from '../security/paths';
 import { createTaskWorktree } from '../git/task-worktree';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
+import { ContextStore } from '../store/context-store';
+import { SettingsStore } from '../store/settings-store';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
@@ -382,6 +384,45 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const userData = process.env['HERMES_COWORK_USERDATA'] || app.getPath('userData');
   mkdirSync(userData, { recursive: true });
   const projects = new ProjectStore(join(userData, 'projects.json'));
+  const contexts = new ContextStore(join(userData, 'contexts.json'));
+  const settings = new SettingsStore(join(userData, 'settings.json'));
+
+  handle(IpcChannel.SettingsGet, () => settings.snapshot());
+  handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {
+    const patch = obj(raw, 'settings patch');
+    const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean } = {};
+    if (patch['defaultFundingRef'] !== undefined) next.defaultFundingRef = strOrNull(patch['defaultFundingRef'], 'defaultFundingRef');
+    if (patch['trackChatsByDefault'] !== undefined) {
+      if (typeof patch['trackChatsByDefault'] !== 'boolean') throw new Error('invalid trackChatsByDefault');
+      next.trackChatsByDefault = patch['trackChatsByDefault'];
+    }
+    return settings.update(next);
+  });
+
+  handle(IpcChannel.ContextList, () => contexts.snapshot());
+  handle(IpcChannel.ContextCreate, (_e, raw: unknown) => {
+    const input = obj(raw, 'context');
+    const name = str(input['name'], 'name').trim();
+    if (!name) throw new Error('context name is required');
+    return contexts.create({ name, fundingRef: strOrNull(input['fundingRef'], 'fundingRef') });
+  });
+  handle(IpcChannel.ContextUpdate, (_e, id: unknown, raw: unknown) => {
+    const patch = obj(raw, 'context patch');
+    const next: { name?: string; fundingRef?: string | null; archived?: boolean } = {};
+    if (patch['name'] !== undefined) {
+      next.name = str(patch['name'], 'name').trim();
+      if (!next.name) throw new Error('context name is required');
+    }
+    if (patch['fundingRef'] !== undefined) next.fundingRef = strOrNull(patch['fundingRef'], 'fundingRef');
+    if (patch['archived'] !== undefined) next.archived = patch['archived'] === true;
+    return contexts.update(str(id, 'id'), next);
+  });
+  handle(IpcChannel.ContextArchive, (_e, id: unknown) => contexts.archive(str(id, 'id')));
+
+  const assertContext = (id: string | null): string | null => {
+    if (id !== null && !contexts.get(id)) throw new Error(`unknown context ${id}`);
+    return id;
+  };
 
   handle(IpcChannel.ProjectList, () => projects.snapshot());
 
@@ -394,6 +435,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         folderPath: strOrNull(o['folderPath'], 'folderPath'),
         profile: str(o['profile'], 'profile'),
         remote: parseRemote(o['remote']),
+        contextId: assertContext(strOrNull(o['contextId'], 'contextId')),
+        fundingRef: strOrNull(o['fundingRef'], 'fundingRef'),
       };
       // A folder is optional (chat-only projects). If given, it must exist —
       // locally, or on the remote host for a remote project (shape-checked
@@ -409,7 +452,10 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         input.name.trim() ||
         folderPath?.split('/').filter(Boolean).pop() ||
         'Project';
-      return projects.create({ name, folderPath, profile: input.profile, remote: input.remote });
+      return projects.create({
+        name, folderPath, profile: input.profile, remote: input.remote,
+        contextId: input.contextId, fundingRef: input.fundingRef,
+      });
     },
   );
 
@@ -417,11 +463,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     IpcChannel.ProjectUpdate,
     (_e, id: unknown, raw: unknown) => {
       const patch = obj(raw, 'project patch');
-      const next: { name?: string; profile?: string; folderPath?: string | null; archived?: boolean; remote?: RemoteOrigin | null } = {};
+      const next: {
+        name?: string; profile?: string; folderPath?: string | null; archived?: boolean; remote?: RemoteOrigin | null;
+        contextId?: string | null; fundingRef?: string | null;
+      } = {};
       if (patch['name'] !== undefined) next.name = str(patch['name'], 'name');
       if (patch['profile'] !== undefined) next.profile = str(patch['profile'], 'profile');
       if (patch['archived'] !== undefined) next.archived = patch['archived'] === true;
       if (patch['remote'] !== undefined) next.remote = parseRemote(patch['remote']);
+      if (patch['contextId'] !== undefined) next.contextId = assertContext(strOrNull(patch['contextId'], 'contextId'));
+      if (patch['fundingRef'] !== undefined) next.fundingRef = strOrNull(patch['fundingRef'], 'fundingRef');
       if (patch['folderPath'] !== undefined) {
         const fp = strOrNull(patch['folderPath'], 'folderPath');
         next.folderPath = fp?.trim() ? fp : null;

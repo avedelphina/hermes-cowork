@@ -7,6 +7,7 @@ import { TasksPage } from './features/cowork/TasksPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { ProfilesManager } from './features/profiles/ProfilesManager';
 import { RemotesPage } from './features/remotes/RemotesPage';
+import { SettingsPage } from './features/settings/SettingsPage';
 import { SkillsPage, MemoryPage, CronPage, KanbanPage, InsightsPage } from './features/hermes/HermesSurfaces';
 
 export function Routes() {
@@ -17,6 +18,7 @@ export function Routes() {
       <Route path="/cowork/new"><NewTaskDialog /></Route>
       <Route path="/cowork/tasks"><TasksPage /></Route>
       <Route path="/cowork/projects"><ProjectsPage /></Route>
+      <Route path="/settings"><SettingsPage /></Route>
       <Route path="/profiles"><ProfilesManager /></Route>
       <Route path="/remotes"><RemotesPage /></Route>
       <Route path="/kanban"><KanbanPage /></Route>

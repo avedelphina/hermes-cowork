@@ -47,6 +47,33 @@ second stage requires a security-model update and tests for protected-folder
 access, project-root escape attempts, denial, checkpoints, and local/remote
 parity.
 
+## Contexts and Purser funding references
+
+A **Context** groups independent projects that belong to one engagement, customer,
+or larger integration. It is not a project hierarchy and it does not own task
+folders. Project membership is stored on the project record, so archival never
+rewrites historical task or chat records.
+
+Contexts and projects may carry an optional opaque Purser funding reference.
+When accounting is added, resolution will be project override → Context →
+Settings default → untracked. The resolved reference must be snapshotted when a
+task, run, or opted-in chat is created; editing a Context or Settings must never
+reclassify prior usage.
+
+The initial Context and Settings slices persist Contexts, project membership/reference
+fields, a default funding reference, and an explicit chat-tracking preference.
+They validate Context ids and Settings updates in the main IPC boundary and
+expose Context creation/selection on the Projects page plus the default in
+Settings. They deliberately do **not** contact Purser, measure usage, show
+balances, snapshot attribution onto executions, or enforce budgets. Purser
+remains authoritative for credentials, reservations, balances, and any refusal
+to execute.
+
+Chat tracking will be an explicit opt-in product setting, disabled by default
+for new installs even when a default funding reference exists. This preserves
+an untracked default for ordinary users while allowing a user who wants full
+accounting to enable default chat tracking.
+
 ## Name-first Cowork task creation
 
 A new Cowork task is first a persisted draft: the dialog records only its name,

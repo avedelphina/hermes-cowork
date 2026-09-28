@@ -52,9 +52,32 @@ export type RemoteAgent = {
   createdAt: string;
 };
 
+/** A durable grouping for related projects, such as one customer engagement. */
+export type Context = {
+  id: string;
+  name: string;
+  /** Opaque Purser funding reference. It is not an account-authorisation claim. */
+  fundingRef: string | null;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ContextSnapshot = { contexts: Context[] };
+
+/** Non-secret defaults for optional Purser attribution. */
+export type CoworkSettings = {
+  defaultFundingRef: string | null;
+  /** Chat remains untracked unless this is explicitly enabled. */
+  trackChatsByDefault: boolean;
+};
+
 export type Project = {
   id: string;
   name: string;
+  /** Optional parent grouping. Membership lives here, not as a duplicate list on Context. */
+  contextId: string | null;
+  /** Project-level funding override; null inherits from Context then Settings. */
+  fundingRef: string | null;
   /** Local folder the project is scoped to. Null for chat-only projects
    * (Cowork tasks require a folder; plain Chat does not). For a remote
    * project this is a path on the *remote* host. */

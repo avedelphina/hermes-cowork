@@ -13,8 +13,11 @@ import type { Project, RemoteOrigin } from '../../shared/types';
 export type { Project };
 
 type Data = { projects: Project[]; activeId: string | null };
-type CreateInput = { name: string; folderPath: string | null; profile: string; remote?: RemoteOrigin | null };
-type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived' | 'remote'>>;
+type CreateInput = {
+  name: string; folderPath: string | null; profile: string; remote?: RemoteOrigin | null;
+  contextId?: string | null; fundingRef?: string | null;
+};
+type UpdatePatch = Partial<Pick<Project, 'name' | 'profile' | 'folderPath' | 'archived' | 'remote' | 'contextId' | 'fundingRef'>>;
 
 export class ProjectStore {
   private data: Data = { projects: [], activeId: null };
@@ -30,6 +33,8 @@ export class ProjectStore {
       ...p,
       archived: p.archived ?? false, // migrate pre-archive records
       remote: p.remote ?? null, // migrate pre-remote records
+      contextId: typeof p.contextId === 'string' ? p.contextId : null,
+      fundingRef: typeof p.fundingRef === 'string' ? p.fundingRef : null,
     }));
     return {
       projects,
@@ -58,6 +63,8 @@ export class ProjectStore {
     const project: Project = {
       name: input.name, folderPath: input.folderPath, profile: input.profile,
       remote: input.remote ?? null,
+      contextId: input.contextId ?? null,
+      fundingRef: input.fundingRef?.trim() || null,
       id: randomUUID(), createdAt: now, lastOpenedAt: now, archived: false,
     };
     this.data.projects.push(project);
@@ -69,7 +76,7 @@ export class ProjectStore {
   update(id: string, patch: UpdatePatch): Project | null {
     const project = this.get(id);
     if (!project) return null;
-    Object.assign(project, pick(patch, ['name', 'profile', 'folderPath', 'archived', 'remote'] as const));
+    Object.assign(project, pick(patch, ['name', 'profile', 'folderPath', 'archived', 'remote', 'contextId', 'fundingRef'] as const));
     // Archiving the active project drops the active pointer to the next live one.
     if (project.archived && this.data.activeId === id) {
       this.data.activeId = this.data.projects.find((p) => !p.archived)?.id ?? null;

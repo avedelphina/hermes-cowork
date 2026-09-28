@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Project } from '@shared/types';
+import type { Context, Project } from '@shared/types';
 import { useProjectStore } from './project.store';
 import { api } from '../../api/rest-client';
 
@@ -11,10 +11,24 @@ export function ProjectsPage() {
   const [folder, setFolder] = useState('');
   const [profile, setProfile] = useState('default');
   const [sshTarget, setSshTarget] = useState('');
+  const [contexts, setContexts] = useState<Context[]>([]);
+  const [contextId, setContextId] = useState<string>('');
+  const [contextName, setContextName] = useState('');
+  const [contextFundingRef, setContextFundingRef] = useState('');
+  const [creatingContext, setCreatingContext] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ctx, setCtx] = useState<Record<string, string[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+
+  const reloadContexts = async () => {
+    const snap = await window.hermes.contexts.list();
+    setContexts(snap.contexts);
+  };
+
+  useEffect(() => {
+    void window.hermes.contexts.list().then((snap) => setContexts(snap.contexts));
+  }, []);
 
   useEffect(() => {
     for (const p of projects) {
@@ -49,12 +63,30 @@ export function ProjectsPage() {
       await window.hermes.projects.create({
         name, folderPath: folder.trim() || null, profile,
         remote: sshTarget.trim() ? { sshTarget: sshTarget.trim() } : null,
+        contextId: contextId || null,
       });
       await load();
       setCreating(false);
       setName('');
       setFolder('');
       setSshTarget('');
+      setContextId('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const createContext = async () => {
+    setError(null);
+    try {
+      const context = await window.hermes.contexts.create({
+        name: contextName.trim(), fundingRef: contextFundingRef.trim() || null,
+      });
+      await reloadContexts();
+      setContextId(context.id);
+      setContextName('');
+      setContextFundingRef('');
+      setCreatingContext(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -67,6 +99,7 @@ export function ProjectsPage() {
 
   const live = projects.filter((p) => !p.archived);
   const archived = projects.filter((p) => p.archived);
+  const contextById = new Map(contexts.map((context) => [context.id, context]));
 
   const Row = ({ p }: { p: Project }) => (
     <li
@@ -101,6 +134,11 @@ export function ProjectsPage() {
             </span>
           )}
           <span className="text-[10px] text-dim">{p.profile}</span>
+          {p.contextId && (
+            <span className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] text-muted" title="Project context">
+              {contextById.get(p.contextId)?.name ?? 'Archived context'}
+            </span>
+          )}
           {p.remote && (
             <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent" title="Runs on another machine over SSH">
               ⇄ {p.remote.sshTarget}
@@ -147,13 +185,51 @@ export function ProjectsPage() {
     <div className="mx-auto mt-10 max-w-2xl px-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Projects</h2>
-        <button
-          onClick={() => setCreating((v) => !v)}
-          className="rounded bg-surface2 px-3 py-1.5 text-xs hover:bg-border"
-        >
-          {creating ? 'Cancel' : '+ New project'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCreatingContext((v) => !v)}
+            className="rounded bg-surface2 px-3 py-1.5 text-xs hover:bg-border"
+          >
+            {creatingContext ? 'Cancel' : '+ New context'}
+          </button>
+          <button
+            onClick={() => setCreating((v) => !v)}
+            className="rounded bg-surface2 px-3 py-1.5 text-xs hover:bg-border"
+          >
+            {creating ? 'Cancel' : '+ New project'}
+          </button>
+        </div>
       </div>
+
+      {creatingContext && (
+        <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+          <label className="mb-1 block text-xs text-muted">Context name</label>
+          <input
+            autoFocus
+            value={contextName}
+            onChange={(e) => setContextName(e.target.value)}
+            placeholder="Acme integration"
+            className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+          />
+          <label className="mb-1 block text-xs text-muted">
+            Purser funding reference <span className="text-dim">(optional; tracking is configured later)</span>
+          </label>
+          <input
+            value={contextFundingRef}
+            onChange={(e) => setContextFundingRef(e.target.value)}
+            placeholder="wallet or funding reference"
+            className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+          />
+          {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+          <button
+            onClick={() => void createContext()}
+            disabled={!contextName.trim()}
+            className="rounded bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50"
+          >
+            Create context
+          </button>
+        </div>
+      )}
 
       {creating && (
         <div className="mb-6 rounded-lg border border-border bg-surface p-4">
@@ -178,6 +254,17 @@ export function ProjectsPage() {
             placeholder="Site redesign"
             className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
           />
+          <label className="mb-1 block text-xs text-muted">Context</label>
+          <select
+            value={contextId}
+            onChange={(e) => setContextId(e.target.value)}
+            className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+          >
+            <option value="">No context</option>
+            {contexts.filter((context) => !context.archived).map((context) => (
+              <option key={context.id} value={context.id}>{context.name}</option>
+            ))}
+          </select>
           <label className="mb-1 block text-xs text-muted">Profile</label>
           {sshTarget.trim() ? (
             // Remote profiles are not in the local dashboard's list, so the
