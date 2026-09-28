@@ -38,7 +38,7 @@ USAGE = 'usage: cowork-pipe attach <run-id> <offset> [-- <agent argv...>] | cowo
 EX_INTERRUPTED = 75
 # ponytail: a client this far behind is dropped; it re-attaches and replays from disk.
 MAX_BACKLOG = 64 << 20
-RUN_ID_CHARS = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-')
+RUN_ID_CHARS = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-')
 EVENT_RW = selectors.EVENT_READ | selectors.EVENT_WRITE
 
 

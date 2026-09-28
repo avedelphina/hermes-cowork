@@ -32,7 +32,6 @@ test('Cowork task uses the configured Purser-backed model', async () => {
     await win.locator('input[placeholder*="/Users/x/work"]').fill(work);
     await win.getByText('Profile', { exact: true }).locator('..').getByRole('combobox').selectOption('anikke');
     await win.locator('input[type="checkbox"]').uncheck();
-    await expect(win.getByRole('button', { name: /Create task/i })).toBeVisible();
     await win.getByRole('button', { name: /Create task/i }).click();
 
     const composer = win.getByRole('textbox', { name: 'Message input' });
@@ -43,6 +42,8 @@ test('Cowork task uses the configured Purser-backed model', async () => {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     console.log('[purser-task-live body after plan wait]', await win.locator('body').innerText());
 
+    const taskStartError = win.getByText(/Error invoking remote method 'task:start'/i);
+    await expect(taskStartError).not.toBeVisible({ timeout: 30_000 });
     const approve = win.getByRole('button', { name: /Approve & run/i });
     await expect(approve).toBeVisible({ timeout: 120_000 });
     await approve.click();
