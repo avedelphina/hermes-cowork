@@ -18,7 +18,7 @@ import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { ContextStore } from '../store/context-store';
 import { SettingsStore } from '../store/settings-store';
-import { resolveAttribution } from '../store/attribution';
+import { resolveAttribution, purserRequestHeaders } from '../store/attribution';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
@@ -176,12 +176,23 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       // Where the agent runs is decided by stored records, never by a
       // renderer-supplied host: the renderer only names a remote agent (chat)
       // or a project.
-      const agent = remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'));
+      const chatId = strOrNull(o['chatId'], 'chatId');
+      const chat = chatId ? chats.get(chatId) : null;
+      if (chatId && !chat) throw new Error(`unknown chat ${chatId}`);
+      if (chat?.acpSessionId) throw new Error('chat already has an ACP session');
+      const agent = chat ? chatRemoteAgent(chat.id) : remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'));
+      const projectId = chat ? chat.projectId : strOrNull(o['projectId'], 'projectId');
+      const profile = agent ? agent.profile : (chat?.profile ?? str(o['profile'], 'profile'));
+      const requestHeaders = chat
+        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null, projectId: null }, {
+          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
+        })
+        : null;
       const opts = {
-        profile: agent ? agent.profile : str(o['profile'], 'profile'),
+        profile,
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
         isolate: o['isolate'] === true,
-        remote: agent ? toOrigin(agent) : projectRemote(strOrNull(o['projectId'], 'projectId')),
+        remote: agent ? toOrigin(agent) : projectRemote(projectId),
       };
       // Chat is not folder-scoped — it defaults to the home directory (on a
       // remote agent: the remote login directory, "." over there). A Cowork
@@ -208,6 +219,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
         remote: opts.remote,
+        ...(requestHeaders ? { requestHeaders } : {}),
       });
     },
   );
@@ -238,6 +250,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         remote: null as RemoteOrigin | null,
       };
       const chatId = strOrNull(o['chatId'], 'chatId');
+      const chat = chatId ? chats.get(chatId) : null;
+      if (chatId && !chat) throw new Error(`unknown chat ${chatId}`);
       const agent = chatRemoteAgent(chatId);
       opts.remote = agent ? toOrigin(agent) : taskRemote(strOrNull(o['taskId'], 'taskId'));
       // A session lives in the profile it was created under, so a chat keeps
@@ -260,6 +274,17 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         await assertKnownProfile(profile);
       }
       const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
+      const taskId = strOrNull(o['taskId'], 'taskId');
+      const run = taskId ? tasks.activeRun(taskId) : null;
+      const requestHeaders = chat
+        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null, projectId: null }, {
+          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
+        })
+        : run
+          ? purserRequestHeaders(run.attribution, {
+            parentId: run.id, profile, jobClass: 'coding', retry: run.attempt - 1,
+          })
+          : null;
       const result = await bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -268,8 +293,8 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, profile),
         remote: opts.remote,
+        ...(requestHeaders ? { requestHeaders } : {}),
       });
-      const taskId = strOrNull(o['taskId'], 'taskId');
       if (taskId) bridge.bindTaskSession(taskId, result.sessionId);
       return result;
     },
@@ -584,6 +609,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     await assertKnownProfile(task.profile);
     const run = tasks.createRun(task.id, null, taskAttribution(task.projectId));
     if (!run) throw new Error('task already has an active run');
+    const requestHeaders = purserRequestHeaders(run.attribution, {
+      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
+    });
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'cowork-pipe.py')
       : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
@@ -594,6 +622,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
       remote: task.remote ?? null,
+      ...(requestHeaders ? { requestHeaders } : {}),
       ...(task.remote ? {} : {
         pipe: {
           scriptPath,
@@ -634,6 +663,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
     if (!isExistingDir(task.cwd)) throw new Error(`Cannot attach task: "${task.cwd}" is not an existing directory.`);
     await assertKnownProfile(task.profile);
+    const requestHeaders = purserRequestHeaders(run.attribution, {
+      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
+    });
     if (bridge.hasSession(task.acpSessionId)) {
       tasks.attachRun(run.id);
       bridge.bindTaskSession(task.id, task.acpSessionId);
@@ -649,6 +681,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       isolate: true,
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
+      ...(requestHeaders ? { requestHeaders } : {}),
       pipe: {
         scriptPath,
         runId: run.id,
@@ -722,7 +755,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     (_e, raw: unknown) => {
       const o = obj(raw, 'chat');
       return chats.create({
-        acpSessionId: str(o['acpSessionId'], 'acpSessionId'),
+        acpSessionId: strOrNull(o['acpSessionId'], 'acpSessionId'),
         projectId: strOrNull(o['projectId'], 'projectId'),
         title: strOrNull(o['title'], 'title'),
         profile: strOrNull(o['profile'], 'profile'),
@@ -733,6 +766,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       });
     },
   );
+  handle(IpcChannel.ChatBind, (_e, id: unknown, acpSessionId: unknown) => {
+    const chat = chats.bindSession(str(id, 'chat id'), str(acpSessionId, 'acpSessionId'));
+    if (!chat) throw new Error('unknown chat');
+    return chat;
+  });
   handle(IpcChannel.ChatUpdate, (_e, id: unknown, raw: unknown) => {
     const o = obj(raw, 'chat patch');
     const patch: { title?: string | null; projectId?: string | null } = {};

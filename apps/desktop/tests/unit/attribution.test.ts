@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { resolveAttribution } from '@main/store/attribution';
+import { resolveAttribution, purserRequestHeaders } from '@main/store/attribution';
 
 const settings = { defaultFundingRef: 'default-wallet', trackChatsByDefault: false };
 const project = { id: 'project-1', contextId: 'context-1', fundingRef: null };
@@ -37,5 +37,22 @@ describe('resolveAttribution', () => {
       tracked: true,
       capturedAt,
     })).toMatchObject({ fundingRef: null, source: 'none', tracked: false });
+  });
+
+  it('maps only a funded project snapshot to immutable Purser headers', () => {
+    expect(purserRequestHeaders(
+      resolveAttribution({ project, context, settings, tracked: true, capturedAt }),
+      { parentId: 'task-1:1', profile: 'anikke', jobClass: 'coding', retry: 0 },
+    )).toEqual({
+      'X-Purser-Project': 'project-1',
+      'X-Purser-Parent': 'task-1:1',
+      'X-Purser-Agent': 'anikke',
+      'X-Purser-Job-Class': 'coding',
+      'X-Purser-Retry': '0',
+    });
+    expect(purserRequestHeaders(
+      resolveAttribution({ project: null, context: null, settings, tracked: true, capturedAt }),
+      { parentId: 'chat-1', profile: 'anikke', jobClass: 'chat', retry: 0 },
+    )).toBeNull();
   });
 });

@@ -43,6 +43,8 @@ type StartSessionOpts = {
   remote?: RemoteOrigin | null;
   /** Give this session its own ACP child (not the shared pool). */
   isolate?: boolean;
+  /** Main-process-derived, Hermes-allowlisted request attribution. Never renderer input. */
+  requestHeaders?: Record<string, string>;
   /** Attach this isolated task session through cowork-pipe. */
   pipe?: {
     scriptPath: string;
@@ -187,6 +189,9 @@ export class AcpBridge extends EventEmitter {
       const res = (await this.sup.request(handle, 'session/new', {
         cwd: opts.cwd,
         mcpServers: [],
+        ...(opts.requestHeaders && Object.keys(opts.requestHeaders).length > 0
+          ? { _meta: { hermes: { requestHeaders: opts.requestHeaders } } }
+          : {}),
       }, CONTROL_TIMEOUT_MS)) as { sessionId?: string; models?: unknown };
       if (typeof res?.sessionId !== 'string') throw new Error('session/new returned no sessionId');
       this.bindSession(res.sessionId, handle);
@@ -270,6 +275,9 @@ export class AcpBridge extends EventEmitter {
         sessionId: opts.sessionId,
         cwd: opts.cwd,
         mcpServers: [],
+        ...(opts.requestHeaders && Object.keys(opts.requestHeaders).length > 0
+          ? { _meta: { hermes: { requestHeaders: opts.requestHeaders } } }
+          : {}),
       }, CONTROL_TIMEOUT_MS)) as { models?: unknown } | null;
       this.bindSession(opts.sessionId, handle);
       const models = normalizeModels(res?.models);

@@ -16,7 +16,7 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProfileEnv),
   },
   acp: {
-    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null; remoteId?: string | null }): Promise<{ sessionId: string }> =>
+    start: (opts: { profile: string; cwd?: string; isolate?: boolean; projectId?: string | null; remoteId?: string | null; chatId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpStart, opts),
     load: (opts: { sessionId: string; profile?: string; cwd?: string; isolate?: boolean; taskId?: string | null; chatId?: string | null }): Promise<{ sessionId: string }> =>
       ipcRenderer.invoke(IpcChannel.AcpLoad, opts),
@@ -111,8 +111,10 @@ const api = {
   },
   chats: {
     list: (): Promise<ChatSession[]> => ipcRenderer.invoke(IpcChannel.ChatList),
-    create: (input: { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null }): Promise<ChatSession> =>
+    create: (input: { acpSessionId?: string | null; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null }): Promise<ChatSession> =>
       ipcRenderer.invoke(IpcChannel.ChatCreate, input),
+    bind: (id: string, acpSessionId: string): Promise<ChatSession> =>
+      ipcRenderer.invoke(IpcChannel.ChatBind, id, acpSessionId),
     update: (id: string, patch: { title?: string | null; projectId?: string | null }): Promise<ChatSession | null> =>
       ipcRenderer.invoke(IpcChannel.ChatUpdate, id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ChatRemove, id),

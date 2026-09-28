@@ -75,6 +75,21 @@ token counts from `session/prompt`, and `usage_update` context pressure. The
 latter is only an estimated context-window snapshot and is never summed or
 presented as spend.
 
+The gateway-routing slice carries a main-process-derived, allowlisted metadata
+map only on ACP `session/new` and `session/load`: a stable Cowork project id,
+durable task-run/chat parent id, agent profile, work class, and retry number.
+The renderer cannot submit headers or Purser credentials. Hermes keeps this map
+in live ACP state only, merges it into model HTTP requests after hook/debug
+observers, and does not persist it to Hermes transcripts or session metadata.
+A tracked chat preallocates its durable record before the first ACP session, so
+its first model request has the same stable parent id as later reattachments.
+
+This is still not a local budget engine: accounting becomes operational only
+when the selected Hermes provider is configured to use Purser's authenticated
+OpenAI-compatible gateway. In that route Purser owns request IDs, holds,
+settlement, ledger idempotency, balances, and 402/429 denials. Direct Hermes
+provider traffic remains usage evidence, not a Purser charge.
+
 These slices still deliberately do **not** contact Purser, show balances,
 reserve funds, export an outbox, or enforce budgets. Purser remains authoritative
 for credentials, reservations, balances, idempotent ledger entries, and any

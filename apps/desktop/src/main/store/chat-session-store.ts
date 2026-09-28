@@ -11,7 +11,7 @@ import type { ChatSession, FundingAttribution } from '../../shared/types';
 export type { ChatSession };
 
 type Data = { chats: ChatSession[] };
-type CreateInput = { acpSessionId: string; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null; attribution: FundingAttribution };
+type CreateInput = { acpSessionId?: string | null; projectId: string | null; title: string | null; profile: string | null; remoteId?: string | null; attribution: FundingAttribution };
 
 export class ChatSessionStore {
   private data: Data = { chats: [] };
@@ -24,6 +24,7 @@ export class ChatSessionStore {
     const parsed = (readJson(this.filePath) ?? {}) as Partial<Data>;
     const chats = (Array.isArray(parsed.chats) ? parsed.chats : []).map((c) => ({
       ...c,
+      acpSessionId: c.acpSessionId ?? null,
       title: c.title ?? null,
       projectId: c.projectId ?? null,
       profile: c.profile ?? null,
@@ -50,7 +51,7 @@ export class ChatSessionStore {
     const now = new Date().toISOString();
     const chat: ChatSession = {
       id: randomUUID(),
-      acpSessionId: input.acpSessionId,
+      acpSessionId: input.acpSessionId ?? null,
       title: input.title,
       projectId: input.projectId,
       profile: input.profile,
@@ -60,6 +61,16 @@ export class ChatSessionStore {
       updatedAt: now,
     };
     this.data.chats.push(chat);
+    this.write();
+    return chat;
+  }
+
+  bindSession(id: string, acpSessionId: string): ChatSession | null {
+    const chat = this.get(id);
+    if (!chat) return null;
+    if (chat.acpSessionId && chat.acpSessionId !== acpSessionId) throw new Error('chat already belongs to another ACP session');
+    chat.acpSessionId = acpSessionId;
+    chat.updatedAt = new Date().toISOString();
     this.write();
     return chat;
   }

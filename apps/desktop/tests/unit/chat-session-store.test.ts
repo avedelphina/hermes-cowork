@@ -33,6 +33,14 @@ describe('ChatSessionStore', () => {
     expect(new ChatSessionStore(file).get('old')?.attribution).toBeNull();
   });
 
+  it('binds a preallocated chat exactly once', () => {
+    const store = new ChatSessionStore(file);
+    const draft = store.create({ ...input, acpSessionId: null });
+    expect(store.bindSession(draft.id, 's1')).toMatchObject({ acpSessionId: 's1' });
+    expect(() => store.bindSession(draft.id, 's2')).toThrow('another ACP session');
+    expect(new ChatSessionStore(file).get(draft.id)?.acpSessionId).toBe('s1');
+  });
+
   it('update sets the title and bumps updatedAt', async () => {
     const store = new ChatSessionStore(file);
     const c = store.create(input);
