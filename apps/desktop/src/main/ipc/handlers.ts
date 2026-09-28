@@ -17,6 +17,7 @@ import { createTaskWorktree } from '../git/task-worktree';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { ContextStore } from '../store/context-store';
+import { SettingsStore } from '../store/settings-store';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
@@ -384,6 +385,19 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   mkdirSync(userData, { recursive: true });
   const projects = new ProjectStore(join(userData, 'projects.json'));
   const contexts = new ContextStore(join(userData, 'contexts.json'));
+  const settings = new SettingsStore(join(userData, 'settings.json'));
+
+  handle(IpcChannel.SettingsGet, () => settings.snapshot());
+  handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {
+    const patch = obj(raw, 'settings patch');
+    const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean } = {};
+    if (patch['defaultFundingRef'] !== undefined) next.defaultFundingRef = strOrNull(patch['defaultFundingRef'], 'defaultFundingRef');
+    if (patch['trackChatsByDefault'] !== undefined) {
+      if (typeof patch['trackChatsByDefault'] !== 'boolean') throw new Error('invalid trackChatsByDefault');
+      next.trackChatsByDefault = patch['trackChatsByDefault'];
+    }
+    return settings.update(next);
+  });
 
   handle(IpcChannel.ContextList, () => contexts.snapshot());
   handle(IpcChannel.ContextCreate, (_e, raw: unknown) => {

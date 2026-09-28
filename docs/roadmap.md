@@ -60,11 +60,14 @@ Settings default → untracked. The resolved reference must be snapshotted when 
 task, run, or opted-in chat is created; editing a Context or Settings must never
 reclassify prior usage.
 
-The initial Context slice persists Contexts and project membership/reference
-fields, validates Context ids in the main IPC boundary, and exposes creation and
-selection on the Projects page. It deliberately does **not** contact Purser,
-measure usage, show balances, or enforce budgets. Purser remains authoritative
-for credentials, reservations, balances, and any refusal to execute.
+The initial Context and Settings slices persist Contexts, project membership/reference
+fields, a default funding reference, and an explicit chat-tracking preference.
+They validate Context ids and Settings updates in the main IPC boundary and
+expose Context creation/selection on the Projects page plus the default in
+Settings. They deliberately do **not** contact Purser, measure usage, show
+balances, snapshot attribution onto executions, or enforce budgets. Purser
+remains authoritative for credentials, reservations, balances, and any refusal
+to execute.
 
 Chat tracking will be an explicit opt-in product setting, disabled by default
 for new installs even when a default funding reference exists. This preserves

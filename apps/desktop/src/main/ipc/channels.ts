@@ -54,6 +54,10 @@ export const IpcChannel = {
   ContextUpdate: 'context:update',
   ContextArchive: 'context:archive',
 
+  // local app settings
+  SettingsGet: 'settings:get',
+  SettingsUpdate: 'settings:update',
+
   // cowork tasks
   TaskList: 'task:list',
   TaskCreate: 'task:create',

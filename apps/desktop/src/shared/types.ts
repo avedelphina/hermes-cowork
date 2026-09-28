@@ -64,6 +64,13 @@ export type Context = {
 };
 export type ContextSnapshot = { contexts: Context[] };
 
+/** Non-secret defaults for optional Purser attribution. */
+export type CoworkSettings = {
+  defaultFundingRef: string | null;
+  /** Chat remains untracked unless this is explicitly enabled. */
+  trackChatsByDefault: boolean;
+};
+
 export type Project = {
   id: string;
   name: string;

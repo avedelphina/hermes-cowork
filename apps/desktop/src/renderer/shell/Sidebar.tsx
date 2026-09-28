@@ -7,6 +7,7 @@ const COWORK_ITEMS: Item[] = [
   { icon: '⏵', label: 'Current task', href: '/cowork' },
   { icon: '☰', label: 'Tasks', href: '/cowork/tasks' },
   { icon: '📁', label: 'Projects', href: '/cowork/projects' },
+  { icon: '⚙', label: 'Settings', href: '/settings' },
 ];
 
 const HERMES_ITEMS: Item[] = [
