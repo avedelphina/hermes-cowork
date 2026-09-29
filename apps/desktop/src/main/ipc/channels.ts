@@ -54,10 +54,9 @@ export const IpcChannel = {
   ContextUpdate: 'context:update',
   ContextArchive: 'context:archive',
 
-  // local app settings
+  // local attribution-tracking settings
   SettingsGet: 'settings:get',
   SettingsUpdate: 'settings:update',
-  SettingsConfigurePurser: 'settings:configure-purser',
 
   // cowork tasks
   TaskList: 'task:list',

@@ -2,9 +2,8 @@
 import { app, ipcMain, BrowserWindow, dialog, Notification, type IpcMainInvokeEvent } from 'electron';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { spawn, execFile as execFileCb } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { IpcChannel } from './channels';
 import { AcpSupervisor } from '../orchestrator/acp-supervisor';
 import { AcpBridge } from '../orchestrator/acp-bridge';
@@ -19,29 +18,13 @@ import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { ContextStore } from '../store/context-store';
 import { SettingsStore } from '../store/settings-store';
-import { resolveAttribution, purserRequestHeaders } from '../store/attribution';
+import { resolveAttribution } from '../store/attribution';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
 import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { UpdaterController } from '../update/updater';
 import type { TaskStatus, RemoteOrigin, RemoteAgent } from '../../shared/types';
-
-const execFile = promisify(execFileCb);
-function readTextFileSafe(path: string): string {
-  try { return readFileSync(path, 'utf8'); } catch { return ''; }
-}
-function setEnvValue(raw: string, key: string, value: string): string {
-  const lines = raw.split(/\r?\n/).filter((line) => !line.startsWith(`${key}=`));
-  return `${lines.filter(Boolean).join('\n')}\n${key}=${value}\n`;
-}
-function writeSecretFile(path: string, value: string): void {
-  writeFileSync(path, value, { mode: 0o600 });
-  chmodSync(path, 0o600);
-}
-async function runHermesConfig(binary: string, home: string, args: string[]): Promise<void> {
-  await execFile(binary, ['config', 'set', ...args], { env: { ...process.env, HERMES_HOME: home } });
-}
 
 type Context = {
   hermesBinary: string;
@@ -200,11 +183,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       const agent = chat ? chatRemoteAgent(chat.id) : remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'));
       const projectId = chat ? chat.projectId : strOrNull(o['projectId'], 'projectId');
       const profile = agent ? agent.profile : (chat?.profile ?? str(o['profile'], 'profile'));
-      const requestHeaders = chat
-        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null, projectId: null }, {
-          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
-        })
-        : null;
       const opts = {
         profile,
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
@@ -236,7 +214,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
         remote: opts.remote,
-        ...(requestHeaders ? { requestHeaders } : {}),
       });
     },
   );
@@ -292,16 +269,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       }
       const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
       const taskId = strOrNull(o['taskId'], 'taskId');
-      const run = taskId ? tasks.activeRun(taskId) : null;
-      const requestHeaders = chat
-        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null, projectId: null }, {
-          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
-        })
-        : run
-          ? purserRequestHeaders(run.attribution, {
-            parentId: run.id, profile, jobClass: 'coding', retry: run.attempt - 1,
-          })
-          : null;
       const result = await bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -310,7 +277,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, profile),
         remote: opts.remote,
-        ...(requestHeaders ? { requestHeaders } : {}),
       });
       if (taskId) bridge.bindTaskSession(taskId, result.sessionId);
       return result;
@@ -430,29 +396,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   const contexts = new ContextStore(join(userData, 'contexts.json'));
   const settings = new SettingsStore(join(userData, 'settings.json'));
 
-  handle(IpcChannel.SettingsConfigurePurser, async (_e, raw: unknown) => {
-    const patch = obj(raw, 'Purser configuration');
-    const endpoint = str(patch['endpoint'], 'endpoint').trim().replace(/\/$/, '').replace(/\/v1$/, '');
-    const apiKey = str(patch['apiKey'], 'apiKey').trim();
-    if (!/^https?:\/\/[^\s]+$/i.test(endpoint)) throw new Error('Purser endpoint must be an HTTP(S) URL');
-    if (!apiKey || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) throw new Error('invalid Purser API key');
-    const model = str(patch['model'] ?? 'qwen/qwen3-coder', 'model').trim();
-    if (!model || model.length > 256) throw new Error('invalid Purser model');
-    const profile = str(patch['profile'] ?? 'default', 'profile');
-    if (profile !== 'default' && !isValidProfileName(profile)) throw new Error('invalid profile');
-    const home = profileHome(ctx.globalHermesHome, profile);
-    const envPath = join(home, '.env');
-    const currentEnv = readTextFileSafe(envPath);
-    const nextEnv = setEnvValue(currentEnv, 'PURSER_COWORK_API_KEY', apiKey);
-    writeSecretFile(envPath, nextEnv);
-    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.api', `${endpoint}/v1`]);
-    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.key_env', 'PURSER_COWORK_API_KEY']);
-    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.catalog_provider', 'openrouter']);
-    await runHermesConfig(ctx.hermesBinary, home, ['providers.purser.transport', 'chat_completions']);
-    await runHermesConfig(ctx.hermesBinary, home, ['model.provider', 'custom:purser']);
-    await runHermesConfig(ctx.hermesBinary, home, ['model.default', model]);
-    return settings.markPurserConfigured();
-  });
+  handle(IpcChannel.SettingsGet, () => settings.snapshot());
   handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {
     const patch = obj(raw, 'settings patch');
     const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean } = {};
@@ -648,9 +592,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     await assertKnownProfile(task.profile);
     const run = tasks.createRun(task.id, null, taskAttribution(task.projectId));
     if (!run) throw new Error('task already has an active run');
-    const requestHeaders = purserRequestHeaders(run.attribution, {
-      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
-    });
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'cowork-pipe.py')
       : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
@@ -661,7 +602,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
       remote: task.remote ?? null,
-      ...(requestHeaders ? { requestHeaders } : {}),
       ...(task.remote ? {} : {
         pipe: {
           scriptPath,
@@ -702,9 +642,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
     if (!isExistingDir(task.cwd)) throw new Error(`Cannot attach task: "${task.cwd}" is not an existing directory.`);
     await assertKnownProfile(task.profile);
-    const requestHeaders = purserRequestHeaders(run.attribution, {
-      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
-    });
     if (bridge.hasSession(task.acpSessionId)) {
       tasks.attachRun(run.id);
       bridge.bindTaskSession(task.id, task.acpSessionId);
@@ -720,7 +657,6 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       isolate: true,
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
-      ...(requestHeaders ? { requestHeaders } : {}),
       pipe: {
         scriptPath,
         runId: run.id,

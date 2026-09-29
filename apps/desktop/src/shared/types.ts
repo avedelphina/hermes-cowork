@@ -64,13 +64,11 @@ export type Context = {
 };
 export type ContextSnapshot = { contexts: Context[] };
 
-/** Non-secret defaults for optional Purser attribution. */
+/** Non-secret defaults for optional Purser attribution tracking. */
 export type CoworkSettings = {
   defaultFundingRef: string | null;
   /** Chat remains untracked unless this is explicitly enabled. */
   trackChatsByDefault: boolean;
-  /** Renderer-facing status; the actual key is never stored here. */
-  purserGatewayConfigured?: boolean;
 };
 
 export type Project = {
