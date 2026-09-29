@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
 
 const livePurserKey = process.env.PURSER_COWORK_E2E_KEY;
+const livePurserEndpoint = process.env.PURSER_COWORK_E2E_ENDPOINT ?? 'https://credits.ocean';
 
 test('settings: configure Purser gateway without exposing the key in Cowork state', async () => {
   test.skip(!livePurserKey, 'requires PURSER_COWORK_E2E_KEY for the live Purser configuration exercise');
@@ -22,7 +23,7 @@ test('settings: configure Purser gateway without exposing the key in Cowork stat
     await win.getByRole('link', { name: 'Cowork' }).click();
     await win.getByRole('link', { name: /Settings/i }).click();
     await expect(win.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await win.getByPlaceholder('http://127.0.0.1:8000').fill('http://127.0.0.1:8000');
+    await win.getByPlaceholder('http://127.0.0.1:8000').fill(livePurserEndpoint);
     await win.getByPlaceholder('Hermes profile').fill('anikke');
     await win.getByPlaceholder('Purser model id').fill('qwen/qwen3-coder');
     await win.getByPlaceholder('Purser inference API key').fill(livePurserKey!);

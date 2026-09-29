@@ -15,6 +15,7 @@ export function ProjectsPage() {
   const [contextId, setContextId] = useState<string>('');
   const [contextName, setContextName] = useState('');
   const [contextFundingRef, setContextFundingRef] = useState('');
+  const [projectFundingRef, setProjectFundingRef] = useState('');
   const [creatingContext, setCreatingContext] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ctx, setCtx] = useState<Record<string, string[]>>({});
@@ -64,6 +65,7 @@ export function ProjectsPage() {
         name, folderPath: folder.trim() || null, profile,
         remote: sshTarget.trim() ? { sshTarget: sshTarget.trim() } : null,
         contextId: contextId || null,
+        fundingRef: projectFundingRef.trim() || null,
       });
       await load();
       setCreating(false);
@@ -71,6 +73,7 @@ export function ProjectsPage() {
       setFolder('');
       setSshTarget('');
       setContextId('');
+      setProjectFundingRef('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -265,6 +268,13 @@ export function ProjectsPage() {
               <option key={context.id} value={context.id}>{context.name}</option>
             ))}
           </select>
+          <label className="mb-1 block text-xs text-muted">Purser funding reference <span className="text-dim">(optional; project overrides context)</span></label>
+          <input
+            value={projectFundingRef}
+            onChange={(e) => setProjectFundingRef(e.target.value)}
+            placeholder="wallet or funding reference"
+            className="mb-3 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+          />
           <label className="mb-1 block text-xs text-muted">Profile</label>
           {sshTarget.trim() ? (
             // Remote profiles are not in the local dashboard's list, so the
