@@ -105,36 +105,27 @@ describe('AcpBridge.startSession', () => {
     await expect(loadPromise).resolves.toEqual({ sessionId: 'past-sess-9' });
   });
 
-  it('puts main-process-derived request headers only on session/new and session/load', async () => {
+  it('does not accept per-session request headers', async () => {
     const { bridge, proc } = makeBridge();
-    const common = {
+    const start = bridge.startSession({
       profile: 'default', cwd: '/Users/x', binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
-      requestHeaders: {
-        'X-Purser-Project': 'project-1', 'X-Purser-Parent': 'run-1', 'X-Purser-Agent': 'anikke',
-        'X-Purser-Job-Class': 'coding', 'X-Purser-Retry': '0',
-      },
-    };
-    const start = bridge.startSession(common);
+    });
     await flush();
     proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
     await flush();
     const newReq = proc.findOutgoing('session/new')!;
-    expect(newReq['params']).toMatchObject({ _meta: { hermes: { requestHeaders: common.requestHeaders } } });
+    expect(newReq['params']).not.toHaveProperty('_meta');
     proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: newReq['id'] as string, result: { sessionId: 's1' } }));
     await start;
 
-    const load = bridge.loadSession({ ...common, sessionId: 'past-1' });
+    const load = bridge.loadSession({
+      profile: 'default', cwd: '/Users/x', binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes', sessionId: 'past-1',
+    });
     await flush();
     const loadReq = proc.findOutgoing('session/load')!;
-    expect(loadReq['params']).toMatchObject({ _meta: { hermes: { requestHeaders: common.requestHeaders } } });
+    expect(loadReq['params']).not.toHaveProperty('_meta');
     proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: loadReq['id'] as string, result: {} }));
     await load;
-
-    const prompt = bridge.sendPrompt('s1', 'hello');
-    await flush();
-    expect(proc.findOutgoing('session/prompt')!['params']).not.toHaveProperty('_meta');
-    proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/prompt')!['id'] as string, result: {} }));
-    await prompt;
   });
 
   it('reports whether this process already owns a session for idempotent task attachment', async () => {

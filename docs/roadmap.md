@@ -75,26 +75,11 @@ token counts from `session/prompt`, and `usage_update` context pressure. The
 latter is only an estimated context-window snapshot and is never summed or
 presented as spend.
 
-The gateway-routing slice carries a main-process-derived, allowlisted metadata
-map only on ACP `session/new` and `session/load`: a stable Cowork project id,
-durable task-run/chat parent id, agent profile, work class, and retry number.
-The renderer cannot submit headers or Purser credentials. Hermes keeps this map
-in live ACP state only, merges it into model HTTP requests after hook/debug
-observers, and does not persist it to Hermes transcripts or session metadata.
-A tracked chat preallocates its durable record before the first ACP session, so
-its first model request has the same stable parent id as later reattachments.
-
-This is still not a local budget engine: accounting becomes operational only
-when the selected Hermes provider is configured to use Purser's authenticated
-OpenAI-compatible gateway. In that route Purser owns request IDs, holds,
-settlement, ledger idempotency, balances, and 402/429 denials. Direct Hermes
-provider traffic remains usage evidence, not a Purser charge.
-
-The gateway-routing slice now also has a Settings flow for configuring a Purser
-endpoint and inference key. The renderer sends the key only over the protected
-IPC call; main validates it, writes it to the selected Hermes profile `.env`
-with mode 0600, and uses Hermes' own config writer for the named `purser`
-provider. Cowork stores only a boolean configured status, never the key.
+Cowork stores local, immutable funding-attribution snapshots for tasks and opted-in
+chats. Funding references resolve project → Context → Settings default and are
+never sent to Hermes or treated as authority to spend. Each session uses the
+provider configuration already assigned to its selected Hermes profile; provider
+routing and credentials remain outside Cowork.
 
 
 

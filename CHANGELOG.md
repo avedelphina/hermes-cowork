@@ -6,6 +6,18 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.18] — 2026-09-29
+
+### Changed
+- **Tracking-only Purser settings.** Cowork now stores only local funding
+  attribution (project → Context → Settings default) and optional chat tracking.
+  It no longer configures Hermes providers, writes inference keys, routes model
+  requests through Purser, or sends per-session Purser headers.
+
+### Fixed
+- **Settings now load.** Register the missing `settings:get` IPC handler so the
+  tracking controls can read their persisted state.
+
 ## [0.2.16] — 2026-09-27
 
 ### Added

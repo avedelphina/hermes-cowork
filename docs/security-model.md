@@ -81,20 +81,14 @@ _(not yet enforced)_ so the gap is visible rather than implied.
   task. Renderer-supplied execution context is not accepted by this boundary.
   If mode setup or persistence fails, the child is stopped and the task remains
   a draft. Folder and profile validation is repeated at start. _Enforced._
-## Purser gateway attribution
+## Funding attribution
 
-Cowork may send Purser attribution only through the ACP extension implemented by
-Hermes. The renderer supplies neither a header map nor a Purser credential.
-Main derives an allowlisted map from immutable task-run or chat attribution and
-sends it only with `session/new` and `session/load`; prompt payloads, renderer
-event journals, and durable Hermes metadata do not carry it.
-
-Only a provider configured to route its model HTTP traffic through Purser's
-authenticated OpenAI-compatible gateway can create Purser accounting. Purser's
-inference key stays in the selected Hermes profile secret scope. Cowork never
-stores, renders, or forwards that key. Purser remains the authority for account
-binding, holds, settlement, ledger idempotency, and denial; Cowork cannot use a
-funding reference or header to authorize spending.
+Cowork stores an immutable funding-attribution snapshot when a task or opted-in
+chat begins. The renderer chooses a project, never a funding reference; main
+resolves project → Context → Settings default from durable local state. The
+reference is an opaque tracking label: it is neither a credential nor a claim to
+spending authority, and Cowork does not send it to Hermes. Hermes starts each
+session using the selected profile's existing provider configuration.
 
 
 An approval is raised when Hermes calls `session/request_permission` (surfaced
