@@ -6,6 +6,21 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.19] — 2026-10-04
+
+### Added
+- **Approval of project instruction files.** Hermes loads `AGENTS.md`,
+  `.hermes.md` and similar files into the agent's system prompt, so a change to
+  one steers the agent. Before a local task, chat or resume starts, Cowork now
+  compares every such file with what you approved for the project and asks, in a
+  native dialog with a diff and the last committer, on any new, changed or
+  removed file. Approving pins the content; cancelling refuses to start.
+  Checked at session start only; remote tasks are not covered. See
+  `docs/project-context.md`.
+- The Projects page lists every instruction file Hermes could load (including
+  `CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.mdc` and nested ones) with its
+  approval status.
+
 ## [0.2.18] — 2026-09-29
 
 ### Changed
