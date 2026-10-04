@@ -89,6 +89,14 @@ export type Project = {
   lastOpenedAt: string;
   archived: boolean;
 };
+/** An instruction file Hermes would load from a project folder, vs. what the user approved. */
+export type ContextEntry = {
+  path: string;
+  status: 'approved' | 'new' | 'changed' | 'removed';
+  /** "Ana, 3 days ago" from git, or null. */
+  lastChange: string | null;
+  bytes: number;
+};
 export type ProjectSnapshot = { projects: Project[]; activeId: string | null };
 
 export type FundingAttribution = {

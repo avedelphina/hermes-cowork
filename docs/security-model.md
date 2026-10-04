@@ -81,6 +81,16 @@ _(not yet enforced)_ so the gap is visible rather than implied.
   task. Renderer-supplied execution context is not accepted by this boundary.
   If mode setup or persistence fails, the child is stopped and the task remains
   a draft. Folder and profile validation is repeated at start. _Enforced._
+## Instruction files are untrusted input
+
+Hermes loads `AGENTS.md`, `.hermes.md` and similar files from the task folder
+into the agent's system prompt, so a change to one is a change to the agent's
+instructions, made by whoever can write to the folder. Before a local session
+starts, main checks them against what the user approved for the project and asks
+(in a native dialog, with a diff) on any new, changed or removed file. Details
+and limits: [project-context.md](project-context.md#approving-instruction-files).
+_Enforced for local sessions; not for remote tasks._
+
 ## Funding attribution
 
 Cowork stores an immutable funding-attribution snapshot when a task or opted-in
