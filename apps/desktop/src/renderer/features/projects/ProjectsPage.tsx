@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Context, Project } from '@shared/types';
+import type { Context, ContextEntry, Project } from '@shared/types';
 import { useProjectStore } from './project.store';
 import { api } from '../../api/rest-client';
 
@@ -18,7 +18,7 @@ export function ProjectsPage() {
   const [projectFundingRef, setProjectFundingRef] = useState('');
   const [creatingContext, setCreatingContext] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ctx, setCtx] = useState<Record<string, string[]>>({});
+  const [ctx, setCtx] = useState<Record<string, ContextEntry[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
@@ -152,7 +152,18 @@ export function ProjectsPage() {
           {p.folderPath ?? 'no folder — chat only'}
         </div>
         <div className="mt-0.5 text-[10px] text-dim">
-          {ctx[p.id]?.length ? `context: ${(ctx[p.id] ?? []).join(', ')}` : 'no AGENTS.md / .hermes.md'}
+          {ctx[p.id]?.length ? (
+            <>
+              <div>Instruction files the agent will follow:</div>
+              {(ctx[p.id] ?? []).map((f) => (
+                <div key={f.path} className={f.status === 'approved' ? '' : 'text-warn'}>
+                  {f.path}
+                  {f.status !== 'approved' && ` — ${f.status}, asks for approval at the next start`}
+                  {f.lastChange && ` · ${f.lastChange}`}
+                </div>
+              ))}
+            </>
+          ) : 'no instruction files (AGENTS.md, .hermes.md, …)'}
         </div>
       </div>
       <div className="flex shrink-0 gap-2">

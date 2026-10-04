@@ -2,7 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../main/ipc/channels';
 import type {
-  AcpClientMessage, AcpServerMessage, AcpModels, Project, ProjectSnapshot, Context, ContextSnapshot, CoworkSettings, DirListing, FilePreview,
+  AcpClientMessage, AcpServerMessage, AcpModels, ContextEntry, Project, ProjectSnapshot, Context, ContextSnapshot, CoworkSettings, DirListing, FilePreview,
   CoworkTask, TaskStatus, ChatSession, UpdateStatus, RemoteOrigin, RemoteAgent, RemoteAgentInput,
 } from '../shared/types';
 
@@ -88,7 +88,7 @@ const api = {
       ipcRenderer.invoke(IpcChannel.ProjectUpdate, id, patch),
     setActive: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectSetActive, id),
     remove: (id: string): Promise<ProjectSnapshot> => ipcRenderer.invoke(IpcChannel.ProjectRemove, id),
-    contextFiles: (id: string): Promise<string[]> => ipcRenderer.invoke(IpcChannel.ProjectContextFiles, id),
+    contextFiles: (id: string): Promise<ContextEntry[]> => ipcRenderer.invoke(IpcChannel.ProjectContextFiles, id),
   },
   fs: {
     list: (taskId: string, rel?: string): Promise<DirListing> => ipcRenderer.invoke(IpcChannel.FsList, taskId, rel),

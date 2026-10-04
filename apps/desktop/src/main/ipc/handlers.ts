@@ -17,12 +17,14 @@ import { createTaskWorktree } from '../git/task-worktree';
 import { isAppUrl, type AppUrlConfig } from '../security/app-url';
 import { ProjectStore } from '../store/project-store';
 import { ContextStore } from '../store/context-store';
+import { ContextPinStore } from '../store/context-pin-store';
+import { contextEntries, describeChanges, diffContext, pinsOf, scanContext } from '../security/context-pin';
 import { SettingsStore } from '../store/settings-store';
 import { resolveAttribution } from '../store/attribution';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
-import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
+import { listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
 import type { UpdaterController } from '../update/updater';
 import type { TaskStatus, RemoteOrigin, RemoteAgent } from '../../shared/types';
 
@@ -169,6 +171,35 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     ctx.win()?.webContents.send(IpcChannel.AcpEvent, semantic);
   });
 
+  /**
+   * Hermes loads AGENTS.md & co. from the folder into the agent's system prompt,
+   * so a changed or new one is untrusted input (security/context-pin.ts). Before
+   * any local session starts in `cwd`, compare with what the user approved and
+   * ask — here in main, so a compromised renderer cannot approve for the user.
+   * Throws when the user declines. Without a project there is nothing to compare
+   * against, so every start in a folder that has instruction files asks.
+   */
+  async function approveContext(projectId: string | null, cwd: string): Promise<void> {
+    const pins = projectId ? contextPins.get(projectId) : {};
+    const files = scanContext(cwd);
+    const changes = diffContext(pins, files);
+    if (!changes.length) return;
+    const options = {
+      type: 'warning' as const,
+      buttons: ['Cancel', 'Approve'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Project instructions changed',
+      message: `The agent will follow these instruction files from ${cwd}. Approve only if you trust them.`,
+      detail: describeChanges(cwd, changes),
+    };
+    const win = ctx.win();
+    const res = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    if (res.response !== 1) throw new Error('The project instruction files were not approved.');
+    if (projectId) contextPins.set(projectId, pinsOf(files));
+  }
+
   handle(
     IpcChannel.AcpStart,
     async (_e, raw: unknown) => {
@@ -206,6 +237,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
           throw new Error(`Refusing to start: "${cwd}" is not an existing directory.`);
         }
         await assertKnownProfile(opts.profile);
+        if (opts.cwd) await approveContext(projectId, cwd);
       }
       return bridge.startSession({
         profile: opts.profile,
@@ -269,6 +301,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       }
       const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
       const taskId = strOrNull(o['taskId'], 'taskId');
+      if (!opts.remote && opts.cwd) await approveContext(chat ? chat.projectId : (taskId ? (tasks.get(taskId)?.projectId ?? null) : null), cwd);
       const result = await bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -394,6 +427,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   mkdirSync(userData, { recursive: true });
   const projects = new ProjectStore(join(userData, 'projects.json'));
   const contexts = new ContextStore(join(userData, 'contexts.json'));
+  const contextPins = new ContextPinStore(join(userData, 'context-pins.json'));
   const settings = new SettingsStore(join(userData, 'settings.json'));
 
   handle(IpcChannel.SettingsGet, () => settings.snapshot());
@@ -518,6 +552,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
 
   handle(IpcChannel.ProjectRemove, (_e, id: unknown) => {
     projects.remove(str(id, 'id'));
+    contextPins.remove(str(id, 'id'));
     return projects.snapshot();
   });
 
@@ -529,7 +564,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     return p.folderPath;
   };
 
-  handle(IpcChannel.ProjectContextFiles, (_e, id: unknown) => contextFiles(projectRoot(id)));
+  handle(IpcChannel.ProjectContextFiles, (_e, id: unknown) => contextEntries(projectRoot(id), contextPins.get(str(id, 'id'))));
 
   // ── cowork tasks ──
   const tasks = new TaskStore(join(userData, 'tasks.json'));
@@ -590,6 +625,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (task.remote) throw new Error('remote Cowork tasks do not yet support durable cowork-pipe runs');
     if (!isExistingDir(task.cwd)) throw new Error(`Cannot start task: "${task.cwd}" is not an existing directory.`);
     await assertKnownProfile(task.profile);
+    await approveContext(task.projectId, task.cwd);
     const run = tasks.createRun(task.id, null, taskAttribution(task.projectId));
     if (!run) throw new Error('task already has an active run');
     const scriptPath = app.isPackaged

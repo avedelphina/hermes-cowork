@@ -10,7 +10,7 @@ import {
   openSync, readSync, closeSync, constants as fsc, type Stats,
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { basename, dirname, extname, isAbsolute, join, relative, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, relative, sep } from 'node:path';
 import { resolveWithinRoot } from '../security/paths';
 import type { DirEntry, DirListing, FilePreview } from '../../shared/types';
 
@@ -101,16 +101,6 @@ function openInRoot(root: string, rel: string, hops = 0): { fd: number; st: Stat
 function readHead(fd: number, max: number): Buffer {
   const buf = Buffer.alloc(max);
   return buf.subarray(0, readSync(fd, buf, 0, max, 0));
-}
-
-export function contextFiles(root: string): string[] {
-  return CONTEXT_FILES.filter((f) => {
-    try {
-      return statSync(join(root, f)).isFile();
-    } catch {
-      return false;
-    }
-  });
 }
 
 export function listDir(root: string, rel = ''): DirListing {

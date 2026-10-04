@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { contextFiles, listDir, readFilePreview, snapshotFile, revertFile } from '@main/fs/project-fs';
+import { listDir, readFilePreview, snapshotFile, revertFile } from '@main/fs/project-fs';
 
 let root: string;
 beforeEach(() => {
@@ -15,12 +15,6 @@ beforeEach(() => {
   writeFileSync(join(root, 'src', 'a.ts'), 'export const a = 1;\n');
   writeFileSync(join(root, 'AGENTS.md'), 'instructions\n');
   writeFileSync(join(root, '.secret'), 'nope\n');
-});
-
-describe('contextFiles', () => {
-  it('reports AGENTS.md when present, .hermes.md when not', () => {
-    expect(contextFiles(root)).toEqual(['AGENTS.md']);
-  });
 });
 
 describe('listDir', () => {
