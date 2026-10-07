@@ -342,7 +342,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         const a = obj(attachment, `prompt attachment ${index + 1}`);
         const name = str(a.name, `prompt attachment ${index + 1} name`);
         const mimeType = str(a.mimeType, `prompt attachment ${index + 1} mimeType`);
-        const data = str(a.data, `prompt attachment ${index + 1} data`);
+        // Not str(): that caps at 10k chars, far below a base64 image (3 MB file ≈ 4 MB).
+        const data = a.data;
+        if (typeof data !== 'string' || !data) throw new Error(`invalid prompt attachment ${index + 1} data`);
         if (name.length > 255 || data.length > 4_000_000 || (!mimeType.startsWith('image/') && !mimeType.startsWith('text/'))) {
           throw new Error(`invalid prompt attachment: ${name}`);
         }
