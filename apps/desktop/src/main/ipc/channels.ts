@@ -23,7 +23,7 @@ export const IpcChannel = {
   RestPatch: 'rest:patch',
   RestDelete: 'rest:delete',
 
-  // kanban WebSocket pump
+  // kanban live events (not wired yet)
   KanbanWsSubscribe: 'kanban-ws:subscribe',
   KanbanWsEvent: 'kanban-ws:event',
 

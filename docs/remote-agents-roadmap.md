@@ -39,8 +39,7 @@ Traced through the actual code, not assumed:
   hardcoded `['acp']` argv in two call sites in `acp-bridge.ts`.
 - **The dashboard (Skills/Memory/Cron/Kanban/Insights, gateway control) is a
   separate REST+WS surface on `127.0.0.1:9119`**, hardcoded in
-  [`dashboard.ts`](../apps/desktop/src/main/orchestrator/dashboard.ts) and
-  [`kanban-ws.ts`](../apps/desktop/src/main/orchestrator/kanban-ws.ts). This is
+  [`dashboard.ts`](../apps/desktop/src/main/orchestrator/dashboard.ts). This is
   a second, independent thing to make remote — don't conflate it with the ACP
   transport.
 - **Folder scope is the trust boundary** ([`security-model.md`](security-model.md),

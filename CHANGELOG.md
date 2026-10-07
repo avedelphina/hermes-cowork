@@ -6,6 +6,14 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.20] — 2026-10-07
+
+### Fixed
+- Cowork could not connect to the local agent with Hermes 0.21.5 or newer.
+  Hermes now refuses a second dashboard on the same host, so Cowork's own
+  dashboard never started. Cowork now starts it with `--isolated`, and retries
+  without that flag on older Hermes versions.
+
 ## [0.2.19] — 2026-10-04
 
 ### Added

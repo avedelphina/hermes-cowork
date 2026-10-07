@@ -8,7 +8,6 @@ import { ensureDashboard, fetchDashboardToken } from './orchestrator/dashboard';
 import { AcpSupervisor } from './orchestrator/acp-supervisor';
 import { registerIpcHandlers } from './ipc/handlers';
 import { createUpdater } from './update/updater';
-// KanbanWsPump is intentionally not started — see note below.
 
 let win: BrowserWindow | null = null;
 const appUrl: AppUrlConfig = {
@@ -115,9 +114,9 @@ void app.whenReady().then(async () => {
     supervisor,
   );
 
-  // NOTE: the kanban events WebSocket (orchestrator/kanban-ws.ts) needs a
-  // per-connection auth ticket (POST /api/auth/ws-ticket) we do not yet mint,
-  // so it 403s and reconnect-loops. Re-enable once Cowork needs live kanban.
+  // Live kanban events (ws /api/plugins/kanban/events) are not wired: they need
+  // a per-connection ticket from POST /api/auth/ws-ticket that we do not mint.
+  // The old pump (orchestrator/kanban-ws.ts) is in git history before this commit.
 
   createWindow();
 
