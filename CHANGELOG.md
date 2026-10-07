@@ -6,6 +6,8 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.22] — 2026-10-07
+
 ### Added
 - **Send messages while Hermes is working.** The composer no longer locks during
   a turn. A text message sent mid-turn goes to Hermes as `/steer` (redirect the
