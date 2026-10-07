@@ -25,6 +25,7 @@ import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
 import { listDir, readFilePreview, snapshotFile, revertFile } from '../fs/project-fs';
+import { assertReviewable, detectMdr, extractComments, insertComment, launchMdr, reviewPrompt, stripForReview } from '../review/md-redline';
 import type { UpdaterController } from '../update/updater';
 import type { TaskStatus, RemoteOrigin, RemoteAgent } from '../../shared/types';
 
@@ -946,5 +947,45 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     if (!checkpoints.has(key)) throw new Error('no checkpoint for this file');
     revertFile(taskRoot(taskId), rel as string, checkpoints.get(key) ?? null);
     checkpoints.delete(key);
+  });
+
+  // md-redline: spawn the user's CLI, or read markers already in the file.
+  // Neither path writes the file or approves a plan.
+  handle(IpcChannel.ReviewStatus, () => detectMdr());
+  handle(IpcChannel.ReviewOpen, (_e, taskId: unknown, rel: unknown) => {
+    const root = taskRoot(taskId);
+    const file = assertReviewable(root, str(rel, 'path'));
+    const found = detectMdr();
+    if (!found.available) throw new Error('md-redline is not installed. Install it with: npm install -g md-redline');
+    launchMdr(found.bin, file, root);
+  });
+  handle(IpcChannel.ReviewComments, (_e, taskId: unknown, rel: unknown) => {
+    const path = str(rel, 'path');
+    const root = taskRoot(taskId);
+    assertReviewable(root, path);
+    const preview = readFilePreview(root, path);
+    if (preview.kind !== 'text') throw new Error('markdown file is not readable as text');
+    const comments = extractComments(preview.text);
+    return {
+      comments,
+      prompt: comments.length ? reviewPrompt(path, comments) : '',
+      display: stripForReview(preview.text),
+    };
+  });
+  handle(IpcChannel.ReviewAdd, (_e, taskId: unknown, rel: unknown, raw: unknown) => {
+    const path = str(rel, 'path');
+    const id = str(taskId, 'taskId');
+    const root = taskRoot(id);
+    assertReviewable(root, path);
+    const body = obj(raw, 'comment');
+    const anchor = str(body['anchor'], 'anchor');
+    const text = str(body['text'], 'text');
+    if (anchor.length > 2_000 || text.length > 8_000) throw new Error('comment is too long');
+    const current = snapshotFile(root, path);
+    if (current === null) throw new Error('markdown file not found');
+    takeCheckpoint(id, path);
+    const next = insertComment(current, { anchor, text, author: 'User' });
+    revertFile(root, path, next);
+    return { comments: extractComments(next), display: stripForReview(next) };
   });
 }

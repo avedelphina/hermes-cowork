@@ -3,6 +3,7 @@ import { GoalHeader } from './GoalHeader';
 import { Transcript } from './Transcript';
 import { Composer } from '../chat/Composer';
 import { RightPane } from './RightPane';
+import { ReviewTab } from './ReviewTab';
 import { useCoworkStore, syncAgentMode } from './cowork.store';
 
 const COWORK_SYSTEM_PROMPT = `You are running in Hermes Cowork mode. First propose a concise plan with todo_list and stop for approval. Do not edit files or run commands before approval. Keep the plan current as you work. For destructive operations, ask inline confirmation.`;
@@ -15,6 +16,9 @@ export function CoworkPage() {
   const taskSessionId = useCoworkStore((s) => s.sessionId);
   const bindSession = useCoworkStore((s) => s.bindSession);
   const pushUserText = useCoworkStore((s) => s.pushUserText);
+  const reviewDraft = useCoworkStore((s) => s.reviewDraft);
+  const clearReviewDraft = useCoworkStore((s) => s.clearReviewDraft);
+  const reviewing = useCoworkStore((s) => s.reviewFile);
   const ensureFirstSession = async (text: string) => {
     if (taskSessionId) return taskSessionId;
     if (!taskId) return null;
@@ -56,12 +60,14 @@ export function CoworkPage() {
     <div className="flex h-full flex-1">
       <div className="flex flex-1 flex-col overflow-hidden">
         <GoalHeader />
-        <Transcript />
+        {reviewing ? <ReviewTab /> : <Transcript />}
         <Composer
           sessionId={sessionId}
           ensureSession={ensureFirstSession}
           onEcho={pushUserText}
           placeholder="Steer the task — redirect, clarify, or add detail… ⌘↵"
+          draft={reviewDraft}
+          onDraftConsumed={clearReviewDraft}
         />
       </div>
       <RightPane />

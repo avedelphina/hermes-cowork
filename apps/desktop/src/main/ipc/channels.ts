@@ -93,6 +93,14 @@ export const IpcChannel = {
   FsCheckpoint: 'fs:checkpoint', // pre-edit text held in main (taken once per task+file)
   FsSnapshot: 'fs:snapshot',     // current text of a task file (for the diff)
   FsRevert: 'fs:revert',         // restore the main-held checkpoint (guarded write)
+
+  // md-redline handoff. Main launches the user's own `mdr` for one in-root
+  // markdown file and reads comment markers back. It does not embed the server.
+  ReviewStatus: 'review:status',
+  ReviewOpen: 'review:open',
+  ReviewComments: 'review:comments',
+  /** Add one anchored comment to a task markdown file. Main writes the marker. */
+  ReviewAdd: 'review:add',
 } as const;
 
 export type IpcChannelKey = (typeof IpcChannel)[keyof typeof IpcChannel];

@@ -55,6 +55,7 @@ of approval mode; the app never grants persistent permission on your behalf.
 | Cowork transcript stuck on "Hermes will propose a plan shortly…" | The ACP turn produced no events. Use **↻ Reconnect** in the goal header to reload the session from Hermes. |
 | A task shows "interrupted" | The app exited while it was live. Open it from the Tasks page to resume — Hermes replays the conversation via `session/load`. |
 | An edit went wrong | Cowork **Changes** tab → **Revert** restores the pre-edit file (or deletes it if it was new). |
+| **Review in md-redline** says it is not installed | Cowork does not bundle md-redline. Install it yourself (`npm install -g md-redline`) so `mdr` is on `PATH`, then try again. The button only launches that CLI against one markdown file inside the task folder. It will not open instruction files (`AGENTS.md` and the other files Cowork pins), remote-task files, or anything outside the folder. Comment markers stay in the file. **Send review comments** only fills the composer — it does not approve the plan or send the message. |
 
 ## Recovery
 

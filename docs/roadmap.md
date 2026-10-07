@@ -198,3 +198,26 @@ project" now that chats are project-aware.
 If it comes back, make it earn the separate mode: inline diffs, edit-in-place,
 a real editor pane, or agent file operations surfaced in the tree — not just a
 file preview next to the chat.
+
+## In-app markdown review (deferred)
+
+Phase 1 is an in-app review in the main Cowork pane. The right pane stays the
+file browser: **Review here** on a markdown file opens it where the transcript
+was. A selection becomes an anchored comment, and main writes it as an
+`<!-- @comment{...} -->` marker through the same checkpointed save as other
+edits. **Send comments** fills the composer and is not plan approval. **Back
+to task** returns to the transcript. The external `mdr` button remains a
+fallback. Cowork does not embed md-redline, proxy its loopback server, or
+grant it trusted roots.
+
+Still deferred, and not scheduled:
+
+- Rendering markdown with a comment card beside each anchor, replies on the
+  card, and drag-to-adjust anchors.
+- A Hermes tool so the session can open Review and wait until Send, without
+  registering md-redline's MCP server.
+- A Plan-tab banner that blocks design approval until review comments on the
+  plan file are sent or explicitly dismissed. Comments are not approval.
+- Agent-originated anchored comments as an ACP prompt convention, not by
+  registering md-redline's MCP server inside a Hermes profile.
+- A before/after review diff that reuses the checkpoint Cowork already stores.

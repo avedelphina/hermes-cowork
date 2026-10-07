@@ -25,12 +25,16 @@ type Props = {
   onEcho?: (text: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Text placed in the box from outside (a review handoff). Not sent until the user does. */
+  draft?: string | null;
+  onDraftConsumed?: () => void;
 };
 
-export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, placeholder, disabled }: Props = {}) {
+export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, placeholder, disabled, draft, onDraftConsumed }: Props = {}) {
   const chatSessionId = useChatStore((s) => s.sessionId);
   const sessionId = sessionIdProp !== undefined ? sessionIdProp : chatSessionId;
   const [text, setText] = useState('');
+  const [seenDraft, setSeenDraft] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AcpPromptAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false); // creating the session
@@ -39,6 +43,17 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   const working = turns > 0;
   const [midTurnSend, setMidTurnSend] = useState<MidTurnSend>('steer');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (draft && draft !== seenDraft) {
+    setSeenDraft(draft);
+    setText(draft);
+  }
+
+  useEffect(() => {
+    if (!draft || draft !== seenDraft) return;
+    onDraftConsumed?.();
+    document.getElementById('composer-input')?.focus();
+  }, [draft, seenDraft, onDraftConsumed]);
 
   useEffect(() => {
     void window.hermes.settings.get().then((s) => setMidTurnSend(s.midTurnSend)).catch(() => {});

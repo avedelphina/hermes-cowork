@@ -144,6 +144,12 @@ type CoworkStore = {
   pendingKickoff: string | null;
   /** Task-relative path the Files tab should open (set from a Changes row). */
   filesTarget: string | null;
+  /** Review prompt waiting to be placed in the composer. Not sent until the user sends it. */
+  reviewDraft: string | null;
+  /** Markdown files in the task folder that the Review tab can open. */
+  reviewFiles: string[];
+  /** Task-relative markdown file open in the Review tab. */
+  reviewFile: string | null;
   /** `thought` is the agent's reasoning, shown folded; `agent` is its reply. */
   transcript: Array<{ role: 'agent' | 'user' | 'system' | 'thought'; text: string }>;
   approvals: Approval[];
@@ -186,6 +192,11 @@ type CoworkStore = {
   /** Ask the Files tab to open a task-relative path. */
   openInFiles: (rel: string) => void;
   clearFilesTarget: () => void;
+  /** Place a review handoff in the composer. Does not approve the plan or send the prompt. */
+  setReviewDraft: (text: string) => void;
+  clearReviewDraft: () => void;
+  setReviewFiles: (files: string[]) => void;
+  setReviewFile: (rel: string | null) => void;
   setApprovalMode: (m: 'ask' | 'auto') => void;
   /** True after the design stage has been approved; implementation must not run before this. */
   designApproved: boolean;
@@ -222,6 +233,9 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   approved: false,
   pendingKickoff: null,
   filesTarget: null,
+  reviewDraft: null,
+  reviewFiles: [],
+  reviewFile: null,
   designApproved: false,
   implementationApproved: false,
   verificationApproved: false,
@@ -238,7 +252,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
       remote: t.remote ?? null, git: t.git ?? null,
       approved: t.approved, designApproved: t.designApproved, implementationApproved: t.implementationApproved,
       verificationApproved: t.verificationApproved, status: t.status === 'executing' || t.status === 'planning' ? 'running' : 'idle',
-      pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: true,
+      pendingKickoff: null, filesTarget: null, reviewDraft: null, reviewFiles: [], reviewFile: null, ...CLEARED, replaying: true,
     }),
 
   clearKickoff: () => set({ pendingKickoff: null }),
@@ -252,6 +266,10 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   dropCheckpoint: (rel) => set((s) => ({ checkpoints: s.checkpoints.filter((c) => c.rel !== rel) })),
   openInFiles: (rel) => set({ filesTarget: rel }),
   clearFilesTarget: () => set({ filesTarget: null }),
+  setReviewDraft: (text) => set({ reviewDraft: text }),
+  clearReviewDraft: () => set({ reviewDraft: null }),
+  setReviewFiles: (reviewFiles) => set({ reviewFiles }),
+  setReviewFile: (reviewFile) => set({ reviewFile }),
   setApprovalMode: (approvalMode) =>
     set((s) => {
       syncAgentMode({ ...s, approvalMode });
@@ -342,7 +360,7 @@ export const useCoworkStore = create<CoworkStore>((set) => ({
   reset: () => set({
     taskId: null, sessionId: null, goal: '', cwd: '', profile: 'default', remote: null, git: null, status: 'idle', approved: false,
     designApproved: false, implementationApproved: false, verificationApproved: false,
-    pendingKickoff: null, filesTarget: null, ...CLEARED, replaying: false,
+    pendingKickoff: null, filesTarget: null, reviewDraft: null, reviewFiles: [], reviewFile: null, ...CLEARED, replaying: false,
   }),
 
   ingestAcp: (msg) =>

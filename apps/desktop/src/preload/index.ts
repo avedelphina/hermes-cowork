@@ -100,6 +100,16 @@ const api = {
     revert: (taskId: string, rel: string): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.FsRevert, taskId, rel),
   },
+  review: {
+    status: (): Promise<{ available: true; bin: string } | { available: false }> =>
+      ipcRenderer.invoke(IpcChannel.ReviewStatus),
+    open: (taskId: string, rel: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.ReviewOpen, taskId, rel),
+    comments: (taskId: string, rel: string): Promise<{ comments: Array<{ id: string; anchor: string; text: string; author: string }>; prompt: string; display: string }> =>
+      ipcRenderer.invoke(IpcChannel.ReviewComments, taskId, rel),
+    add: (taskId: string, rel: string, comment: { anchor: string; text: string }): Promise<{ comments: Array<{ id: string; anchor: string; text: string; author: string }>; display: string }> =>
+      ipcRenderer.invoke(IpcChannel.ReviewAdd, taskId, rel, comment),
+  },
   remotes: {
     list: (): Promise<RemoteAgent[]> => ipcRenderer.invoke(IpcChannel.RemoteList),
     create: (input: RemoteAgentInput): Promise<RemoteAgent> => ipcRenderer.invoke(IpcChannel.RemoteCreate, input),

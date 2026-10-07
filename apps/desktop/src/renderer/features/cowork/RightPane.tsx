@@ -129,7 +129,7 @@ export function RightPane() {
         )}
         {!remote && tab === 'advisor' && <div className="overflow-y-auto"><AdvisorTab /></div>}
         {!remote && tab === 'evidence' && <div className="overflow-y-auto"><EvidenceTab /></div>}
-        {!remote && tab === 'files' && <FileBrowser />}
+        {!remote && tab === 'files' && <FileBrowser onReview={(rel) => useCoworkStore.getState().setReviewFile(rel)} />}
         {!remote && tab === 'changes' && <div className="overflow-y-auto"><ChangesTab onOpenFile={() => setTab('files')} /></div>}
         {remote && (
           <div className="border-t border-border px-3 py-2 text-[10px] text-dim">

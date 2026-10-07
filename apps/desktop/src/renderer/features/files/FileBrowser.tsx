@@ -8,6 +8,14 @@ function crumbs(path: string): string[] {
 function parentOf(path: string): string {
   return path.split('/').slice(0, -1).join('/');
 }
+function isMarkdown(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.endsWith('.md') || lower.endsWith('.markdown');
+}
+const INSTRUCTION = new Set(['AGENTS.md', 'AGENTS.override.md', 'HERMES.md', '.hermes.md', 'CLAUDE.md', '.cursorrules']);
+function isInstruction(name: string): boolean {
+  return INSTRUCTION.has(name) || name.endsWith('.mdc');
+}
 function fmtSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -15,27 +23,37 @@ function fmtSize(n: number): string {
 }
 
 /** Read-only browser over the current Cowork task's working folder. */
-export function FileBrowser() {
+export function FileBrowser({ onReview }: { onReview?: (rel: string) => void }) {
   const taskId = useCoworkStore((s) => s.taskId);
   const cwd = useCoworkStore((s) => s.cwd);
   if (!taskId) return <div className="p-4 text-xs text-muted">Start a task to browse its folder.</div>;
   // key on the task id → switching tasks remounts with fresh state.
-  return <Browser key={taskId} taskId={taskId} rootName={cwd.split('/').filter(Boolean).pop() ?? cwd} />;
+  return <Browser key={taskId} taskId={taskId} rootName={cwd.split('/').filter(Boolean).pop() ?? cwd} onReview={onReview} />;
 }
 
-function Browser({ taskId, rootName }: { taskId: string; rootName: string }) {
+function Browser({ taskId, rootName, onReview }: { taskId: string; rootName: string; onReview?: (rel: string) => void }) {
   const [dir, setDir] = useState('');
   const [listing, setListing] = useState<DirListing | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [preview, setPreview] = useState<FilePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewNote, setReviewNote] = useState<string | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const setReviewDraft = useCoworkStore((s) => s.setReviewDraft);
+  const setReviewFiles = useCoworkStore((s) => s.setReviewFiles);
 
   const load = useCallback((rel: string) => {
     window.hermes.fs
       .list(taskId, rel)
-      .then((l) => { setListing(l); setError(null); })
+      .then((l) => {
+        setListing(l);
+        setError(null);
+        if (!rel) {
+          setReviewFiles(l.entries.filter((e) => e.kind === 'file' && isMarkdown(e.name) && !isInstruction(e.name)).map((e) => e.name));
+        }
+      })
       .catch((e) => setError(String(e)));
-  }, [taskId]);
+  }, [taskId, setReviewFiles]);
 
   useEffect(() => { load(dir); }, [dir, load]);
 
@@ -60,6 +78,35 @@ function Browser({ taskId, rootName }: { taskId: string; rootName: string }) {
       .catch((e) => setError(String(e)));
     clearFilesTarget();
   }, [filesTarget, taskId, clearFilesTarget]);
+
+  const reviewable = !!sel && !!preview && preview.kind === 'text' && isMarkdown(preview.name) && !isInstruction(preview.name);
+  const openReview = () => {
+    if (!sel) return;
+    setReviewBusy(true);
+    setReviewNote(null);
+    window.hermes.review
+      .open(taskId, sel)
+      .then(() => setReviewNote('Opened in md-redline. Comment there, then send the comments back.'))
+      .catch((e) => setError(String(e)))
+      .finally(() => setReviewBusy(false));
+  };
+  const sendComments = () => {
+    if (!sel) return;
+    setReviewBusy(true);
+    setReviewNote(null);
+    window.hermes.review
+      .comments(taskId, sel)
+      .then((r) => {
+        if (!r.comments.length) {
+          setReviewNote('No review comments in this file yet.');
+          return;
+        }
+        setReviewDraft(r.prompt);
+        setReviewNote(`${r.comments.length} comment${r.comments.length === 1 ? '' : 's'} placed in the composer. Nothing is sent until you send it.`);
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setReviewBusy(false));
+  };
 
   return (
     <div className="flex h-full flex-col text-xs">
@@ -115,6 +162,38 @@ function Browser({ taskId, rootName }: { taskId: string; rootName: string }) {
           {preview?.kind === 'pdf' && <embed src={preview.dataUri} type="application/pdf" className="h-64 w-full" />}
           {preview?.kind === 'unsupported' && (
             <p className="text-muted">No preview for {preview.name} ({fmtSize(preview.size)}).</p>
+          )}
+          {reviewable && (
+            <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+              <div className="flex flex-wrap gap-2">
+                {onReview && sel && (
+                  <button
+                    type="button"
+                    onClick={() => onReview(sel)}
+                    className="rounded bg-accent px-2 py-1 font-semibold text-bg"
+                  >
+                    Review here
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={reviewBusy}
+                  onClick={openReview}
+                  className="rounded border border-border px-2 py-1 text-muted hover:text-fg disabled:opacity-50"
+                >
+                  Open in md-redline
+                </button>
+                <button
+                  type="button"
+                  disabled={reviewBusy}
+                  onClick={sendComments}
+                  className="rounded border border-border px-2 py-1 text-muted hover:text-fg disabled:opacity-50"
+                >
+                  Send review comments
+                </button>
+              </div>
+              {reviewNote && <p className="text-[10px] text-dim">{reviewNote}</p>}
+            </div>
           )}
         </div>
       </div>

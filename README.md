@@ -49,7 +49,14 @@ What's in:
   gateway start/stop/restart and a profile manager.
 - **File browser** — the **Files** tab is read-only and confined to the task's
   folder (`..` and symlink escape are rejected). **Open** on a Changes row
-  jumps to the file.
+  jumps to the file. **Review here** opens that markdown file in the main
+  Cowork pane: select text, leave a comment, and it is stored in the file as
+  the same `<!-- @comment -->` marker [md-redline](https://github.com/dejuknow/md-redline)
+  uses. The right pane stays the file browser. **Send comments** puts them in
+  the composer; it does not approve the plan. **Back to task** returns to the
+  transcript. Instruction files such as `AGENTS.md` are refused. **Open in
+  md-redline** remains available if you have `mdr` installed; Cowork does not
+  install it.
 - **Remote agents in Chat** — add a Hermes profile on another machine (Remote
   agents page, with a connection test) and pick it in Chat.
 - **Remote agents** — a project can point at another machine (an SSH target);

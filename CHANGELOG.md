@@ -6,6 +6,21 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.23] — 2026-10-07
+
+### Added
+- **In-app markdown review.** In the Files tab, **Review here** opens a markdown
+  file in the main pane. Select text, add a comment, and Cowork stores it in the
+  file as an md-redline `<!-- @comment -->` marker through the checkpointed save,
+  so Changes can revert it. **Send comments** fills the composer and is not plan
+  approval. **Open in md-redline** launches your own `mdr` if installed.
+  Instruction files such as `AGENTS.md` are refused.
+
+### Fixed
+- **Attachments can be sent.** Image and text attachments were rejected as
+  "invalid prompt attachment" because the main process capped their data at
+  10,000 characters.
+
 ## [0.2.22] — 2026-10-07
 
 ### Added
