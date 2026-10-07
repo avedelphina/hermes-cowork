@@ -62,6 +62,46 @@ async function usablePort(port: number): Promise<number> {
   return (await tryListen(port)) ?? (await tryListen(0)) ?? port;
 }
 
+function startDashboard(opts: DashboardOptions, port: number, isolated: boolean): ChildProcess {
+  const child = spawn(
+    opts.binaryPath,
+    [
+      'dashboard',
+      ...(isolated ? ['--isolated'] : []),
+      '--no-open',
+      '--port',
+      String(port),
+      '--host',
+      '127.0.0.1',
+    ],
+    {
+      env: { ...process.env, HERMES_HOME: opts.hermesHome },
+      // Never leave a pipe undrained: once its ~64 KB buffer fills, the
+      // dashboard blocks on its next log write and hangs.
+      stdio: ['ignore', 'ignore', 'inherit'],
+    },
+  );
+  child.on('error', (err) => {
+    console.error('[dashboard] spawn error', err);
+  });
+  return child;
+}
+
+/** Poll /api/status until ready, the child exits, or READY_TIMEOUT_MS passes. */
+async function waitReady(child: ChildProcess, port: number): Promise<'ready' | 'exited' | 'timeout'> {
+  let exited = child.exitCode !== null;
+  child.once('exit', () => {
+    exited = true;
+  });
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (await probeDashboard(port)) return 'ready';
+    if (exited) return 'exited';
+    await sleep(400);
+  }
+  return 'timeout';
+}
+
 export async function ensureDashboard(opts: DashboardOptions): Promise<DashboardState> {
   const preferred = opts.port ?? DEFAULT_PORT;
 
@@ -72,28 +112,17 @@ export async function ensureDashboard(opts: DashboardOptions): Promise<Dashboard
   // Pick the preferred port when free, otherwise an OS-assigned loopback port.
   const port = await usablePort(preferred);
 
-  const child = spawn(
-    opts.binaryPath,
-    ['dashboard', '--no-open', '--port', String(port), '--host', '127.0.0.1'],
-    {
-      env: { ...process.env, HERMES_HOME: opts.hermesHome },
-      // Never leave a pipe undrained: once its ~64 KB buffer fills, the
-      // dashboard blocks on its next log write and hangs.
-      stdio: ['ignore', 'ignore', 'inherit'],
-    },
-  );
-
-  child.on('error', (err) => {
-    console.error('[dashboard] spawn error', err);
-  });
-
-  // Wait until /api/status responds, up to READY_TIMEOUT_MS.
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (await probeDashboard(port)) {
-      return { kind: 'ready', port, pid: child.pid ?? null, child };
-    }
-    await sleep(400);
+  // --isolated: Hermes >= 0.21.5 refuses a second dashboard per host
+  // ("this host is already served by PID …") unless it is isolated. Older
+  // Hermes rejects the unknown flag and exits at once, so retry without it.
+  let child = startDashboard(opts, port, true);
+  let state = await waitReady(child, port);
+  if (state === 'exited') {
+    child = startDashboard(opts, port, false);
+    state = await waitReady(child, port);
+  }
+  if (state === 'ready') {
+    return { kind: 'ready', port, pid: child.pid ?? null, child };
   }
 
   child.kill('SIGTERM');

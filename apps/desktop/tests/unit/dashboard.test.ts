@@ -67,4 +67,24 @@ describe('ensureDashboard', () => {
       expect(result.pid).toBe(4321);
     }
   });
+
+  it('retries without --isolated when an older Hermes rejects the flag', async () => {
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValue(new Response(JSON.stringify({ version: '0.20.6' }), { status: 200 }));
+
+    const old = Object.assign(new EventEmitter(), { pid: 1, kill: vi.fn(), exitCode: 2 });
+    const fresh = Object.assign(new EventEmitter(), { pid: 2, kill: vi.fn(), exitCode: null });
+    vi.mocked(childProcess.spawn)
+      .mockReturnValueOnce(old as unknown as ReturnType<typeof childProcess.spawn>)
+      .mockReturnValueOnce(fresh as unknown as ReturnType<typeof childProcess.spawn>);
+
+    const result = await ensureDashboard({ binaryPath: '/bin/hermes', hermesHome: '/h' });
+
+    const args = vi.mocked(childProcess.spawn).mock.calls.map((c) => c[1] as string[]);
+    expect(args[0]).toContain('--isolated');
+    expect(args[1]).not.toContain('--isolated');
+    expect(result.kind).toBe('ready');
+    if (result.kind === 'ready') expect(result.pid).toBe(2);
+  });
 });
