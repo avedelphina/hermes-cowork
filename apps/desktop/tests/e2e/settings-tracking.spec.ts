@@ -25,6 +25,7 @@ test('settings saves local tracking without changing the Hermes provider', async
     expect(JSON.parse(readFileSync(path.join(userData, 'settings.json'), 'utf8'))).toEqual({
       defaultFundingRef: 'wallet-1',
       trackChatsByDefault: true,
+      midTurnSend: 'steer',
     });
   } finally {
     await app.close();

@@ -340,8 +340,17 @@ export class AcpBridge extends EventEmitter {
     const cleanText = text.trim();
     if (!cleanText && attachments.length === 0) throw new Error('prompt must contain text or an attachment');
 
+    // A prompt sent while another is in flight is mid-turn: Hermes absorbs it
+    // (/steer redirects the running turn, /queue runs it after) and answers at
+    // once, so it must not end the turn the UI is still showing as working.
+    const midTurn = (this.promptsInFlight.get(sessionId) ?? 0) > 0;
+    this.promptsInFlight.set(sessionId, (this.promptsInFlight.get(sessionId) ?? 0) + 1);
     try {
-      const prompt: Array<Record<string, string>> = cleanText ? [{ type: 'text', text: cleanText }] : [];
+      // Slash commands are text-only for Hermes, so attachments go as a plain prompt.
+      const wireText = midTurn && attachments.length === 0 && !cleanText.startsWith('/')
+        ? `/${this.midTurnSend()} ${cleanText}`
+        : cleanText;
+      const prompt: Array<Record<string, string>> = wireText ? [{ type: 'text', text: wireText }] : [];
       for (const attachment of attachments) {
         if (attachment.mimeType.startsWith('image/')) {
           prompt.push({ type: 'image', data: attachment.data, mimeType: attachment.mimeType });
@@ -354,11 +363,22 @@ export class AcpBridge extends EventEmitter {
         prompt,
       })) as { usage?: unknown } | null;
       const usage = parseTurnUsage(result?.usage);
-      if (usage) this.out({ kind: 'turn-usage', sessionId, ...usage });
+      if (usage && !midTurn) this.out({ kind: 'turn-usage', sessionId, ...usage });
     } finally {
-      this.out({ kind: 'done', sessionId });
+      const left = (this.promptsInFlight.get(sessionId) ?? 1) - 1;
+      if (left > 0) this.promptsInFlight.set(sessionId, left);
+      else this.promptsInFlight.delete(sessionId);
+      if (!midTurn) this.out({ kind: 'done', sessionId });
     }
   }
+
+  /** Source of the mid-turn send mode (a Cowork setting); defaults to steer. */
+  setMidTurnSend(get: () => 'steer' | 'queue'): void {
+    this.midTurnSend = get;
+  }
+
+  private promptsInFlight = new Map<string, number>();
+  private midTurnSend: () => 'steer' | 'queue' = () => 'steer';
 
   setApprovalStore(store: ApprovalStore): void {
     this.approvalStore = store;

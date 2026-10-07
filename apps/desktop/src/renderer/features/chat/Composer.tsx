@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AcpPromptAttachment } from '@shared/types';
+import type { AcpPromptAttachment, MidTurnSend } from '@shared/types';
 import { useChatStore } from './chat.store';
 import { ModelPicker } from '../../shell/ModelPicker';
 
@@ -33,9 +33,15 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AcpPromptAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // creating the session
+  const [turns, setTurns] = useState(0); // prompts in flight; > 0 means Hermes is working
   const [sendKey, setSendKey] = useState<SendKey>(loadSendKey);
+  const [midTurnSend, setMidTurnSend] = useState<MidTurnSend>('steer');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void window.hermes.settings.get().then((s) => setMidTurnSend(s.midTurnSend)).catch(() => {});
+  }, [turns > 0]);
 
   useEffect(() => {
     try {
@@ -75,6 +81,8 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
     if ((!text.trim() && attachments.length === 0) || busy || disabled) return;
     setBusy(true);
     setError(null);
+    const sent = { text, attachments };
+    let dispatched = false;
     try {
       const prepared = sessionId ?? (ensureSession ? await ensureSession(text) : null);
       const sid = typeof prepared === 'string' ? prepared : prepared?.sessionId ?? null;
@@ -86,17 +94,25 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
           messages: [...s.messages, { role: 'user', text, toolCalls: [] }],
         }));
       }
-      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: wireText, attachments });
+      // Clear now, not when the turn ends: the composer stays usable so a
+      // message sent while Hermes works can steer or queue behind it.
       setText('');
       setAttachments([]);
+      dispatched = true;
+      setBusy(false);
+      setTurns((n) => n + 1);
+      await window.hermes.acp.send({ kind: 'prompt', sessionId: sid, text: wireText, attachments: sent.attachments });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      if (dispatched) { setText((t) => t || sent.text); setAttachments((a) => (a.length ? a : sent.attachments)); }
     } finally {
       setBusy(false);
+      if (dispatched) setTurns((n) => n - 1);
     }
   };
 
   const canSend = !!(sessionId || ensureSession);
+  const working = turns > 0;
   const hint = sendKey === 'enter' ? '↵ to send' : `${modifierLabel}↵ to send`;
 
   return (
@@ -149,7 +165,7 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
           <input ref={fileInputRef} type="file" multiple accept="image/*,text/*" className="hidden" onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.currentTarget.value = ''; }} />
           <span>Paste files or images here</span>
         </div>
-        <span>{hint}</span>
+        <span>{working ? `Hermes is working — sending will ${midTurnSend === 'queue' ? 'queue after this turn' : 'steer this turn'}` : hint}</span>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CoworkSettings } from '@shared/types';
 
-const DEFAULTS: CoworkSettings = { defaultFundingRef: null, trackChatsByDefault: false };
+const DEFAULTS: CoworkSettings = { defaultFundingRef: null, trackChatsByDefault: false, midTurnSend: 'steer' };
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<CoworkSettings>(DEFAULTS);
@@ -52,6 +52,20 @@ export function SettingsPage() {
             <span className="mt-0.5 block text-[11px] text-dim">Off by default. When enabled, Cowork snapshots the applicable funding reference for new chats; it does not change Hermes&apos; provider or create a Purser charge.</span>
           </span>
         </label>
+      </section>
+
+      <section className="mt-4 rounded-lg border border-border bg-surface p-4">
+        <h3 className="mb-3 text-sm font-medium">Messages while Hermes is working</h3>
+        <select
+          value={settings.midTurnSend}
+          onChange={(e) => setSettings((current) => ({ ...current, midTurnSend: e.target.value === 'queue' ? 'queue' : 'steer' }))}
+          aria-label="Message while working"
+          className="mb-2 w-full rounded border border-border bg-surface2 px-3 py-2 text-sm"
+        >
+          <option value="steer">Steer — redirect the current turn</option>
+          <option value="queue">Queue — send after the current turn</option>
+        </select>
+        <p className="text-[11px] text-dim">Applies to text messages sent while a turn is running. Messages with attachments are always queued.</p>
       </section>
 
       {error && <p className="mt-3 text-xs text-danger">{error}</p>}

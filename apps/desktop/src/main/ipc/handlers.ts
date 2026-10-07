@@ -450,11 +450,15 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   handle(IpcChannel.SettingsGet, () => settings.snapshot());
   handle(IpcChannel.SettingsUpdate, (_e, raw: unknown) => {
     const patch = obj(raw, 'settings patch');
-    const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean } = {};
+    const next: { defaultFundingRef?: string | null; trackChatsByDefault?: boolean; midTurnSend?: 'steer' | 'queue' } = {};
     if (patch['defaultFundingRef'] !== undefined) next.defaultFundingRef = strOrNull(patch['defaultFundingRef'], 'defaultFundingRef');
     if (patch['trackChatsByDefault'] !== undefined) {
       if (typeof patch['trackChatsByDefault'] !== 'boolean') throw new Error('invalid trackChatsByDefault');
       next.trackChatsByDefault = patch['trackChatsByDefault'];
+    }
+    if (patch['midTurnSend'] !== undefined) {
+      if (patch['midTurnSend'] !== 'steer' && patch['midTurnSend'] !== 'queue') throw new Error('invalid midTurnSend');
+      next.midTurnSend = patch['midTurnSend'];
     }
     return settings.update(next);
   });
@@ -588,6 +592,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
   /** Pipe runs explicitly stopped by this client; ordinary client shutdown only detaches. */
   const stoppingPipeRuns = new Set<string>();
   bridge.setApprovalStore(tasks);
+  bridge.setMidTurnSend(() => settings.snapshot().midTurnSend);
   const remoteAgents = new RemoteAgentStore(join(userData, 'remote-agents.json'));
   // Hoisted: the acp:* handlers above resolve a remote origin through these.
   function projectRemote(projectId: string | null): RemoteOrigin | null {

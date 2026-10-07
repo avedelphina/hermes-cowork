@@ -233,6 +233,38 @@ describe('AcpBridge.sendPrompt', () => {
     expect(semanticEvents).toContainEqual({ kind: 'turn-usage', sessionId: 'sess-1', inputTokens: 11, outputTokens: 7, totalTokens: 18, reasoningTokens: 2, cachedReadTokens: 3 });
     expect(semanticEvents).toContainEqual({ kind: 'done', sessionId: 'sess-1' });
   });
+
+  it.each([['steer', '/steer also add tests'], ['queue', '/queue also add tests']] as const)(
+    'sends a mid-turn message as %s without ending the running turn', async (mode, wire) => {
+      const { bridge, proc, semanticEvents } = makeBridge();
+      bridge.setMidTurnSend(() => mode);
+      const start = bridge.startSession({
+        profile: 'default', cwd: '/tmp', binaryPath: '/usr/local/bin/hermes', hermesHome: '/Users/x/.hermes',
+      });
+      await flush();
+      proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('initialize')!['id'] as string, result: {} }));
+      await flush();
+      proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: proc.findOutgoing('session/new')!['id'] as string, result: { sessionId: 's' } }));
+      await start;
+
+      const turn = bridge.sendPrompt('s', 'build it');
+      await flush();
+      const turnReq = proc.findOutgoing('session/prompt')!;
+      const mid = bridge.sendPrompt('s', 'also add tests');
+      await flush();
+      const midReq = proc.findOutgoing('session/prompt')!;
+      expect(midReq['id']).not.toBe(turnReq['id']);
+      expect(midReq['params']).toMatchObject({ prompt: [{ type: 'text', text: wire }] });
+
+      proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: midReq['id'] as string, result: { stopReason: 'end_turn' } }));
+      await mid;
+      expect(semanticEvents.filter((e) => e.kind === 'done')).toHaveLength(0);
+
+      proc.stdout!.push(encodeFrame({ jsonrpc: '2.0', id: turnReq['id'] as string, result: { stopReason: 'end_turn' } }));
+      await turn;
+      expect(semanticEvents.filter((e) => e.kind === 'done')).toHaveLength(1);
+    },
+  );
 });
 
 describe('AcpBridge.respondToPermission', () => {

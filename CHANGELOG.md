@@ -6,6 +6,12 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+### Added
+- **Send messages while Hermes is working.** The composer no longer locks during
+  a turn. A text message sent mid-turn goes to Hermes as `/steer` (redirect the
+  running turn, default) or `/queue` (run after it); choose in Settings. Messages
+  with attachments are always queued by Hermes.
+
 ### Fixed
 - **Purser usage is tagged again.** Tracked chats and task runs send the
   resolved funding reference as `X-Purser-Project`, plus the Hermes profile as

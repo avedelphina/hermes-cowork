@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAttribution, purserRequestHeaders } from '@main/store/attribution';
 
-const settings = { defaultFundingRef: 'default-wallet', trackChatsByDefault: false };
+const settings = { defaultFundingRef: 'default-wallet', trackChatsByDefault: false, midTurnSend: 'steer' as const };
 const project = { id: 'project-1', contextId: 'context-1', fundingRef: null };
 const context = { id: 'context-1', fundingRef: 'context-wallet' };
 const capturedAt = '2026-09-28T10:00:00.000Z';

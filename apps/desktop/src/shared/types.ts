@@ -69,7 +69,10 @@ export type CoworkSettings = {
   defaultFundingRef: string | null;
   /** Chat remains untracked unless this is explicitly enabled. */
   trackChatsByDefault: boolean;
+  /** What a message sent while the agent is working does: `steer` redirects the running turn, `queue` runs it after. */
+  midTurnSend: MidTurnSend;
 };
+export type MidTurnSend = 'steer' | 'queue';
 
 export type Project = {
   id: string;

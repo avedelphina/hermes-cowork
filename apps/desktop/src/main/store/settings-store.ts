@@ -18,6 +18,7 @@ export class SettingsStore {
       // Chat usage is deliberately opt-in, even when the user has a default
       // funding reference for Cowork projects.
       trackChatsByDefault: parsed.trackChatsByDefault === true,
+      midTurnSend: parsed.midTurnSend === 'queue' ? 'queue' : 'steer',
     };
   }
 
@@ -26,7 +27,7 @@ export class SettingsStore {
   }
 
   update(patch: Partial<CoworkSettings>): CoworkSettings {
-    Object.assign(this.settings, pick(patch, ['defaultFundingRef', 'trackChatsByDefault'] as const));
+    Object.assign(this.settings, pick(patch, ['defaultFundingRef', 'trackChatsByDefault', 'midTurnSend'] as const));
     this.settings.defaultFundingRef = this.settings.defaultFundingRef?.trim() || null;
     writeJsonAtomic(this.filePath, this.settings);
     return this.snapshot();
