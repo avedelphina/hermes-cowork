@@ -6,6 +6,13 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+### Fixed
+- **Purser usage is tagged again.** Tracked chats and task runs send the
+  resolved funding reference as `X-Purser-Project`, plus the Hermes profile as
+  `X-Purser-Agent`, via the Hermes ACP `_meta.hermes.requestHeaders` extension on
+  `session/new` and `session/load`. Untracked sessions send nothing. Only
+  Purser-routed profiles show up in Purser.
+
 ## [0.2.21] — 2026-10-07
 
 ### Added

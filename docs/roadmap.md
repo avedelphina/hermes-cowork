@@ -77,7 +77,7 @@ presented as spend.
 
 Cowork stores local, immutable funding-attribution snapshots for tasks and opted-in
 chats. Funding references resolve project → Context → Settings default and are
-never sent to Hermes or treated as authority to spend. Each session uses the
+sent to Purser only as the allowlisted `X-Purser-*` attribution headers on tracked sessions (never as authority to spend). Each session uses the
 provider configuration already assigned to its selected Hermes profile; provider
 routing and credentials remain outside Cowork.
 

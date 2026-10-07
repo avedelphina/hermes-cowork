@@ -20,7 +20,7 @@ import { ContextStore } from '../store/context-store';
 import { ContextPinStore } from '../store/context-pin-store';
 import { contextEntries, describeChanges, diffContext, pinsOf, scanContext } from '../security/context-pin';
 import { SettingsStore } from '../store/settings-store';
-import { resolveAttribution } from '../store/attribution';
+import { resolveAttribution, purserRequestHeaders } from '../store/attribution';
 import { TaskStore } from '../store/task-store';
 import { ChatSessionStore } from '../store/chat-session-store';
 import { RemoteAgentStore, toOrigin } from '../store/remote-agent-store';
@@ -214,6 +214,11 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       const agent = chat ? chatRemoteAgent(chat.id) : remoteAgentFor(strOrNull(o['remoteId'], 'remoteId'));
       const projectId = chat ? chat.projectId : strOrNull(o['projectId'], 'projectId');
       const profile = agent ? agent.profile : (chat?.profile ?? str(o['profile'], 'profile'));
+      const requestHeaders = chat
+        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null }, {
+          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
+        })
+        : null;
       const opts = {
         profile,
         cwd: strOrNull(o['cwd'], 'cwd') ?? undefined,
@@ -246,6 +251,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, opts.profile),
         remote: opts.remote,
+        ...(requestHeaders ? { requestHeaders } : {}),
       });
     },
   );
@@ -302,6 +308,16 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       const cwd = opts.cwd ? opts.cwd : opts.remote ? '.' : homedir();
       const taskId = strOrNull(o['taskId'], 'taskId');
       if (!opts.remote && opts.cwd) await approveContext(chat ? chat.projectId : (taskId ? (tasks.get(taskId)?.projectId ?? null) : null), cwd);
+      const run = taskId ? tasks.activeRun(taskId) : null;
+      const requestHeaders = chat
+        ? purserRequestHeaders(chat.attribution ?? { tracked: false, fundingRef: null }, {
+          parentId: chat.id, profile, jobClass: 'chat', retry: 0,
+        })
+        : run
+          ? purserRequestHeaders(run.attribution, {
+            parentId: run.id, profile, jobClass: 'coding', retry: run.attempt - 1,
+          })
+          : null;
       const result = await bridge.loadSession({
         sessionId: opts.sessionId,
         profile,
@@ -310,6 +326,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
         binaryPath: ctx.hermesBinary,
         hermesHome: profileHome(ctx.globalHermesHome, profile),
         remote: opts.remote,
+        ...(requestHeaders ? { requestHeaders } : {}),
       });
       if (taskId) bridge.bindTaskSession(taskId, result.sessionId);
       return result;
@@ -628,6 +645,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     await approveContext(task.projectId, task.cwd);
     const run = tasks.createRun(task.id, null, taskAttribution(task.projectId));
     if (!run) throw new Error('task already has an active run');
+    const requestHeaders = purserRequestHeaders(run.attribution, {
+      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
+    });
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'cowork-pipe.py')
       : join(app.getAppPath(), '../../apps/pipe/cowork-pipe.py');
@@ -638,6 +658,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
       remote: task.remote ?? null,
+      ...(requestHeaders ? { requestHeaders } : {}),
       ...(task.remote ? {} : {
         pipe: {
           scriptPath,
@@ -678,6 +699,9 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
     }
     if (!isExistingDir(task.cwd)) throw new Error(`Cannot attach task: "${task.cwd}" is not an existing directory.`);
     await assertKnownProfile(task.profile);
+    const requestHeaders = purserRequestHeaders(run.attribution, {
+      parentId: run.id, profile: task.profile, jobClass: 'coding', retry: run.attempt - 1,
+    });
     if (bridge.hasSession(task.acpSessionId)) {
       tasks.attachRun(run.id);
       bridge.bindTaskSession(task.id, task.acpSessionId);
@@ -693,6 +717,7 @@ export function registerIpcHandlers(ctx: Context, sup: AcpSupervisor): void {
       isolate: true,
       binaryPath: ctx.hermesBinary,
       hermesHome: profileHome(ctx.globalHermesHome, task.profile),
+      ...(requestHeaders ? { requestHeaders } : {}),
       pipe: {
         scriptPath,
         runId: run.id,
