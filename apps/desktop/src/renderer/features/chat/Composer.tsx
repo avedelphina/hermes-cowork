@@ -36,12 +36,13 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   const [busy, setBusy] = useState(false); // creating the session
   const [turns, setTurns] = useState(0); // prompts in flight; > 0 means Hermes is working
   const [sendKey, setSendKey] = useState<SendKey>(loadSendKey);
+  const working = turns > 0;
   const [midTurnSend, setMidTurnSend] = useState<MidTurnSend>('steer');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void window.hermes.settings.get().then((s) => setMidTurnSend(s.midTurnSend)).catch(() => {});
-  }, [turns > 0]);
+  }, [working]);
 
   useEffect(() => {
     try {
@@ -112,7 +113,6 @@ export function Composer({ sessionId: sessionIdProp, ensureSession, onEcho, plac
   };
 
   const canSend = !!(sessionId || ensureSession);
-  const working = turns > 0;
   const hint = sendKey === 'enter' ? '↵ to send' : `${modifierLabel}↵ to send`;
 
   return (
