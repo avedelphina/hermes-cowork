@@ -6,6 +6,18 @@ minor versions may carry breaking changes.
 
 ## Unreleased
 
+## [0.2.21] — 2026-10-07
+
+### Added
+- **Edit projects and contexts.** Projects now have an Edit button for name,
+  folder, context and Purser funding reference, so you can fix a moved folder
+  or add a wallet later. Contexts are listed on the Projects page with Edit and
+  Archive.
+
+### Changed
+- The Projects page checks instruction files (`AGENTS.md` and similar) only for
+  the open project, not for every project in the list.
+
 ## [0.2.20] — 2026-10-07
 
 ### Fixed

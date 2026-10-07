@@ -8,7 +8,7 @@ type ProjectStore = {
   load: () => Promise<void>;
   setActive: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  update: (id: string, patch: { name?: string; profile?: string; archived?: boolean; folderPath?: string | null; remote?: Project['remote'] }) => Promise<void>;
+  update: (id: string, patch: { name?: string; profile?: string; archived?: boolean; folderPath?: string | null; remote?: Project['remote']; contextId?: string | null; fundingRef?: string | null }) => Promise<void>;
 };
 
 export const useProjectStore = create<ProjectStore>((set) => ({

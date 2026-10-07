@@ -21,6 +21,10 @@ export function ProjectsPage() {
   const [ctx, setCtx] = useState<Record<string, ContextEntry[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editing2, setEditing2] = useState<string | null>(null); // project in full-edit form
+  const [form, setForm] = useState({ name: '', folderPath: '', contextId: '', fundingRef: '' });
+  const [editingContext, setEditingContext] = useState<string | null>(null);
+  const [ctxForm, setCtxForm] = useState({ name: '', fundingRef: '' });
 
   const reloadContexts = async () => {
     const snap = await window.hermes.contexts.list();
@@ -32,12 +36,13 @@ export function ProjectsPage() {
   }, []);
 
   useEffect(() => {
-    for (const p of projects) {
-      window.hermes.projects.contextFiles(p.id)
-        .then((files) => setCtx((c) => ({ ...c, [p.id]: files })))
-        .catch(() => { /* ignore */ });
-    }
-  }, [projects]);
+    // Scan instruction files only for the open project, not the whole list.
+    const p = projects.find((x) => x.id === activeId);
+    if (!p) return;
+    window.hermes.projects.contextFiles(p.id)
+      .then((files) => setCtx((c) => ({ ...c, [p.id]: files })))
+      .catch(() => { /* ignore */ });
+  }, [projects, activeId]);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -100,18 +105,83 @@ export function ProjectsPage() {
     setEditing(null);
   };
 
+  const startEdit = (p: Project) => {
+    setEditing2(p.id);
+    setForm({ name: p.name, folderPath: p.folderPath ?? '', contextId: p.contextId ?? '', fundingRef: p.fundingRef ?? '' });
+  };
+
+  const saveEdit = async () => {
+    if (!editing2) return;
+    setError(null);
+    try {
+      await update(editing2, {
+        name: form.name.trim(),
+        folderPath: form.folderPath.trim() || null,
+        contextId: form.contextId || null,
+        fundingRef: form.fundingRef.trim() || null,
+      });
+      setEditing2(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const saveContext = async () => {
+    if (!editingContext) return;
+    setError(null);
+    try {
+      await window.hermes.contexts.update(editingContext, {
+        name: ctxForm.name.trim(), fundingRef: ctxForm.fundingRef.trim() || null,
+      });
+      await reloadContexts();
+      setEditingContext(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const live = projects.filter((p) => !p.archived);
   const archived = projects.filter((p) => p.archived);
   const contextById = new Map(contexts.map((context) => [context.id, context]));
 
-  const Row = ({ p }: { p: Project }) => (
+  const input = 'w-full rounded border border-border bg-surface2 px-2 py-1.5 text-sm';
+  const editForm = () => (
+    <div className="flex w-full flex-col gap-2">
+      <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name" className={input} />
+      <div className="flex gap-2">
+        <input value={form.folderPath} onChange={(e) => setForm({ ...form, folderPath: e.target.value })} placeholder="Folder (empty = chat only)" className={input} />
+        <button
+          onClick={() => void window.hermes.dialog.pickFolder().then((f) => f && setForm((v) => ({ ...v, folderPath: f })))}
+          className="rounded bg-surface2 px-3 text-xs hover:bg-border"
+        >
+          Pick…
+        </button>
+      </div>
+      <select value={form.contextId} onChange={(e) => setForm({ ...form, contextId: e.target.value })} className={input}>
+        <option value="">No context</option>
+        {contexts.filter((c) => !c.archived || c.id === form.contextId).map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
+      <input value={form.fundingRef} onChange={(e) => setForm({ ...form, fundingRef: e.target.value })} placeholder="Purser wallet / funding reference (overrides context)" className={input} />
+      {error && <p className="text-xs text-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={() => void saveEdit()} disabled={!form.name.trim()} className="rounded bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50">Save</button>
+        <button onClick={() => setEditing2(null)} className="rounded px-3 py-1 text-xs text-muted hover:text-fg">Cancel</button>
+      </div>
+    </div>
+  );
+
+  const row = (p: Project) => (
     <li
+      key={p.id}
       className={
         'flex items-center justify-between rounded-lg border px-4 py-3 ' +
         (p.id === activeId ? 'border-accent bg-surface2' : 'border-border bg-surface') +
         (p.archived ? ' opacity-60' : '')
       }
     >
+      {editing2 === p.id ? editForm() : <>
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-sm">
           {p.id === activeId && <span className="text-accent">●</span>}
@@ -152,7 +222,7 @@ export function ProjectsPage() {
           {p.folderPath ?? 'no folder — chat only'}
         </div>
         <div className="mt-0.5 text-[10px] text-dim">
-          {ctx[p.id]?.length ? (
+          {p.id !== activeId ? 'Open the project to check instruction files.' : ctx[p.id]?.length ? (
             <>
               <div>Instruction files the agent will follow:</div>
               {(ctx[p.id] ?? []).map((f) => (
@@ -173,10 +243,10 @@ export function ProjectsPage() {
           </button>
         )}
         <button
-          onClick={() => { setEditing(p.id); setEditName(p.name); }}
+          onClick={() => startEdit(p)}
           className="rounded px-2 py-1 text-xs text-muted hover:text-fg"
         >
-          Rename
+          Edit
         </button>
         <button
           onClick={() => void update(p.id, { archived: !p.archived })}
@@ -192,6 +262,7 @@ export function ProjectsPage() {
           Remove
         </button>
       </div>
+      </>}
     </li>
   );
 
@@ -332,18 +403,54 @@ export function ProjectsPage() {
         </div>
       )}
 
+      {contexts.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 text-[10px] uppercase tracking-wide text-dim">Contexts</div>
+          <ul className="flex flex-col gap-2">
+            {contexts.map((c) => (
+              <li key={c.id} className={'rounded-lg border border-border bg-surface px-4 py-2 ' + (c.archived ? 'opacity-60' : '')}>
+                {editingContext === c.id ? (
+                  <div className="flex flex-col gap-2">
+                    <input value={ctxForm.name} onChange={(e) => setCtxForm({ ...ctxForm, name: e.target.value })} placeholder="Name" className={input} />
+                    <input value={ctxForm.fundingRef} onChange={(e) => setCtxForm({ ...ctxForm, fundingRef: e.target.value })} placeholder="Purser wallet / funding reference" className={input} />
+                    {error && <p className="text-xs text-danger">{error}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={() => void saveContext()} disabled={!ctxForm.name.trim()} className="rounded bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50">Save</button>
+                      <button onClick={() => setEditingContext(null)} className="rounded px-3 py-1 text-xs text-muted hover:text-fg">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium">{c.name}</span>
+                      <span className="ml-2 text-[11px] text-muted">{c.fundingRef ?? 'no funding ref'}</span>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button onClick={() => { setEditingContext(c.id); setCtxForm({ name: c.name, fundingRef: c.fundingRef ?? '' }); }} className="rounded px-2 py-1 text-xs text-muted hover:text-fg">Edit</button>
+                      <button onClick={() => void window.hermes.contexts.update(c.id, { archived: !c.archived }).then(reloadContexts)} className="rounded px-2 py-1 text-xs text-muted hover:text-fg">
+                        {c.archived ? 'Unarchive' : 'Archive'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {projects.length === 0 ? (
         <p className="text-sm text-muted">No projects yet. Create one from a local folder.</p>
       ) : (
         <>
           <ul className="flex flex-col gap-2">
-            {live.map((p) => <Row key={p.id} p={p} />)}
+            {live.map(row)}
           </ul>
           {archived.length > 0 && (
             <>
               <div className="mb-2 mt-6 text-[10px] uppercase tracking-wide text-dim">Archived</div>
               <ul className="flex flex-col gap-2">
-                {archived.map((p) => <Row key={p.id} p={p} />)}
+                {archived.map(row)}
               </ul>
             </>
           )}
