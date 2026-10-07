@@ -4,8 +4,6 @@ import { createServer, type AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 export type DashboardState =
-  | { kind: 'unknown' }
-  | { kind: 'starting'; pid: number }
   // `child` is set only when *we* spawned the dashboard; the caller owns its
   // lifecycle. A reused external dashboard has child === null and must not be
   // killed by us.
@@ -19,6 +17,7 @@ export type DashboardOptions = {
 };
 
 const DEFAULT_PORT = 9119;
+const READY_TIMEOUT_MS = 20_000;
 
 export async function fetchDashboardToken(port: number): Promise<string | null> {
   try {
@@ -58,7 +57,7 @@ async function usablePort(port: number): Promise<number> {
       });
     });
   // ponytail: small TOCTOU window between close() and the dashboard binding —
-  // acceptable for a single-user desktop app; the 20s readiness probe catches
+  // acceptable for a single-user desktop app; the readiness probe catches
   // a lost race.
   return (await tryListen(port)) ?? (await tryListen(0)) ?? port;
 }
@@ -88,8 +87,8 @@ export async function ensureDashboard(opts: DashboardOptions): Promise<Dashboard
     console.error('[dashboard] spawn error', err);
   });
 
-  // Wait until /api/status responds, with a 20s ceiling.
-  const deadline = Date.now() + 20_000;
+  // Wait until /api/status responds, up to READY_TIMEOUT_MS.
+  const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (await probeDashboard(port)) {
       return { kind: 'ready', port, pid: child.pid ?? null, child };
@@ -98,5 +97,5 @@ export async function ensureDashboard(opts: DashboardOptions): Promise<Dashboard
   }
 
   child.kill('SIGTERM');
-  return { kind: 'crashed', lastError: `dashboard did not become ready on port ${port} in 20s` };
+  return { kind: 'crashed', lastError: `dashboard did not become ready on port ${port} in ${READY_TIMEOUT_MS / 1000}s` };
 }
